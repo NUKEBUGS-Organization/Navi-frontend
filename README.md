@@ -72,3 +72,22 @@ export default defineConfig([
 ])
 ```
 # Navi-frontend
+
+## URLs (for your client)
+
+- **Landing page / Login:** open `https://<your-vercel-domain>/`  
+  - This route internally uses `ROUTES.HOME` → redirects to `ROUTES.AUTH_LOGIN` (`/login`).
+- **Signup (lead form):** `https://<your-vercel-domain>/signup`
+- **Super Admin dashboard:** `https://<your-vercel-domain>/super-admin/dashboard`
+  - There is also a button on the login screen labeled **“Open Super Admin Dashboard”** which navigates here.
+
+> Note: At this stage there is **no real authentication** protecting the Super Admin routes. They are frontend-only and meant for demo/client access.
+
+## Deploying to Vercel (Vite + React)
+
+1. Push this repo to GitHub/GitLab/Bitbucket.
+2. In Vercel, **New Project → Import** this repo.
+3. Framework preset: **Vite** (or Vercel will auto-detect).
+4. Build command: `npm run build`  
+   Output directory: `dist`
+5. After the first deploy, your app will be accessible at `https://<your-vercel-domain>/` with the routing described above.

@@ -1,5 +1,4 @@
-import React from "react";
-import AdminLayout from "../layout/AdminLayout";
+import AdminLayout from "@/roles/admin/layout/AdminLayout";
 import {
   Box,
   Title,
@@ -26,9 +25,7 @@ import {
   IconBell,
   IconChevronDown,
 } from "@tabler/icons-react";
-
-const THEME_BLUE = "#0f2b5c";
-const TEAL_BLUE = "#14b8a6";
+import { THEME_BLUE, TEAL_BLUE } from "@/constants";
 
 export default function AdminSettings() {
   return (

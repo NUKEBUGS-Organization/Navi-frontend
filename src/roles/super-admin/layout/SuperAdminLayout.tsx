@@ -14,15 +14,12 @@ import { useDisclosure } from "@mantine/hooks";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   IconLayoutDashboard,
-  IconTarget,
-  IconCheckbox,
-  IconRoute,
-  IconHierarchy,
+  IconBuilding,
   IconSettings,
 } from "@tabler/icons-react";
 import type { IconProps } from "@tabler/icons-react";
 import { COLORS, ROUTES } from "@/constants";
-import naviLogo from "@/assets/navi-logo.jpeg";
+import logo from "@/assets/navi-logo.jpeg";
 
 interface NavItem {
   icon: React.FC<IconProps>;
@@ -31,19 +28,12 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { icon: IconLayoutDashboard, label: "Dashboard", path: ROUTES.ADMIN_DASHBOARD },
-  { icon: IconTarget, label: "Initiatives", path: ROUTES.ADMIN_INITIATIVES },
-  { icon: IconCheckbox, label: "Assessments", path: ROUTES.ADMIN_ASSESSMENTS },
-  { icon: IconRoute, label: "Roadmap", path: ROUTES.ADMIN_ROADMAP },
-  { icon: IconHierarchy, label: "Organization", path: ROUTES.ADMIN_ORGANIZATION },
-  { icon: IconSettings, label: "Settings", path: ROUTES.ADMIN_SETTINGS },
+  { icon: IconLayoutDashboard, label: "Dashboard", path: ROUTES.SUPER_ADMIN_DASHBOARD },
+  { icon: IconBuilding, label: "Organizations", path: ROUTES.SUPER_ADMIN_ORGS },
+  { icon: IconSettings, label: "Settings", path: ROUTES.SUPER_ADMIN_SETTINGS },
 ];
 
-export default function AdminLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export default function SuperAdminLayout({ children }: { children: ReactNode }) {
   const [opened, { toggle }] = useDisclosure();
   const navigate = useNavigate();
   const location = useLocation();
@@ -51,11 +41,7 @@ export default function AdminLayout({
   return (
     <AppShell
       header={{ height: { base: 60, sm: 0 } }}
-      navbar={{
-        width: 280,
-        breakpoint: "sm",
-        collapsed: { mobile: !opened },
-      }}
+      navbar={{ width: 260, breakpoint: "sm", collapsed: { mobile: !opened } }}
       padding="0"
     >
       <AppShell.Header
@@ -66,12 +52,12 @@ export default function AdminLayout({
         <Group justify="space-between" style={{ width: "100%" }}>
           <Group>
             <img
-              src={naviLogo}
+              src={logo}
               alt="Navi"
               style={{ height: 28, borderRadius: 6 }}
             />
             <Text fw={700} c="white">
-              NAVI
+              NAVI Super Admin
             </Text>
           </Group>
           <Burger
@@ -89,29 +75,7 @@ export default function AdminLayout({
         bg={COLORS.sidebarBg}
         style={{ border: "none", zIndex: 100 }}
       >
-        <Group mb={40} mt={10} px="xs" visibleFrom="sm">
-          <img
-            src={naviLogo}
-            alt="Navi"
-            style={{ height: 32, borderRadius: 8 }}
-          />
-          <Stack gap={0}>
-            <Text
-              fw={700}
-              size="xl"
-              c="white"
-              lts={0.5}
-              style={{ lineHeight: 1 }}
-            >
-              NAVI
-            </Text>
-            <Text size="10px" c={COLORS.sidebarText} fw={700} lts={1.2} mt={4}>
-              EXECUTIVE HUB
-            </Text>
-          </Stack>
-        </Group>
-
-        <Stack gap={4}>
+        <Stack gap={4} mt="sm">
           {NAV_ITEMS.map((item) => {
             const isActive = location.pathname.startsWith(item.path);
             return (
@@ -126,17 +90,11 @@ export default function AdminLayout({
                   alignItems: "center",
                   padding: `${rem(12)} ${rem(16)}`,
                   borderRadius: "8px",
-                  backgroundColor: isActive
-                    ? COLORS.sidebarActive
-                    : "transparent",
+                  backgroundColor: isActive ? COLORS.sidebarActive : "transparent",
                   color: isActive ? COLORS.activeText : COLORS.sidebarText,
                 }}
               >
-                <item.icon
-                  size={22}
-                  stroke={1.5}
-                  style={{ marginRight: rem(12) }}
-                />
+                <item.icon size={22} stroke={1.5} style={{ marginRight: rem(12) }} />
                 <Text size="sm" fw={500}>
                   {item.label}
                 </Text>
@@ -148,19 +106,16 @@ export default function AdminLayout({
         <Box
           mt="auto"
           p="md"
-          style={{
-            backgroundColor: "rgba(255,255,255,0.05)",
-            borderRadius: "12px",
-          }}
+          style={{ backgroundColor: "rgba(255,255,255,0.05)", borderRadius: 12 }}
         >
           <Group gap="sm">
             <Avatar radius="md" size="md" />
             <Stack gap={0}>
               <Text size="sm" fw={700} c="white">
-                James Wilson
+                Super Admin
               </Text>
               <Text size="xs" c={COLORS.sidebarText} fw={500}>
-                Chief Officer
+                Platform Owner
               </Text>
             </Stack>
           </Group>
@@ -173,3 +128,4 @@ export default function AdminLayout({
     </AppShell>
   );
 }
+

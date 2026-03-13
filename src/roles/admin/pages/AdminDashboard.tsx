@@ -1,5 +1,5 @@
 import React from "react";
-import AdminLayout from "../layout/AdminLayout";
+import AdminLayout from "@/roles/admin/layout/AdminLayout";
 import {
   Grid,
   Card,
@@ -14,14 +14,10 @@ import {
   Box,
   rem,
   TextInput,
-  Button,
   ActionIcon,
-  Indicator,
 } from "@mantine/core";
 import {
   IconSearch,
-  IconBell,
-  IconPlus,
   IconCalendarEvent,
   IconRocket,
   IconChartBar,
@@ -29,8 +25,7 @@ import {
   IconAlertTriangle,
 } from "@tabler/icons-react";
 import type { IconProps } from "@tabler/icons-react";
-
-const THEME_BLUE = "#0f2b5c";
+import { THEME_BLUE } from "@/constants";
 
 interface StatCardProps {
   icon: React.FC<IconProps>;

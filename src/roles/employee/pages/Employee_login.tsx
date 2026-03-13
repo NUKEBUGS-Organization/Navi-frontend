@@ -1,32 +1,29 @@
 import {
-  TextInput,
   PasswordInput,
   Checkbox,
   Anchor,
-  Paper,
   Title,
   Text,
-  Container,
   Group,
   Button,
   Stack,
   Box,
-  Grid,
   SimpleGrid,
-  Center,
   Image,
   Divider,
   Input,
 } from "@mantine/core";
+import { ROUTES, THEME_BLUE } from "@/constants";
+import logo from "@/assets/navi-logo.jpeg";
 
 const EmployeeLogin = () => {
   return (
     <Box w="100vw" h="100vh" style={{ overflow: "hidden" }}>
       <SimpleGrid cols={2} spacing={0} h="100%">
-        <Stack bg="#0F2B5C" h="100%" justify="center" align="center">
+        <Stack bg={THEME_BLUE} h="100%" justify="center" align="center">
           <Group>
             <Image
-              src="/logo.jpeg"
+              src={logo}
               h={"100px"}
               w={"100px"}
               radius="50%"
@@ -40,7 +37,7 @@ const EmployeeLogin = () => {
         <Stack bg="#FFFFFF" h="100%" justify="center" align="center" gap={"0"}>
           <Title c={"#0F2B5C"}>Welcome back</Title>
           <Text c="#64748B" size="sm">
-            Sign in to your organization workspace
+            Sign in to your Navi account
           </Text>
           <Divider w={"440px"} mt={"30px"} c={"#E2E8F0"} size={"sm"}></Divider>
           <Stack mt={"25px"} gap={0}>
@@ -75,8 +72,21 @@ const EmployeeLogin = () => {
           />
           <Text mt={"30px"}>
             Don't have an account?{" "}
-            <Anchor href="signup">Sign Up as an organization</Anchor>
+            <Anchor href={ROUTES.AUTH_SIGNUP}>Submit an organization request</Anchor>
           </Text>
+          <Button
+            mt={"16px"}
+            w={"440px"}
+            variant="outline"
+            color={THEME_BLUE}
+            h={"46px"}
+            radius="md"
+            onClick={() => {
+              window.location.href = ROUTES.SUPER_ADMIN_DASHBOARD;
+            }}
+          >
+            Open Super Admin Dashboard
+          </Button>
         </Stack>
       </SimpleGrid>
     </Box>

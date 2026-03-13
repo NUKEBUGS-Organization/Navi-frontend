@@ -1,5 +1,4 @@
-import React from "react";
-import AdminLayout from "../layout/AdminLayout";
+import AdminLayout from "@/roles/admin/layout/AdminLayout";
 import {
   Box,
   Title,
@@ -18,7 +17,6 @@ import {
   Divider,
   ActionIcon,
   Table,
-  Indicator,
   SimpleGrid,
   Center,
   Modal,
@@ -27,7 +25,6 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import {
   IconSearch,
-  IconBell,
   IconChevronRight,
   IconDotsVertical,
   IconPlus,
@@ -37,9 +34,8 @@ import {
   IconBuilding,
   IconCircle,
 } from "@tabler/icons-react";
-
-const THEME_BLUE = "#0f2b5c";
-const TEAL_BLUE = "#14b8a6";
+import { THEME_BLUE, TEAL_BLUE } from "@/constants";
+import { PageHeader } from "@/components";
 
 interface MemberRowProps {
   name: string;
@@ -56,16 +52,14 @@ export default function AdminOrganization() {
   return (
     <AdminLayout>
       <Box style={{ width: "100%" }}>
-        <Group justify="space-between" mb={30} wrap="nowrap">
-          <Group gap="md">
-            <Title order={1} fw={800} fz={{ base: 22, sm: 28 }}>
-              Organization
-            </Title>
+        <PageHeader
+          title="Organization"
+          actions={
             <Badge variant="light" color="teal" radius="sm" fw={800} size="sm">
               ENTERPRISE
             </Badge>
-          </Group>
-        </Group>
+          }
+        />
 
         <Tabs
           defaultValue="profile"
@@ -454,7 +448,13 @@ function RoleOption({
   );
 }
 
-function DepartmentCard({ title, members, color }: any) {
+interface DepartmentCardProps {
+  title: string;
+  members: number;
+  color: string;
+}
+
+function DepartmentCard({ title, members, color }: DepartmentCardProps) {
   return (
     <Card
       withBorder

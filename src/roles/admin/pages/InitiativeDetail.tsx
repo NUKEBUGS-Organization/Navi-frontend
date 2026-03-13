@@ -1,4 +1,4 @@
-import AdminLayout from "../layout/AdminLayout";
+import AdminLayout from "@/roles/admin/layout/AdminLayout";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Grid,
@@ -20,7 +20,8 @@ import {
   Divider,
   Timeline,
   Table,
-  Tooltip,
+  Paper,
+  ThemeIcon,
 } from "@mantine/core";
 
 import { useDisclosure } from "@mantine/hooks";
@@ -30,10 +31,13 @@ import {
   IconShare,
   IconEdit,
   IconChevronDown,
+  IconCircleCheck,
+  IconClock,
+  IconCircle,
+  IconUsers,
 } from "@tabler/icons-react";
 import { useState } from "react";
-
-const THEME_BLUE = "#0f2b5c";
+import { THEME_BLUE, NAVY, ROUTES } from "@/constants";
 
 interface Initiative {
   id: string;
@@ -298,15 +302,27 @@ export default function InitiativeDetail() {
 
   const getStatusBadge = (status: string) => {
     const map: Record<string, { bg: string; c: string }> = {
+      ACTIVE: { bg: "#e6fcf5", c: "#099268" },
+      COMPLETED: { bg: "#e6fcf5", c: "#099268" },
+      AT_RISK: { bg: "#fff0f0", c: "#e03131" },
+      ON_HOLD: { bg: "#fff4e6", c: "#e8590c" },
+      DRAFT: { bg: "#f1f3f5", c: "#868e96" },
+      PLANNING: { bg: "#e7f5ff", c: "#1971c2" },
       "In Progress": { bg: "#e6fcf5", c: "#099268" },
       Active: { bg: "#e6fcf5", c: "#099268" },
-      Draft: { bg: "#fff4e6", c: "#d9480f" },
+      Draft: { bg: "#f1f3f5", c: "#868e96" },
       Planning: { bg: "#e7f5ff", c: "#1971c2" },
     };
-    return map[status] || map["In Progress"];
+    return map[status] || map["ACTIVE"];
   };
-
   const statusColors = getStatusBadge(initiative.status);
+  const activeMilestoneIndex = initiative.milestones.findIndex(
+    (m) => m.status === "current",
+  );
+  const timelineActive =
+    activeMilestoneIndex >= 0
+      ? activeMilestoneIndex
+      : initiative.milestones.length - 1;
 
   return (
     <AdminLayout>
@@ -314,7 +330,7 @@ export default function InitiativeDetail() {
         gap={6}
         mb="md"
         style={{ cursor: "pointer" }}
-        onClick={() => navigate("/admin/initiatives")}
+        onClick={() => navigate(ROUTES.ADMIN_INITIATIVES)}
       >
         <IconArrowLeft size={16} color="#868e96" />
         <Text fz="sm" fw={600} c="dimmed">
@@ -385,18 +401,18 @@ export default function InitiativeDetail() {
         </Group>
       </Group>
 
-      <Tabs defaultValue="overview" mb="xl">
+      <Tabs defaultValue="overview" mb="xl" color={NAVY}>
         <Tabs.List>
-          <Tabs.Tab value="overview" fw={600}>
+          <Tabs.Tab value="overview" fw={700} style={{ color: NAVY }}>
             Overview
           </Tabs.Tab>
-          <Tabs.Tab value="roadmap" fw={600}>
+          <Tabs.Tab value="roadmap" fw={700}>
             Roadmap
           </Tabs.Tab>
-          <Tabs.Tab value="assessment" fw={600}>
+          <Tabs.Tab value="assessment" fw={700}>
             Assessment
           </Tabs.Tab>
-          <Tabs.Tab value="activity" fw={600}>
+          <Tabs.Tab value="activity" fw={700}>
             Activity
           </Tabs.Tab>
         </Tabs.List>
@@ -404,288 +420,272 @@ export default function InitiativeDetail() {
         <Tabs.Panel value="overview" pt="xl">
           <Grid gutter={30}>
             <Grid.Col span={{ base: 12, md: 8 }}>
-              <Stack gap={30}>
-                <Card withBorder radius="lg" p="xl" shadow="xs">
-                  <Title order={4} fw={700} mb="md">
-                    Description
-                  </Title>
-                  <Text fz="sm" c="dimmed" lh={1.7}>
-                    {initiative.description}
-                  </Text>
-                </Card>
-
-                <Card withBorder radius="lg" p="xl" shadow="xs">
-                  <Title order={4} fw={700} mb="lg">
-                    Impacted Departments
-                  </Title>
-                  <Group gap="sm">
-                    {initiative.impactedDepts.map((dept) => (
-                      <Badge
-                        key={dept}
-                        variant="outline"
-                        color="gray"
-                        radius="xl"
-                        size="lg"
-                        px="lg"
-                        fw={600}
-                        styles={{
-                          root: {
-                            textTransform: "none",
-                            border: "1px solid #dee2e6",
-                            color: "#495057",
-                          },
-                        }}
-                      >
-                        {dept}
-                      </Badge>
-                    ))}
-                  </Group>
-                </Card>
-
-                <Card withBorder radius="lg" p="xl" shadow="xs">
-                  <Title order={4} fw={700} mb="lg">
-                    Goals & Success Measures
-                  </Title>
-                  <Table verticalSpacing="md" horizontalSpacing="lg">
-                    <Table.Thead>
-                      <Table.Tr>
-                        <Table.Th>
-                          <Text fz={11} fw={700} c="dimmed" lts={0.5}>
-                            OBJECTIVE
+              <Paper withBorder p="xl" mb="md">
+                <Title order={4} fw={800} mb="sm" c={NAVY}>
+                  Description
+                </Title>
+                <Text fz="sm" style={{ lineHeight: 1.6 }}>
+                  {initiative.description}
+                </Text>
+              </Paper>
+              <Paper withBorder p="xl" mb="md">
+                <Title order={4} fw={800} mb="sm" c={NAVY}>
+                  Impacted Departments
+                </Title>
+                <Group gap="sm">
+                  {initiative.impactedDepts.map((d) => (
+                    <Badge
+                      key={d}
+                      variant="light"
+                      color="gray"
+                      radius="xl"
+                      size="lg"
+                      fw={600}
+                    >
+                      {d}
+                    </Badge>
+                  ))}
+                </Group>
+              </Paper>
+              <Paper withBorder p="xl" mb="md">
+                <Title order={4} fw={800} mb="md" c={NAVY}>
+                  Goals & Success Measures
+                </Title>
+                <Table withTableBorder withColumnBorders>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th fw={700} fz="xs" c="dimmed" tt="uppercase">
+                        Objective
+                      </Table.Th>
+                      <Table.Th fw={700} fz="xs" c="dimmed" tt="uppercase">
+                        KPI / Success Measure
+                      </Table.Th>
+                      <Table.Th fw={700} fz="xs" c="dimmed" tt="uppercase">
+                        Target Date
+                      </Table.Th>
+                      <Table.Th fw={700} fz="xs" c="dimmed" tt="uppercase">
+                        Status
+                      </Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {initiative.goals.map((g, i) => (
+                      <Table.Tr key={i}>
+                        <Table.Td fw={600}>{g.objective}</Table.Td>
+                        <Table.Td fz="sm">{g.kpi}</Table.Td>
+                        <Table.Td fz="sm">{g.targetDate}</Table.Td>
+                        <Table.Td>
+                          <Text
+                            fz="sm"
+                            fw={600}
+                            c={
+                              g.status === "On Track"
+                                ? "green.7"
+                                : g.status === "In Progress"
+                                  ? "orange.7"
+                                  : "dimmed"
+                            }
+                          >
+                            {g.status}
                           </Text>
-                        </Table.Th>
-                        <Table.Th>
-                          <Text fz={11} fw={700} c="dimmed" lts={0.5}>
-                            KPI / SUCCESS MEASURE
-                          </Text>
-                        </Table.Th>
-                        <Table.Th>
-                          <Text fz={11} fw={700} c="dimmed" lts={0.5}>
-                            TARGET DATE
-                          </Text>
-                        </Table.Th>
-                        <Table.Th>
-                          <Text fz={11} fw={700} c="dimmed" lts={0.5}>
-                            STATUS
-                          </Text>
-                        </Table.Th>
+                        </Table.Td>
                       </Table.Tr>
-                    </Table.Thead>
-                    <Table.Tbody>
-                      {initiative.goals.map((goal, i) => (
-                        <Table.Tr key={i}>
-                          <Table.Td>
-                            <Text fz="sm" fw={600}>
-                              {goal.objective}
-                            </Text>
-                          </Table.Td>
-                          <Table.Td>
-                            <Text fz="sm" c="dimmed">
-                              {goal.kpi}
-                            </Text>
-                          </Table.Td>
-                          <Table.Td>
-                            <Text fz="sm" c="dimmed">
-                              {goal.targetDate}
-                            </Text>
-                          </Table.Td>
-                          <Table.Td>
-                            <Text
-                              fz="sm"
-                              fw={600}
-                              c={
-                                goal.status === "On Track"
-                                  ? "#099268"
-                                  : goal.status === "In Progress"
-                                    ? "#e8590c"
-                                    : "#1971c2"
-                              }
-                            >
-                              {goal.status}
-                            </Text>
-                          </Table.Td>
-                        </Table.Tr>
-                      ))}
-                    </Table.Tbody>
-                  </Table>
-                </Card>
-              </Stack>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </Paper>
             </Grid.Col>
-
             <Grid.Col span={{ base: 12, md: 4 }}>
-              <Stack gap={20}>
-                +
-                <Card withBorder radius="lg" p="xl" shadow="xs">
-                  <Title order={5} fw={700} mb="lg">
+              <Stack gap="md">
+                <Paper withBorder p="lg" radius="md">
+                  <Title order={5} fw={700} mb="md" c={NAVY}>
                     Quick Stats
                   </Title>
                   <Stack gap="md">
                     <Box>
-                      <Group justify="space-between" mb={6}>
-                        <Text fz="sm" c="dimmed" fw={500}>
-                          Overall Progress
-                        </Text>
-                        <Text fz="lg" fw={800} c={THEME_BLUE}>
+                      <Text fz="xs" fw={700} c="dimmed" mb={4}>
+                        Overall Progress
+                      </Text>
+                      <Group justify="space-between" align="center" gap="sm" wrap="nowrap">
+                        <Box style={{ flex: 1, minWidth: 0 }}>
+                          <Progress
+                            value={initiative.progress}
+                            color={THEME_BLUE}
+                            size="md"
+                            radius="xl"
+                          />
+                        </Box>
+                        <Text fw={700} fz="sm">
                           {initiative.progress}%
                         </Text>
                       </Group>
-                      <Progress
-                        value={initiative.progress}
-                        color={THEME_BLUE}
-                        h={8}
-                        radius="xl"
-                      />
                     </Box>
-                    <Grid gutter="md" mt="sm">
-                      <Grid.Col span={6}>
-                        <Stack gap={2} align="center">
-                          <Text fz={11} fw={700} c="dimmed" lts={0.5}>
-                            READINESS
-                          </Text>
-                          <Text fz="xl" fw={800} c={THEME_BLUE}>
-                            {initiative.readiness}
-                          </Text>
-                        </Stack>
-                      </Grid.Col>
-                      <Grid.Col span={6}>
-                        <Stack gap={2} align="center">
-                          <Text fz={11} fw={700} c="dimmed" lts={0.5}>
-                            RISK LEVEL
-                          </Text>
-                          <Text
-                            fz="xl"
-                            fw={800}
-                            c={
-                              initiative.riskLevel === "High"
-                                ? "#e03131"
-                                : initiative.riskLevel === "Med"
-                                  ? "#e8590c"
-                                  : "#2f9e44"
-                            }
-                          >
-                            {initiative.riskLevel}
-                          </Text>
-                        </Stack>
-                      </Grid.Col>
-                    </Grid>
-                    <Divider my={4} />
-                    <Group justify="space-between">
-                      <Text fz="sm" c="dimmed" fw={500}>
+                    <Box>
+                      <Text fz="xs" fw={700} c="dimmed" mb={4}>
+                        READINESS
+                      </Text>
+                      <Badge
+                        variant="light"
+                        color="gray"
+                        size="lg"
+                        fw={700}
+                        fullWidth
+                        style={{ justifyContent: "center" }}
+                      >
+                        {initiative.readiness}
+                      </Badge>
+                    </Box>
+                    <Box>
+                      <Text fz="xs" fw={700} c="dimmed" mb={4}>
+                        RISK LEVEL
+                      </Text>
+                      <Badge
+                        variant="light"
+                        color={initiative.riskLevel === "High" ? "red" : initiative.riskLevel === "Med" ? "yellow" : "gray"}
+                        size="lg"
+                        fw={700}
+                        fullWidth
+                        style={{
+                          justifyContent: "center",
+                          border:
+                            initiative.riskLevel === "Med"
+                              ? "1px solid #fab005"
+                              : undefined,
+                        }}
+                      >
+                        {initiative.riskLevel}
+                      </Badge>
+                    </Box>
+                    <Box>
+                      <Text fz="xs" fw={700} c="dimmed" mb={4}>
                         Pending Tasks
                       </Text>
-                      <Text fz="sm" fw={700}>
-                        {initiative.pendingTasks.done} /{" "}
-                        {initiative.pendingTasks.total}
+                      <Text fw={700} fz="md">
+                        {initiative.pendingTasks.done} / {initiative.pendingTasks.total}
                       </Text>
-                    </Group>
+                    </Box>
                   </Stack>
-                </Card>
-                {/* Team */}
-                <Card withBorder radius="lg" p="xl" shadow="xs">
+                </Paper>
+
+                <Paper withBorder p="lg" radius="md">
                   <Group justify="space-between" mb="md">
-                    <Title order={5} fw={700}>
+                    <Title order={5} fw={700} c={NAVY}>
                       Team
                     </Title>
-                    <Box style={{ cursor: "pointer" }} c="dimmed">
-                      <svg
-                        width="18"
-                        height="18"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      >
-                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                        <circle cx="9" cy="7" r="4" />
-                        <line x1="19" y1="8" x2="19" y2="14" />
-                        <line x1="22" y1="11" x2="16" y2="11" />
-                      </svg>
-                    </Box>
+                    <Button variant="subtle" size="xs" p={4} title="Add team member">
+                      <IconUsers size={18} color={THEME_BLUE} />
+                    </Button>
                   </Group>
-                  {initiative.team.map((member) => (
-                    <Group key={member.name} gap="sm" mb="md">
-                      <Avatar radius="xl" size="md" color={member.color}>
-                        {member.initials}
-                      </Avatar>
-                      <Stack gap={0}>
-                        <Text fz="sm" fw={700}>
-                          {member.name}
-                        </Text>
-                        <Text fz="xs" c="dimmed">
-                          {member.role}
-                        </Text>
-                      </Stack>
-                    </Group>
-                  ))}
-                  <Group gap={6} mt="sm">
-                    {initiative.teamAvatars.map((a, i) => (
-                      <Tooltip key={i} label={a.initials}>
-                        <Avatar radius="xl" size="sm" color={a.color}>
-                          {a.initials}
+                  <Stack gap="sm">
+                    {initiative.team.map((member, i) => (
+                      <Group key={i} gap="sm">
+                        <Avatar
+                          radius="xl"
+                          size="md"
+                          color={member.color}
+                          style={{ fontWeight: 700, fontSize: 12 }}
+                        >
+                          {member.initials}
                         </Avatar>
-                      </Tooltip>
+                        <Box>
+                          <Text fz="sm" fw={700}>
+                            {member.name}
+                          </Text>
+                          <Text fz="xs" c="dimmed">
+                            • {member.role}
+                          </Text>
+                        </Box>
+                      </Group>
                     ))}
-                  </Group>
-                </Card>
-                <Card withBorder radius="lg" p="xl" shadow="xs">
-                  <Title order={5} fw={700} mb="lg">
+                    <Group gap={6} mt={4}>
+                      {initiative.teamAvatars.map((av, i) => (
+                        <Avatar
+                          key={i}
+                          radius="xl"
+                          size="sm"
+                          color={av.color}
+                          style={{ fontWeight: 700, fontSize: 10 }}
+                        >
+                          {av.initials}
+                        </Avatar>
+                      ))}
+                    </Group>
+                  </Stack>
+                </Paper>
+
+                <Paper withBorder p="lg" radius="md">
+                  <Title order={5} fw={700} mb="md" c={NAVY}>
                     Upcoming Milestones
                   </Title>
                   <Timeline
-                    active={initiative.milestones.findIndex(
-                      (m) => m.status === "current",
-                    )}
-                    bulletSize={24}
+                    active={timelineActive}
+                    bulletSize={26}
                     lineWidth={2}
                     color={THEME_BLUE}
                   >
-                    {initiative.milestones.map((ms, i) => (
-                      <Timeline.Item
-                        key={i}
-                        bullet={
-                          ms.status === "completed" ? (
-                            <Box
-                              w={12}
-                              h={12}
-                              bg={THEME_BLUE}
-                              style={{ borderRadius: "50%" }}
-                            />
-                          ) : ms.status === "current" ? (
-                            <Box
-                              w={12}
-                              h={12}
-                              style={{
-                                borderRadius: "50%",
-                                border: `2px solid ${THEME_BLUE}`,
-                                backgroundColor: "white",
-                              }}
-                            />
-                          ) : (
-                            <Box
-                              w={12}
-                              h={12}
-                              style={{
-                                borderRadius: "50%",
-                                border: "2px solid #dee2e6",
-                                backgroundColor: "white",
-                              }}
-                            />
-                          )
-                        }
-                      >
-                        <Text fz={10} fw={700} c="dimmed" lts={0.8} mb={2}>
-                          {ms.label}
-                        </Text>
-                        <Text fz="sm" fw={700}>
-                          {ms.title}
-                        </Text>
-                        <Text fz="xs" c="dimmed">
-                          {ms.date}
-                        </Text>
-                      </Timeline.Item>
-                    ))}
+                    {initiative.milestones.map((m, i) => {
+                      let bullet;
+                      if (m.status === "completed") {
+                        bullet = (
+                          <ThemeIcon
+                            radius="xl"
+                            size={26}
+                            color={THEME_BLUE}
+                            variant="filled"
+                          >
+                            <IconCircleCheck size={16} />
+                          </ThemeIcon>
+                        );
+                      } else if (m.status === "current") {
+                        bullet = (
+                          <ThemeIcon
+                            radius="xl"
+                            size={26}
+                            color={THEME_BLUE}
+                            variant="outline"
+                          >
+                            <IconClock size={16} />
+                          </ThemeIcon>
+                        );
+                      } else {
+                        bullet = (
+                          <ThemeIcon
+                            radius="xl"
+                            size={26}
+                            color="gray.3"
+                            variant="light"
+                          >
+                            <IconCircle size={14} />
+                          </ThemeIcon>
+                        );
+                      }
+
+                      return (
+                        <Timeline.Item
+                          key={i}
+                          bullet={bullet}
+                          lineVariant="solid"
+                        >
+                          <Text
+                            fz="xs"
+                            fw={700}
+                            c="dimmed"
+                            tt="uppercase"
+                            mb={2}
+                          >
+                            {m.label}
+                          </Text>
+                          <Text fz="sm" fw={600}>
+                            {m.title}
+                          </Text>
+                          <Text fz="xs" c="dimmed">
+                            {m.date}
+                          </Text>
+                        </Timeline.Item>
+                      );
+                    })}
                   </Timeline>
-                </Card>
+                </Paper>
               </Stack>
             </Grid.Col>
           </Grid>
