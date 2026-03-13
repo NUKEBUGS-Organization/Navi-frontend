@@ -1,16 +1,13 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import LoginPage from "../Pages/Auth/LoginPage";
+import AdminDashboard from "../roles/admin/pages/AdminDashboard";
 
-const AppRoutes = () => {
+export default function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
-
-        <Route path="/login" element={<LoginPage />} />
+        <Route path="/" element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="/admin/dashboard" element={<AdminDashboard />} />
       </Routes>
     </BrowserRouter>
   );
-};
-
-export default AppRoutes;
+}
