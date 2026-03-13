@@ -15,8 +15,11 @@ import {
 } from "@mantine/core";
 import { ROUTES, THEME_BLUE } from "@/constants";
 import logo from "@/assets/navi-logo.jpeg";
+import { useNavigate } from "react-router-dom";
 
 const EmployeeLogin = () => {
+  const navigate = useNavigate();
+
   return (
     <Box w="100vw" h="100vh" style={{ overflow: "hidden" }}>
       <SimpleGrid cols={2} spacing={0} h="100%">
@@ -82,7 +85,20 @@ const EmployeeLogin = () => {
             h={"46px"}
             radius="md"
             onClick={() => {
-              window.location.href = ROUTES.SUPER_ADMIN_DASHBOARD;
+              navigate(ROUTES.ADMIN_DASHBOARD);
+            }}
+          >
+            Open Admin Dashboard
+          </Button>
+          <Button
+            mt={"16px"}
+            w={"440px"}
+            variant="outline"
+            color={THEME_BLUE}
+            h={"46px"}
+            radius="md"
+            onClick={() => {
+              navigate(ROUTES.SUPER_ADMIN_DASHBOARD);
             }}
           >
             Open Super Admin Dashboard
