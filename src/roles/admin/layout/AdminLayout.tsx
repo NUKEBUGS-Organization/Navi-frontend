@@ -1,3 +1,4 @@
+import React from "react";
 import {
   AppShell,
   Box,
@@ -7,7 +8,10 @@ import {
   Stack,
   rem,
   UnstyledButton,
+  Burger,
 } from "@mantine/core";
+import { useDisclosure } from "@mantine/hooks";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   IconLayoutDashboard,
   IconTarget,
@@ -15,16 +19,22 @@ import {
   IconRoute,
   IconHierarchy,
   IconSettings,
-  IconCompass,
 } from "@tabler/icons-react";
+import type { IconProps } from "@tabler/icons-react";
+import naviLogo from "../../../assets/navi-logo.jpeg";
 
-// Exact colors from the design
-const DESIGN_COLORS = {
-  sidebarBg: "#0f2b5c", // Deep Dark Navy
-  sidebarActive: "#27416d", // Lighter blue for active state
-  sidebarText: "#94A3B8", // Muted text
-  activeText: "#FFFFFF", // White text for active
-  mainBg: "#F1F4F9", // Light gray background
+interface NavItem {
+  icon: React.FC<IconProps>;
+  label: string;
+  path: string;
+}
+
+const COLORS = {
+  sidebarBg: "#0f2b5c",
+  sidebarActive: "rgba(255, 255, 255, 0.1)",
+  sidebarText: "#94A3B8",
+  activeText: "#FFFFFF",
+  mainBg: "#F8F9FA",
 };
 
 export default function AdminLayout({
@@ -32,90 +42,131 @@ export default function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const [opened, { toggle }] = useDisclosure();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const navItems: NavItem[] = [
+    { icon: IconLayoutDashboard, label: "Dashboard", path: "/admin/dashboard" },
+    { icon: IconTarget, label: "Initiatives", path: "/admin/initiatives" },
+    { icon: IconCheckbox, label: "Assessments", path: "/admin/assessments" },
+    { icon: IconRoute, label: "Roadmap", path: "/admin/roadmap" },
+    { icon: IconHierarchy, label: "Organization", path: "/admin/organization" },
+    { icon: IconSettings, label: "Settings", path: "/admin/settings" },
+  ];
+
   return (
-    <AppShell navbar={{ width: 260, breakpoint: "sm" }} padding="0">
-      {/* SIDEBAR */}
-      <AppShell.Navbar
-        p="md"
-        bg={DESIGN_COLORS.sidebarBg}
-        style={{ border: "none" }}
+    <AppShell
+      header={{ height: { base: 60, sm: 0 } }}
+      navbar={{
+        width: 280,
+        breakpoint: "sm",
+        collapsed: { mobile: !opened },
+      }}
+      padding="0"
+    >
+      <AppShell.Header
+        bg={COLORS.sidebarBg}
+        px="md"
+        style={{ border: "none", display: "flex", alignItems: "center" }}
       >
-        <Group mb={30} mt={10} px="xs">
-          <Box
-            style={{
-              backgroundColor: "rgba(255,255,255,0.15)",
-              borderRadius: "8px",
-              padding: "6px",
-              display: "flex",
-            }}
-          >
-            <IconCompass color="white" size={24} />
-          </Box>
-          <Stack gap={0}>
-            <Text fw={700} size="lg" c="white" style={{ lineHeight: 1.1 }}>
+        <Group justify="space-between" style={{ width: "100%" }}>
+          <Group>
+            <img
+              src={naviLogo}
+              alt="Navi"
+              style={{ height: 28, borderRadius: 6 }}
+            />
+            <Text fw={700} c="white">
               NAVI
             </Text>
-            <Text size="10px" c={DESIGN_COLORS.sidebarText} fw={600} lts={1}>
+          </Group>
+          <Burger
+            opened={opened}
+            onClick={toggle}
+            hiddenFrom="sm"
+            size="sm"
+            color="white"
+          />
+        </Group>
+      </AppShell.Header>
+
+      <AppShell.Navbar
+        p="lg"
+        bg={COLORS.sidebarBg}
+        style={{ border: "none", zIndex: 100 }}
+      >
+        <Group mb={40} mt={10} px="xs" visibleFrom="sm">
+          <img
+            src={naviLogo}
+            alt="Navi"
+            style={{ height: 32, borderRadius: 8 }}
+          />
+          <Stack gap={0}>
+            <Text
+              fw={700}
+              size="xl"
+              c="white"
+              lts={0.5}
+              style={{ lineHeight: 1 }}
+            >
+              NAVI
+            </Text>
+            <Text size="10px" c={COLORS.sidebarText} fw={700} lts={1.2} mt={4}>
               EXECUTIVE HUB
             </Text>
           </Stack>
         </Group>
 
         <Stack gap={4}>
-          {[
-            { icon: IconLayoutDashboard, label: "Dashboard", active: true },
-            { icon: IconTarget, label: "Initiatives", active: false },
-            { icon: IconCheckbox, label: "Assessments", active: false },
-            { icon: IconRoute, label: "Roadmap", active: false },
-            { icon: IconHierarchy, label: "Organization", active: false },
-            { icon: IconSettings, label: "Settings", active: false },
-          ].map((item) => (
-            <UnstyledButton
-              key={item.label}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                padding: `${rem(10)} ${rem(14)}`,
-                borderRadius: "8px",
-                backgroundColor: item.active
-                  ? DESIGN_COLORS.sidebarActive
-                  : "transparent",
-                color: item.active
-                  ? DESIGN_COLORS.activeText
-                  : DESIGN_COLORS.sidebarText,
-              }}
-            >
-              <item.icon
-                size={20}
-                stroke={1.5}
-                style={{ marginRight: rem(12) }}
-              />
-              <Text size="sm" fw={500}>
-                {item.label}
-              </Text>
-            </UnstyledButton>
-          ))}
+          {navItems.map((item) => {
+            const isActive = location.pathname.startsWith(item.path);
+            return (
+              <UnstyledButton
+                key={item.label}
+                onClick={() => {
+                  navigate(item.path);
+                  if (opened) toggle();
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  padding: `${rem(12)} ${rem(16)}`,
+                  borderRadius: "8px",
+                  backgroundColor: isActive
+                    ? COLORS.sidebarActive
+                    : "transparent",
+                  color: isActive ? COLORS.activeText : COLORS.sidebarText,
+                }}
+              >
+                <item.icon
+                  size={22}
+                  stroke={1.5}
+                  style={{ marginRight: rem(12) }}
+                />
+                <Text size="sm" fw={500}>
+                  {item.label}
+                </Text>
+              </UnstyledButton>
+            );
+          })}
         </Stack>
 
-        {/* BOTTOM USER PROFILE */}
         <Box
           mt="auto"
-          p="sm"
+          p="md"
           style={{
-            backgroundColor: "rgba(255,255,255,0.04)",
+            backgroundColor: "rgba(255,255,255,0.05)",
             borderRadius: "12px",
           }}
         >
           <Group gap="sm">
-            <Avatar
-              src="https://raw.githubusercontent.com/mantinedev/mantine/master/.demo/avatars/avatar-1.png"
-              radius="md"
-            />
+            <Avatar radius="md" size="md" />
             <Stack gap={0}>
-              <Text size="sm" fw={600} c="white">
+              <Text size="sm" fw={700} c="white">
                 James Wilson
               </Text>
-              <Text size="xs" c={DESIGN_COLORS.sidebarText}>
+              <Text size="xs" c={COLORS.sidebarText} fw={500}>
                 Chief Officer
               </Text>
             </Stack>
@@ -123,9 +174,8 @@ export default function AdminLayout({
         </Box>
       </AppShell.Navbar>
 
-      {/* MAIN CONTENT */}
-      <AppShell.Main bg={DESIGN_COLORS.mainBg} p="xl">
-        {children}
+      <AppShell.Main bg={COLORS.mainBg} style={{ minHeight: "100vh" }}>
+        <Box p={{ base: "md", sm: "35px" }}>{children}</Box>
       </AppShell.Main>
     </AppShell>
   );

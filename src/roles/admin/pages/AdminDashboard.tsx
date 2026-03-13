@@ -28,19 +28,19 @@ import {
   IconCircleCheck,
   IconAlertTriangle,
 } from "@tabler/icons-react";
+import type { IconProps } from "@tabler/icons-react";
 
 const THEME_BLUE = "#0f2b5c";
 
-// --- INTERFACES ---
 interface StatCardProps {
-  icon: React.FC<React.ComponentProps<"svg">>;
+  icon: React.FC<IconProps>;
   label: string;
   value: string;
-  sub?: string;
-  badge?: string;
-  target?: string;
+  subValue?: string;
+  badgeText?: string;
+  badgeColor?: string;
+  helperText?: string;
   progress?: number;
-  color?: string;
 }
 
 interface TableRowProps {
@@ -57,13 +57,13 @@ interface ReadinessItemProps {
   value: string;
 }
 
-interface PhaseProgressProps {
+interface PhaseBarProps {
   label: string;
   value: number;
 }
 
 interface ActivityItemProps {
-  icon: React.FC<React.ComponentProps<"svg">>;
+  icon: React.FC<IconProps>;
   color: string;
   title: string;
   sub: string;
@@ -73,71 +73,73 @@ interface ActivityItemProps {
 export default function AdminDashboard() {
   return (
     <AdminLayout>
-      {/* HEADER */}
-      <Group justify="space-between" mb={30}>
-        <Group gap="xl">
-          <Title order={3} fw={700}>
-            Executive Dashboard
-          </Title>
-          <Group gap={8}>
-            <IconCalendarEvent size={18} color="#94A3B8" />
-            <Text size="sm" c="dimmed" fw={600}>
-              Q3 2024 • Fiscal Year View
-            </Text>
+      <Group justify="space-between" mb={40} align="center">
+        <Stack gap={5}>
+          <Group gap="lg" wrap="wrap">
+            <Title order={2} fw={800} fz={{ base: 20, sm: 24 }}>
+              Executive Dashboard
+            </Title>
+            <Box
+              visibleFrom="xs"
+              style={{ width: 1.5, height: 20, backgroundColor: "#dee2e6" }}
+            />
+            <Group gap={8}>
+              <IconCalendarEvent size={18} color="#94A3B8" />
+              <Text fz="sm" c="dimmed" fw={600}>
+                Q3 2024 • Fiscal Year View
+              </Text>
+            </Group>
           </Group>
-        </Group>
+        </Stack>
 
-        <Group gap="md">
+        <Group gap="md" style={{ flexGrow: 1, justifyContent: "flex-end" }}>
           <TextInput
             placeholder="Search insights..."
-            leftSection={<IconSearch size={16} />}
+            leftSection={<IconSearch size={16} color="#adb5bd" />}
             radius="md"
+            visibleFrom="md"
             styles={{
               input: {
-                backgroundColor: "#F1F5F9",
-                border: "none",
-                width: rem(260),
+                backgroundColor: "#FFFFFF",
+                border: "1px solid #E9ECEF",
+                width: rem(280),
+                height: rem(40),
               },
             }}
           />
-          <Indicator color="red" offset={3} size={9} withBorder>
-            <ActionIcon variant="transparent" c="gray.5">
-              <IconBell size={24} />
-            </ActionIcon>
-          </Indicator>
-          <Button
+          {/* <Button
             leftSection={<IconPlus size={18} />}
             bg={THEME_BLUE}
             radius="md"
+            h={40}
             px="xl"
+            fw={700}
           >
             New Initiative
-          </Button>
+          </Button> */}
         </Group>
       </Group>
 
-      {/* TOP STATS */}
-      <Grid mb="xl">
-        <Grid.Col span={{ base: 12, md: 3 }}>
+      <Grid mb={30} gutter="xl">
+        <Grid.Col span={{ base: 12, xs: 6, md: 3 }}>
           <StatCard
             icon={IconRocket}
             label="Active Initiatives"
             value="7"
-            badge="+2 this month"
-            color="green"
+            badgeText="+2 this month"
+            badgeColor="green"
           />
         </Grid.Col>
-        <Grid.Col span={{ base: 12, md: 3 }}>
+        <Grid.Col span={{ base: 12, xs: 6, md: 3 }}>
           <StatCard
             icon={IconChartBar}
             label="Avg. Readiness Score"
             value="3.4"
-            sub="/ 5"
-            target="Target: 4.5/5"
-            color="gray"
+            subValue="/ 5"
+            helperText="Target: 4.5/5"
           />
         </Grid.Col>
-        <Grid.Col span={{ base: 12, md: 3 }}>
+        <Grid.Col span={{ base: 12, xs: 6, md: 3 }}>
           <StatCard
             icon={IconCircleCheck}
             label="Task Completion Rate"
@@ -145,136 +147,151 @@ export default function AdminDashboard() {
             progress={68}
           />
         </Grid.Col>
-        <Grid.Col span={{ base: 12, md: 3 }}>
+        <Grid.Col span={{ base: 12, xs: 6, md: 3 }}>
           <StatCard
             icon={IconAlertTriangle}
             label="Initiatives at Risk"
             value="2"
-            badge="Action Required"
-            color="red"
+            badgeText="Action Required"
+            badgeColor="red"
           />
         </Grid.Col>
       </Grid>
 
-      {/* MIDDLE SECTION */}
-      <Grid mb="xl">
+      <Grid mb={30} gutter="xl">
         <Grid.Col span={{ base: 12, lg: 8 }}>
-          <Card withBorder radius="md" p="xl">
-            <Group justify="space-between" mb="xl">
-              <Text fw={700} size="lg">
+          <Card withBorder radius="lg" p={{ base: "md", sm: "xl" }} shadow="xs">
+            <Group justify="space-between" mb={30}>
+              <Text fw={800} fz="lg">
                 Active Initiatives
               </Text>
-              <Text c="blue" fw={700} size="sm" style={{ cursor: "pointer" }}>
+              <Text c="blue.7" fw={700} fz="sm" style={{ cursor: "pointer" }}>
                 View All
               </Text>
             </Group>
-            <Table verticalSpacing="md">
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th c="dimmed" fw={700} fz="xs">
-                    INITIATIVE NAME
-                  </Table.Th>
-                  <Table.Th c="dimmed" fw={700} fz="xs">
-                    LEAD
-                  </Table.Th>
-                  <Table.Th c="dimmed" fw={700} fz="xs">
-                    PROGRESS
-                  </Table.Th>
-                  <Table.Th c="dimmed" fw={700} fz="xs">
-                    READINESS
-                  </Table.Th>
-                  <Table.Th c="dimmed" fw={700} fz="xs">
-                    STATUS
-                  </Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                <TableRow
-                  name="Cloud Migration"
-                  lead="Sarah Chen"
-                  progress={75}
-                  readiness="High"
-                  status="On Track"
-                  color="green"
-                />
-                <TableRow
-                  name="HR Digitalization"
-                  lead="Mark Smith"
-                  progress={40}
-                  readiness="Medium"
-                  status="At Risk"
-                  color="red"
-                />
-                <TableRow
-                  name="Agile Transformation"
-                  lead="Elena Rod."
-                  progress={20}
-                  readiness="Low"
-                  status="Delayed"
-                  color="orange"
-                />
-              </Table.Tbody>
-            </Table>
+
+            <Table.ScrollContainer minWidth={600}>
+              <Table verticalSpacing="lg">
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th c="dimmed" fw={800} fz={10} lts={1}>
+                      INITIATIVE NAME
+                    </Table.Th>
+                    <Table.Th c="dimmed" fw={800} fz={10} lts={1}>
+                      LEAD
+                    </Table.Th>
+                    <Table.Th c="dimmed" fw={800} fz={10} lts={1}>
+                      PROGRESS
+                    </Table.Th>
+                    <Table.Th c="dimmed" fw={800} fz={10} lts={1}>
+                      READINESS
+                    </Table.Th>
+                    <Table.Th c="dimmed" fw={800} fz={10} lts={1}>
+                      STATUS
+                    </Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  <TableRow
+                    name="Cloud Migration"
+                    lead="Sarah Chen"
+                    progress={75}
+                    readiness="High"
+                    status="On Track"
+                    color="#40c057"
+                  />
+                  <TableRow
+                    name="HR Digitalization"
+                    lead="Mark Smith"
+                    progress={40}
+                    readiness="Medium"
+                    status="At Risk"
+                    color="#fa5252"
+                  />
+                  <TableRow
+                    name="Agile Transformation"
+                    lead="Elena Rod."
+                    progress={20}
+                    readiness="Low"
+                    status="Delayed"
+                    color="#fab005"
+                  />
+                </Table.Tbody>
+              </Table>
+            </Table.ScrollContainer>
           </Card>
         </Grid.Col>
 
         <Grid.Col span={{ base: 12, lg: 4 }}>
-          <Card withBorder radius="md" p="xl">
-            <Text fw={700} size="lg" mb="xl">
+          <Card withBorder radius="lg" p="xl" shadow="xs">
+            <Text fw={800} fz="lg" mb={30}>
               Readiness Score Overview
             </Text>
-            <Stack gap={25}>
+            <Stack gap={28}>
               <ReadinessItem label="LEADERSHIP ALIGNMENT" value="4.2" />
               <ReadinessItem label="STAFF COMPETENCY" value="3.1" />
               <ReadinessItem label="CULTURAL READINESS" value="2.8" />
               <ReadinessItem label="TECH INFRASTRUCTURE" value="3.9" />
             </Stack>
-            <Text ta="center" size="xs" c="dimmed" mt={40}>
+            <Text ta="center" fz={11} c="dimmed" fw={600} mt={50}>
               Calculated across all 7 active initiatives
             </Text>
           </Card>
         </Grid.Col>
       </Grid>
 
-      {/* BOTTOM SECTION */}
-      <Grid>
+      <Grid gutter="xl">
         <Grid.Col span={{ base: 12, lg: 7 }}>
-          <Card withBorder radius="md" p="xl">
-            <Group justify="space-between" mb="xl">
-              <Text fw={700} size="lg">
+          <Card withBorder radius="lg" p="xl" shadow="xs">
+            <Group justify="space-between" mb={30} wrap="nowrap">
+              <Text fw={800} fz="lg">
                 Task Completion by Phase
               </Text>
-              <Group gap="xs">
-                <Badge color={THEME_BLUE} variant="filled" size="xs" circle />{" "}
-                <Text size="xs" c="dimmed" fw={700}>
-                  Done
-                </Text>
-                <Badge color="gray.2" variant="filled" size="xs" circle />{" "}
-                <Text size="xs" c="dimmed" fw={700}>
-                  Pending
-                </Text>
+              <Group gap="md" visibleFrom="xs">
+                <Group gap={6}>
+                  <Box
+                    w={10}
+                    h={10}
+                    bg={THEME_BLUE}
+                    style={{ borderRadius: "2px" }}
+                  />
+                  <Text fz={11} fw={700} c="dimmed">
+                    Done
+                  </Text>
+                </Group>
+                <Group gap={6}>
+                  <Box
+                    w={10}
+                    h={10}
+                    bg="#e9ecef"
+                    style={{ borderRadius: "2px" }}
+                  />
+                  <Text fz={11} fw={700} c="dimmed">
+                    Pending
+                  </Text>
+                </Group>
               </Group>
             </Group>
-            <Stack gap="lg">
-              <PhaseProgress label="Planning" value={90} />
-              <PhaseProgress label="Execution" value={65} />
-              <PhaseProgress label="Testing" value={30} />
-              <PhaseProgress label="Launch" value={10} />
+            <Stack gap="xl">
+              <PhaseBar label="Planning" value={90} />
+              <PhaseBar label="Execution" value={65} />
+              <PhaseBar label="Testing" value={30} />
+              <PhaseBar label="Launch" value={10} />
             </Stack>
           </Card>
         </Grid.Col>
 
         <Grid.Col span={{ base: 12, lg: 5 }}>
-          <Card withBorder radius="md" p="xl">
-            <Group justify="space-between" mb="xl">
-              <Text fw={700} size="lg">
+          <Card withBorder radius="lg" p="xl" shadow="xs">
+            <Group justify="space-between" mb={30}>
+              <Text fw={800} fz="lg">
                 Recent Activity
               </Text>
-              <Badge variant="light" color="gray" radius="sm">
+              <Badge variant="light" color="gray" radius="sm" fz={10} px={8}>
                 Live Update
               </Badge>
             </Group>
-            <Stack gap="xl">
+            <Stack gap={25}>
               <ActivityItem
                 icon={IconCircleCheck}
                 color="green"
@@ -304,58 +321,74 @@ export default function AdminDashboard() {
   );
 }
 
-// --- HELPER COMPONENTS WITH PROPER TYPES ---
-
 function StatCard({
   icon: Icon,
   label,
   value,
-  sub,
-  badge,
-  target,
+  subValue,
+  badgeText,
+  badgeColor,
+  helperText,
   progress,
-  color,
 }: StatCardProps) {
   return (
-    <Card withBorder radius="md" p="lg">
-      <Group justify="space-between" mb="xs">
+    <Card
+      withBorder
+      radius="lg"
+      p="xl"
+      h="100%"
+      shadow="xs"
+      style={{ border: "1px solid #E9ECEF" }}
+    >
+      <Group justify="space-between" mb="lg" align="flex-start">
         <Box
           p={8}
-          bg="#F1F5F9"
+          bg="#F8F9FA"
           style={{ borderRadius: "8px", display: "flex" }}
         >
-          <Icon size={20} color="#64748B" />
+          <Icon size={22} color="#475569" stroke={1.5} />
         </Box>
-        {badge && (
-          <Badge variant="light" color={color} radius="sm" size="xs" fw={700}>
-            {badge}
+        {badgeText && (
+          <Badge
+            variant="light"
+            color={badgeColor}
+            radius="sm"
+            fz={10}
+            fw={800}
+          >
+            {badgeText}
           </Badge>
         )}
-      </Group>
-      <Text size="xs" c="dimmed" fw={700} mb={4}>
-        {label.toUpperCase()}
-      </Text>
-      <Group align="flex-end" gap={5}>
-        <Text size={rem(28)} fw={700}>
-          {value}
-        </Text>
-        {sub && (
-          <Text size="sm" c="dimmed" pb={5}>
-            {sub}
+        {progress && (
+          <Text fz="xs" c="dimmed" fw={700}>
+            68%
+          </Text>
+        )}
+        {helperText && !progress && (
+          <Text fz="xs" c="dimmed" fw={700}>
+            {helperText}
           </Text>
         )}
       </Group>
-      {target && (
-        <Text size="xs" c="dimmed" fw={500}>
-          {target}
+      <Text fz="xs" c="dimmed" fw={700} mb={4} lts={0.5}>
+        {label.toUpperCase()}
+      </Text>
+      <Group align="flex-end" gap={4}>
+        <Text fz={28} fw={800} style={{ lineHeight: 1 }}>
+          {value}
         </Text>
-      )}
+        {subValue && (
+          <Text fz="sm" c="dimmed" fw={700} pb={2}>
+            {subValue}
+          </Text>
+        )}
+      </Group>
       {progress && (
         <Progress
           value={progress}
           color={THEME_BLUE}
-          size="sm"
-          mt="md"
+          h={6}
+          mt="xl"
           radius="xl"
         />
       )}
@@ -373,13 +406,13 @@ function TableRow({
 }: TableRowProps) {
   return (
     <Table.Tr>
-      <Table.Td fw={700} fz="sm">
+      <Table.Td fw={700} fz="sm" py="lg" style={{ whiteSpace: "nowrap" }}>
         {name}
       </Table.Td>
       <Table.Td>
-        <Group gap="xs">
-          <Avatar size="xs" radius="xl" />
-          <Text size="sm" fw={500}>
+        <Group gap="sm" wrap="nowrap">
+          <Avatar size="sm" radius="xl" />
+          <Text fz="sm" fw={600} style={{ whiteSpace: "nowrap" }}>
             {lead}
           </Text>
         </Group>
@@ -388,9 +421,9 @@ function TableRow({
         <Progress
           value={progress}
           color={THEME_BLUE}
-          size="xs"
-          radius="xl"
+          h={6}
           w={100}
+          radius="xl"
         />
       </Table.Td>
       <Table.Td>
@@ -403,14 +436,16 @@ function TableRow({
                 ? "orange"
                 : "red"
           }
+          radius="xl"
+          px="lg"
         >
           {readiness}
         </Badge>
       </Table.Td>
       <Table.Td>
-        <Group gap={6}>
-          <Box w={6} h={6} bg={color} style={{ borderRadius: "50%" }} />
-          <Text size="sm" fw={500}>
+        <Group gap={8} wrap="nowrap">
+          <Box w={8} h={8} bg={color} style={{ borderRadius: "50%" }} />
+          <Text fz="sm" fw={600} style={{ whiteSpace: "nowrap" }}>
             {status}
           </Text>
         </Group>
@@ -422,38 +457,38 @@ function TableRow({
 function ReadinessItem({ label, value }: ReadinessItemProps) {
   return (
     <Box>
-      <Group justify="space-between" mb={6}>
-        <Text size="xs" fw={800} c="dimmed">
+      <Group justify="space-between" mb={8}>
+        <Text fz={11} fw={800} c="dimmed">
           {label}
         </Text>
-        <Text size="xs" fw={800}>
+        <Text fz={13} fw={800}>
           {value}
         </Text>
       </Group>
       <Progress
         value={(parseFloat(value) / 5) * 100}
         color={THEME_BLUE}
-        size="xl"
-        radius="md"
+        h={12}
+        radius="sm"
       />
     </Box>
   );
 }
 
-function PhaseProgress({ label, value }: PhaseProgressProps) {
+function PhaseBar({ label, value }: PhaseBarProps) {
   return (
-    <Group gap="xl">
-      <Text size="sm" fw={600} w={80}>
+    <Group gap="xl" wrap="nowrap">
+      <Text fz="sm" fw={700} w={100} style={{ whiteSpace: "nowrap" }}>
         {label}
       </Text>
       <Progress
         value={value}
         color={THEME_BLUE}
-        size={rem(30)}
+        h={34}
         radius="sm"
-        style={{ flex: 1, backgroundColor: "#F1F5F9" }}
+        style={{ flex: 1, backgroundColor: "#f1f3f5" }}
       />
-      <Text size="xs" fw={700} w={30}>
+      <Text fz="xs" fw={800} w={40} ta="right">
         {value}%
       </Text>
     </Group>
@@ -469,17 +504,23 @@ function ActivityItem({
 }: ActivityItemProps) {
   return (
     <Group align="flex-start" wrap="nowrap">
-      <ActionIcon variant="light" color={color} radius="xl" size="md">
-        <Icon size={16} />
+      <ActionIcon
+        variant="light"
+        color={color}
+        radius="xl"
+        size="lg"
+        flex="0 0 auto"
+      >
+        <Icon size={20} />
       </ActionIcon>
-      <Stack gap={2}>
-        <Text size="sm" fw={700}>
+      <Stack gap={4}>
+        <Text fz="sm" fw={800} style={{ lineHeight: 1.2 }}>
           {title}
         </Text>
-        <Text size="xs" c="dimmed" fw={500}>
+        <Text fz="xs" c="dimmed" fw={500}>
           {sub}
         </Text>
-        <Text size="10px" c="dimmed" fw={700} mt={4}>
+        <Text fz={10} c="dimmed" fw={700} mt={4}>
           {time}
         </Text>
       </Stack>
