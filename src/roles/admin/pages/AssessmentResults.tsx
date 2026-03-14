@@ -12,8 +12,14 @@ import {
   Progress,
   Anchor,
   Breadcrumbs,
+  Modal,
+  TextInput,
+  Textarea,
+  Select,
 } from "@mantine/core";
+import { useForm } from "@mantine/form";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { NAVY, TEAL, PAGE_BG, ROUTES } from "@/constants";
 import {
   IconCheck,
@@ -78,6 +84,21 @@ const RECOMMENDED_FOCUS = [
   },
 ];
 
+interface AssessmentCreateValues {
+  name: string;
+  owner: string;
+  initiative: string;
+  audience: string;
+  dueDate: string;
+  description: string;
+}
+
+const AUDIENCE_OPTIONS = [
+  { value: "leadership", label: "Leadership team" },
+  { value: "managers", label: "People managers" },
+  { value: "all-employees", label: "All employees" },
+];
+
 function getRiskLevel(score: number) {
   if (score >= 4.0) return { label: "Low Risk", color: TEAL };
   if (score >= 2.5) return { label: "Medium Risk", color: "orange" };
@@ -107,6 +128,22 @@ function StarRating({ value, max = 5 }: { value: number; max?: number }) {
 export default function AssessmentResults() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [createOpen, setCreateOpen] = useState(false);
+
+  const createForm = useForm<AssessmentCreateValues>({
+    initialValues: {
+      name: "",
+      owner: "",
+      initiative: "",
+      audience: "",
+      dueDate: "",
+      description: "",
+    },
+    validate: {
+      name: (v) => (!v ? "Assessment name is required" : null),
+      owner: (v) => (!v ? "Owner is required" : null),
+    },
+  });
 
   type DimensionScore = { label: string; score: number };
   const state = location.state as {
@@ -124,8 +161,6 @@ export default function AssessmentResults() {
       })))
     : MOCK_RESULTS.dimensionScores;
   const overall = hasState ? Number(state.overall) : MOCK_RESULTS.overall;
-  const completedBy = state?.completedBy || MOCK_RESULTS.completedBy;
-  const completedDate = state?.completedDate || MOCK_RESULTS.completedDate;
 
   const risk = getRiskLevel(overall);
 
@@ -137,6 +172,72 @@ export default function AssessmentResults() {
   return (
     <AdminLayout>
       <Box bg={PAGE_BG} style={{ minHeight: "100%", paddingBottom: 40 }}>
+        <Modal
+          opened={createOpen}
+          onClose={() => setCreateOpen(false)}
+          title="Create Assessment"
+          centered
+          size="lg"
+        >
+          <form
+            onSubmit={createForm.onSubmit(() => {
+              setCreateOpen(false);
+              createForm.reset();
+            })}
+          >
+            <Stack gap="md">
+              <TextInput
+                label="Assessment name"
+                placeholder="e.g., Q3 Readiness Survey"
+                withAsterisk
+                {...createForm.getInputProps("name")}
+              />
+              <Grid>
+                <Grid.Col span={{ base: 12, sm: 6 }}>
+                  <TextInput
+                    label="Owner"
+                    placeholder="Person responsible"
+                    withAsterisk
+                    {...createForm.getInputProps("owner")}
+                  />
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, sm: 6 }}>
+                  <TextInput
+                    label="Due date"
+                    placeholder="YYYY-MM-DD"
+                    {...createForm.getInputProps("dueDate")}
+                  />
+                </Grid.Col>
+              </Grid>
+              <TextInput
+                label="Related initiative"
+                placeholder="Which initiative is this assessment for?"
+                {...createForm.getInputProps("initiative")}
+              />
+              <Select
+                label="Primary audience"
+                placeholder="Select who will answer this assessment"
+                data={AUDIENCE_OPTIONS}
+                clearable
+                {...createForm.getInputProps("audience")}
+              />
+              <Textarea
+                label="Description"
+                placeholder="Short description so others understand the purpose of this assessment."
+                minRows={3}
+                autosize
+                {...createForm.getInputProps("description")}
+              />
+              <Group justify="flex-end" mt="md">
+                <Button variant="default" onClick={() => setCreateOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit">Create Assessment</Button>
+              </Group>
+            </Stack>
+          </form>
+        </Modal>
+
         {/* Breadcrumb + Header */}
         <Stack gap="xs" mb="lg">
           <Breadcrumbs separator=">" styles={{ separator: { color: NAVY } }}>
@@ -161,13 +262,19 @@ export default function AssessmentResults() {
           <Group justify="space-between" align="flex-end" wrap="wrap">
             <Box>
               <Title order={2} c={NAVY} mb={4}>
-                Assessment Results
+                Assessments
               </Title>
               <Text c="dimmed" fz="sm">
-                Completed on {completedDate} by {completedBy}
+                Review the latest readiness results and manage assessment runs.
               </Text>
             </Box>
             <Group gap="sm">
+              <Button
+                color={NAVY}
+                onClick={() => setCreateOpen(true)}
+              >
+                Create Assessment
+              </Button>
               <Button
                 variant="light"
                 color="dark"
@@ -177,7 +284,8 @@ export default function AssessmentResults() {
                 Retake Assessment
               </Button>
               <Button
-                color={NAVY}
+                variant="light"
+                color="dark"
                 leftSection={<IconRoute size={18} />}
                 onClick={() => navigate(ROUTES.ADMIN_ROADMAP)}
               >

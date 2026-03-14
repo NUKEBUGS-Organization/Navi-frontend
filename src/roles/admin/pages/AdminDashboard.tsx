@@ -102,16 +102,6 @@ export default function AdminDashboard() {
               },
             }}
           />
-          {/* <Button
-            leftSection={<IconPlus size={18} />}
-            bg={THEME_BLUE}
-            radius="md"
-            h={40}
-            px="xl"
-            fw={700}
-          >
-            New Initiative
-          </Button> */}
         </Group>
       </Group>
 
