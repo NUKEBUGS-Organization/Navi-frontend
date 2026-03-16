@@ -1,5 +1,6 @@
 import "@mantine/core/styles.css";
 import { MantineProvider, createTheme } from "@mantine/core";
+import { AuthProvider } from "@/contexts/AuthContext";
 import AppRoutes from "./routers/routes";
 
 const theme = createTheme({
@@ -11,7 +12,9 @@ const theme = createTheme({
 function App() {
   return (
     <MantineProvider theme={theme}>
-      <AppRoutes />
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
     </MantineProvider>
   );
 }

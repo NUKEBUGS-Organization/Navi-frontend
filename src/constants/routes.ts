@@ -26,4 +26,8 @@ export const ROUTES = {
   ADMIN_ROADMAP: "/admin/roadmap",
   ADMIN_ORGANIZATION: "/admin/organization",
   ADMIN_SETTINGS: "/admin/settings",
+  ADMIN_STAKEHOLDERS: "/admin/stakeholders",
+  ADMIN_COMMUNICATIONS: "/admin/communications",
+  ADMIN_ADOPTION: "/admin/adoption",
+  ADMIN_RISKS: "/admin/risks",
 } as const;

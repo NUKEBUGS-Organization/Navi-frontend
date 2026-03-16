@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   PasswordInput,
   Checkbox,
@@ -16,11 +17,52 @@ import {
 import { useMediaQuery } from "@mantine/hooks";
 import { ROUTES, THEME_BLUE } from "@/constants";
 import logo from "@/assets/navi-logo.jpeg";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Navigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { login as apiLogin } from "@/api/auth";
+import type { ApiError } from "@/api/client";
 
 const EmployeeLogin = () => {
   const navigate = useNavigate();
+  const { login: authLogin, token, user, isReady } = useAuth();
   const isMobile = useMediaQuery("(max-width: 768px)");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  if (!isReady) return null;
+  if (token && user) {
+    const to = user.role === "super_admin" ? ROUTES.SUPER_ADMIN_DASHBOARD : ROUTES.ADMIN_DASHBOARD;
+    return <Navigate to={to} replace />;
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!email.trim() || !password) {
+      setError("Email and password are required.");
+      return;
+    }
+    const normalizedEmail = email.trim().toLowerCase();
+    console.log("Sign In — submitted data:", { email: normalizedEmail, password });
+    setLoading(true);
+    try {
+      const data = await apiLogin(normalizedEmail, password);
+      authLogin(data.access_token, data.user);
+      const redirect =
+        data.user.role === "super_admin"
+          ? ROUTES.SUPER_ADMIN_DASHBOARD
+          : ROUTES.ADMIN_DASHBOARD;
+      navigate(redirect, { replace: true });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : (err as ApiError)?.message ?? "Invalid email or password.";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <Box
@@ -52,7 +94,7 @@ const EmployeeLogin = () => {
               h={isMobile ? "72px" : "100px"}
               w={isMobile ? "72px" : "100px"}
               radius="50%"
-            ></Image>
+            />
 
             <Text
               c="white"
@@ -85,40 +127,58 @@ const EmployeeLogin = () => {
             mt={"30px"}
             c={"#E2E8F0"}
             size={"sm"}
-          ></Divider>
-          <Stack mt={"25px"} gap={0} w={isMobile ? "100%" : "440px"}>
-            <Text c={"#0F2B5C"}>Email</Text>
-            <Input
-              placeholder="Please Enter your Email"
-              styles={{ input: { height: "49px" } }}
-            ></Input>
-          </Stack>
-          <Stack mt={"25px"} gap={0} w={isMobile ? "100%" : "440px"}>
-            <Text c={"#0F2B5C"}>Password</Text>
-            <PasswordInput
-              placeholder="Please Enter your Password"
-              styles={{ input: { height: "49px" } }}
-            ></PasswordInput>
-          </Stack>
-          <Group
-            mt={"30px"}
-            w={isMobile ? "100%" : "440px"}
-            justify="space-between"
-            wrap="wrap"
-            gap="xs"
+          />
+          <form
+            onSubmit={handleSubmit}
+            style={{ width: isMobile ? "100%" : "440px", marginTop: 24 }}
           >
-            <Checkbox label="Remember me" c={"#0F2B5C"}></Checkbox>
-            <Anchor>Forgot Password?</Anchor>
-          </Group>
-          <Button
-            mt={"30px"}
-            w={isMobile ? "100%" : "440px"}
-            bg="#00A99D"
-            c="white"
-            h={"50px"}
-          >
-            Sign In
-          </Button>
+            <Stack gap="md">
+              {error && (
+                <Text c="red" size="sm" fw={600}>
+                  {error}
+                </Text>
+              )}
+              <Stack gap={4}>
+                <Text c={"#0F2B5C"}>Email</Text>
+                <Input
+                  type="email"
+                  placeholder="Please Enter your Email"
+                  value={email}
+                  onChange={(e) => setEmail(e.currentTarget.value)}
+                  styles={{ input: { height: "49px" } }}
+                />
+              </Stack>
+              <Stack gap={4}>
+                <Text c={"#0F2B5C"}>Password</Text>
+                <PasswordInput
+                  placeholder="Please Enter your Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.currentTarget.value)}
+                  styles={{ input: { height: "49px" } }}
+                />
+              </Stack>
+              <Group justify="space-between" wrap="wrap" gap="xs">
+                <Checkbox
+                  label="Remember me"
+                  c={"#0F2B5C"}
+                  checked={remember}
+                  onChange={(e) => setRemember(e.currentTarget.checked)}
+                />
+                <Anchor>Forgot Password?</Anchor>
+              </Group>
+              <Button
+                type="submit"
+                mt="sm"
+                w="100%"
+                bg="#00A99D"
+                c="white"
+                h={"50px"}
+                loading={loading}
+              >
+                Sign In
+              </Button>
+            </Stack>
+          </form>
           <Divider
             my="xs"
             label="OR"
@@ -132,32 +192,6 @@ const EmployeeLogin = () => {
               Submit an organization request
             </Anchor>
           </Text>
-          <Button
-            mt={"16px"}
-            w={isMobile ? "100%" : "440px"}
-            variant="outline"
-            color={THEME_BLUE}
-            h={"46px"}
-            radius="md"
-            onClick={() => {
-              navigate(ROUTES.ADMIN_DASHBOARD);
-            }}
-          >
-            Open Admin Dashboard
-          </Button>
-          <Button
-            mt={"16px"}
-            w={isMobile ? "100%" : "440px"}
-            variant="outline"
-            color={THEME_BLUE}
-            h={"46px"}
-            radius="md"
-            onClick={() => {
-              navigate(ROUTES.SUPER_ADMIN_DASHBOARD);
-            }}
-          >
-            Open Super Admin Dashboard
-          </Button>
         </Stack>
       </SimpleGrid>
     </Box>

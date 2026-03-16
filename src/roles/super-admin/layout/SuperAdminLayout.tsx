@@ -9,17 +9,15 @@ import {
   rem,
   UnstyledButton,
   Burger,
+  Menu,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { useNavigate, useLocation } from "react-router-dom";
-import {
-  IconLayoutDashboard,
-  IconBuilding,
-  IconSettings,
-} from "@tabler/icons-react";
+import { IconLayoutDashboard, IconBuilding, IconSettings, IconLogout } from "@tabler/icons-react";
 import type { IconProps } from "@tabler/icons-react";
 import { COLORS, ROUTES } from "@/constants";
 import logo from "@/assets/navi-logo.jpeg";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface NavItem {
   icon: React.FC<IconProps>;
@@ -37,6 +35,7 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
   const [opened, { toggle }] = useDisclosure();
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, logout } = useAuth();
 
   return (
     <AppShell
@@ -101,6 +100,26 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
               </UnstyledButton>
             );
           })}
+          <UnstyledButton
+            onClick={() => {
+              logout();
+              navigate(ROUTES.AUTH_LOGIN, { replace: true });
+              if (opened) toggle();
+            }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              padding: `${rem(12)} ${rem(16)}`,
+              borderRadius: "8px",
+              color: COLORS.sidebarText,
+              marginTop: rem(8),
+            }}
+          >
+            <IconLogout size={22} stroke={1.5} style={{ marginRight: rem(12) }} />
+            <Text size="sm" fw={500}>
+              Log out
+            </Text>
+          </UnstyledButton>
         </Stack>
 
         <Box
@@ -108,17 +127,35 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
           p="md"
           style={{ backgroundColor: "rgba(255,255,255,0.05)", borderRadius: 12 }}
         >
-          <Group gap="sm">
-            <Avatar radius="md" size="md" />
-            <Stack gap={0}>
-              <Text size="sm" fw={700} c="white">
-                Super Admin
-              </Text>
-              <Text size="xs" c={COLORS.sidebarText} fw={500}>
-                Platform Owner
-              </Text>
-            </Stack>
-          </Group>
+          <Menu shadow="md" width={200} position="top-end">
+            <Menu.Target>
+              <UnstyledButton style={{ width: "100%" }}>
+                <Group gap="sm">
+                  <Avatar radius="md" size="md" />
+                  <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
+                    <Text size="sm" fw={700} c="white" truncate>
+                      {user?.name ?? "Super Admin"}
+                    </Text>
+                    <Text size="xs" c={COLORS.sidebarText} fw={500}>
+                      Platform Owner
+                    </Text>
+                  </Stack>
+                </Group>
+              </UnstyledButton>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item
+                leftSection={<IconLogout size={14} />}
+                color="red"
+                onClick={() => {
+                  logout();
+                  navigate(ROUTES.AUTH_LOGIN, { replace: true });
+                }}
+              >
+                Log out
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
         </Box>
       </AppShell.Navbar>
 

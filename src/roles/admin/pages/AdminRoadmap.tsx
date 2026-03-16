@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import AdminLayout from "@/roles/admin/layout/AdminLayout";
 import {
   Box,
@@ -18,7 +19,6 @@ import {
   Textarea,
   Select,
   Divider,
-  SegmentedControl,
   Slider,
   SimpleGrid,
   Menu,
@@ -26,6 +26,7 @@ import {
 import type { ReactNode } from "react";
 import { DateInput } from "@mantine/dates";
 import { useDisclosure } from "@mantine/hooks";
+import { useForm } from "@mantine/form";
 import {
   IconPlus,
   IconLayoutKanban,
@@ -39,48 +40,132 @@ import {
   IconChevronDown,
   IconRocket,
 } from "@tabler/icons-react";
-import { THEME_BLUE, TEAL_BLUE } from "@/constants";
+import { THEME_BLUE, TEAL_BLUE, ROUTES } from "@/constants";
 import { PageHeader } from "@/components";
 import { TaskCard } from "@/components/roadmap/TaskCard";
 import type { Task } from "@/types";
+import { listInitiatives } from "@/api/initiatives";
+import {
+  listTasks,
+  createTask,
+  updateTask,
+  deleteTask,
+  listTaskComments,
+  createTaskComment,
+  type TaskDto,
+  type TaskPhase,
+  type TaskCommentDto,
+} from "@/api/tasks";
+import { listOrganizationUsers } from "@/api/auth";
+import { useAuth } from "@/contexts/AuthContext";
+
+const PHASES: TaskPhase[] = ["Discovery", "Awareness", "Alignment", "Implementation", "Adoption", "Reinforcement"];
+
+function formatTaskDate(d: string | undefined): string {
+  if (!d) return "—";
+  const date = new Date(d);
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
 
 export default function AdminRoadmap() {
+  const { user } = useAuth();
+  const location = useLocation();
+  const stateInitiativeId =
+    location?.state && typeof location.state === "object" && "initiativeId" in location.state
+      ? (location.state as { initiativeId: string }).initiativeId
+      : undefined;
+  const isEmployee = user?.role === "employee";
+  const currentUserId = user?._id ?? "";
   const [opened, { open, close }] = useDisclosure(false);
-  const [editModalOpen, setEditModalOpen] = React.useState(false);
-  const [selectedTask, setSelectedTask] = React.useState<Task | null>(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [initiatives, setInitiatives] = useState<{ id: string; title: string }[]>([]);
+  const [selectedInitiativeId, setSelectedInitiativeId] = useState<string | null>(null);
+  const [tasksRaw, setTasksRaw] = useState<TaskDto[]>([]);
+  const [users, setUsers] = useState<{ _id: string; name: string; departments?: string[] }[]>([]);
+  const [loading, setLoading] = useState(true);
 
+  useEffect(() => {
+    listInitiatives()
+      .then((list) => {
+        setInitiatives(list.map((i) => ({ id: i.id, title: i.title })));
+        const toSelect =
+          stateInitiativeId && list.some((i) => i.id === stateInitiativeId)
+            ? stateInitiativeId
+            : list.length > 0
+              ? list[0].id
+              : null;
+        setSelectedInitiativeId((prev) => prev ?? toSelect);
+      })
+      .catch(() => []);
+  }, [stateInitiativeId]);
+
+  useEffect(() => {
+    listOrganizationUsers()
+      .then((list) =>
+        setUsers(list.map((u) => ({ _id: u._id, name: u.name, departments: u.departments })))
+      )
+      .catch(() => []);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedInitiativeId) {
+      setTasksRaw([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    listTasks(selectedInitiativeId)
+      .then((list) => setTasksRaw(Array.isArray(list) ? list : []))
+      .catch(() => setTasksRaw([]))
+      .finally(() => setLoading(false));
+  }, [selectedInitiativeId]);
+
+  const userById: Record<string, string> = {};
+  users.forEach((u) => { userById[String(u._id)] = u.name; });
+
+  const tasks: Task[] = tasksRaw.map((t) => ({
+    id: t._id,
+    _id: t._id,
+    initiativeId: t.initiativeId,
+    assigneeId: t.assigneeId,
+    status: t.status as Task["status"],
+    title: t.title,
+    owner: t.assigneeName ?? userById[String(t.assigneeId ?? "")] ?? (t.assigneeId != null ? String(t.assigneeId) : "—"),
+    date: formatTaskDate(t.dueDate),
+    dueDate: t.dueDate,
+    progress: t.progress ?? 0,
+    isBlocked: t.isBlocked,
+    phase: t.phase,
+    description: t.description,
+  }));
+
+  const selectedInitiative = initiatives.find((i) => i.id === selectedInitiativeId);
+
+  const myDepts = new Set((user?.departments ?? []).map((d) => String(d).toLowerCase()));
+  const assigneeIdsInMyDept = new Set(
+    users
+      .filter(
+        (u) =>
+          u._id !== currentUserId &&
+          u.departments?.some((d) => myDepts.has(String(d).toLowerCase()))
+      )
+      .map((u) => u._id)
+  );
+  const tasksForView =
+    isEmployee
+      ? tasks.filter((t) => String(t.assigneeId ?? t.id) === currentUserId)
+      : user?.role === "manager"
+        ? tasks.filter(
+            (t) =>
+              String(t.assigneeId ?? t.id) === currentUserId ||
+              assigneeIdsInMyDept.has(String(t.assigneeId ?? ""))
+          )
+        : tasks;
   const breadcrumbs = [
-    { title: "Initiatives", href: "#" },
-    { title: "Strategic Digital Transformation", href: "#" },
+    { title: "Initiatives", href: ROUTES.ADMIN_INITIATIVES },
+    { title: selectedInitiative?.title ?? "Roadmap", href: "#" },
     { title: "Roadmap", href: "#" },
-  ];
-
-  const tasks: Task[] = [
-    {
-      id: 1,
-      status: "In Progress",
-      title: "Stakeholder Impact Assessment Workshop",
-      owner: "Sarah M.",
-      date: "Oct 24",
-      progress: 65,
-    },
-    {
-      id: 2,
-      status: "Not Started",
-      title: "Current State Data Architecture Audit",
-      owner: "James T.",
-      date: "Oct 30",
-      progress: 0,
-    },
-    {
-      id: 3,
-      status: "Blocked",
-      title: "Executive Town Hall Communication Kit",
-      owner: "Elena V.",
-      date: "Nov 05",
-      progress: 20,
-      isBlocked: true,
-    },
   ];
 
   const handleEditTask = (task: Task) => {
@@ -92,6 +177,12 @@ export default function AdminRoadmap() {
     setSelectedTask(null);
   };
 
+  const refetchTasks = () => {
+    if (selectedInitiativeId) {
+      listTasks(selectedInitiativeId).then((list) => setTasksRaw(Array.isArray(list) ? list : [])).catch(() => {});
+    }
+  };
+
   return (
     <AdminLayout>
       <>
@@ -100,19 +191,38 @@ export default function AdminRoadmap() {
             title="Change Roadmap"
             breadcrumbs={breadcrumbs}
             actions={
-              <Button
-                leftSection={<IconPlus size={20} />}
-                bg={THEME_BLUE}
-                radius="md"
-                h={45}
-                px={30}
-                fw={700}
-                onClick={open}
-              >
-                Add Task
-              </Button>
+              <Group>
+                <Select
+                  placeholder="Select initiative"
+                  data={initiatives.map((i) => ({ value: i.id, label: i.title }))}
+                  value={selectedInitiativeId ?? undefined}
+                  onChange={(v) => setSelectedInitiativeId(v ?? null)}
+                  size="sm"
+                  w={220}
+                  radius="md"
+                />
+                {!isEmployee && (
+                  <Button
+                    leftSection={<IconPlus size={20} />}
+                    bg={THEME_BLUE}
+                    radius="md"
+                    h={45}
+                    px={30}
+                    fw={700}
+                    onClick={open}
+                    disabled={!selectedInitiativeId}
+                  >
+                    Add Task
+                  </Button>
+                )}
+              </Group>
             }
           />
+          {(isEmployee || user?.role === "manager") && (
+            <Text size="xs" c="dimmed" mb="xs">
+              Showing tasks relevant to your role and department.
+            </Text>
+          )}
 
           <Box
             style={{
@@ -165,73 +275,72 @@ export default function AdminRoadmap() {
                 </Tabs.List>
 
                 <Tabs.Panel value="kanban" pt="xl">
+                  {loading ? (
+                    <Text size="sm" c="dimmed">Loading tasks…</Text>
+                  ) : (
                   <SimpleGrid
                     cols={{ base: 1, sm: 2, lg: 3 }}
                     spacing={40}
                     verticalSpacing={50}
                   >
-                    <KanbanColumn
-                      title="DISCOVERY"
-                      count={2}
-                      progress={75}
-                      color="#00a99d"
-                    >
-                      {tasks.slice(0, 2).map((task) => (
-                        <TaskCard
-                          key={task.id}
-                          {...task}
-                          onMenuClick={() => handleEditTask(task)}
-                        />
-                      ))}
-                    </KanbanColumn>
-
-                    <KanbanColumn
-                      title="AWARENESS"
-                      count={1}
-                      progress={45}
-                      color="#00a99d"
-                    >
-                      {tasks.slice(2, 3).map((task) => (
-                        <TaskCard
-                          key={task.id}
-                          {...task}
-                          onMenuClick={() => handleEditTask(task)}
-                        />
-                      ))}
-                    </KanbanColumn>
-
-                    <KanbanColumn
-                      title="ALIGNMENT"
-                      count={8}
-                      progress={0}
-                      color="#00a99d"
-                    >
-                      <Card
-                        h={rem(200)}
-                        withBorder
-                        radius="lg"
-                        bg="#f8f9fa"
-                        style={{
-                          border: "2.5px dashed #dee2e6",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
-                      >
-                        <Stack align="center" gap={8}>
-                          <IconPackage size={44} color="#adb5bd" stroke={1.2} />
-                          <Text fz="sm" c="dimmed" fw={700}>
-                            Drop tasks here
-                          </Text>
-                        </Stack>
-                      </Card>
-                    </KanbanColumn>
+                    {PHASES.map((phase) => {
+                      const phaseTasks = tasksForView.filter((t) => (t.phase ?? "Discovery") === phase);
+                      const progress = phaseTasks.length
+                        ? Math.round(phaseTasks.reduce((s, t) => s + t.progress, 0) / phaseTasks.length)
+                        : 0;
+                      return (
+                        <KanbanColumn
+                          key={phase}
+                          title={phase.toUpperCase()}
+                          count={phaseTasks.length}
+                          progress={progress}
+                          color="#00a99d"
+                        >
+                          {phaseTasks.map((task) => (
+                            <TaskCard
+                              key={String(task.id)}
+                              {...task}
+                              onMenuClick={() => handleEditTask(task)}
+                            />
+                          ))}
+                          {phaseTasks.length === 0 && (
+                            <Card
+                              h={rem(200)}
+                              withBorder
+                              radius="lg"
+                              bg="#f8f9fa"
+                              style={{
+                                border: "2.5px dashed #dee2e6",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <Stack align="center" gap={8}>
+                                <IconPackage size={44} color="#adb5bd" stroke={1.2} />
+                                <Text fz="sm" c="dimmed" fw={700}>
+                                  No tasks in this phase
+                                </Text>
+                              </Stack>
+                            </Card>
+                          )}
+                        </KanbanColumn>
+                      );
+                    })}
                   </SimpleGrid>
+                  )}
                 </Tabs.Panel>
 
                 <Tabs.Panel value="list" pt="xl">
+                  {loading ? (
+                    <Text size="sm" c="dimmed">Loading tasks…</Text>
+                  ) : tasksForView.length === 0 ? (
+                    <Text size="sm" c="dimmed">
+                      {isEmployee ? "No tasks assigned to you for this initiative." : "No tasks yet. Select an initiative and add a task."}
+                    </Text>
+                  ) : (
                 <Stack gap="sm">
-                    {tasks.map((task) => (
+                    {tasksForView.map((task) => (
                       <Card
                         key={task.id}
                         withBorder
@@ -300,11 +409,19 @@ export default function AdminRoadmap() {
                       </Card>
                     ))}
                   </Stack>
+                )}
                 </Tabs.Panel>
 
                 <Tabs.Panel value="timeline" pt="xl">
+                  {loading ? (
+                    <Text size="sm" c="dimmed">Loading tasks…</Text>
+                  ) : tasksForView.length === 0 ? (
+                    <Text size="sm" c="dimmed">
+                      {isEmployee ? "No tasks assigned to you." : "No tasks yet."}
+                    </Text>
+                  ) : (
                   <Stack gap="md">
-                    {tasks.map((task) => (
+                    {tasksForView.map((task) => (
                       <Group
                         key={task.id}
                         align="flex-start"
@@ -360,6 +477,7 @@ export default function AdminRoadmap() {
                       </Group>
                     ))}
                   </Stack>
+                  )}
                 </Tabs.Panel>
               </Tabs>
 
@@ -375,11 +493,21 @@ export default function AdminRoadmap() {
             </Group>
           </Box>
         </Box>
-        <CreateTaskModal opened={opened} onClose={close} />
+        <CreateTaskModal
+          opened={opened}
+          onClose={close}
+          initiativeId={selectedInitiativeId}
+          users={users}
+          onCreated={refetchTasks}
+        />
         <EditTaskModal
           opened={editModalOpen}
           onClose={handleCloseEditModal}
           task={selectedTask}
+          userById={userById}
+          canDelete={!isEmployee}
+          onSaved={refetchTasks}
+          onDeleted={() => { handleCloseEditModal(); refetchTasks(); }}
         />
       </>
     </AdminLayout>
@@ -436,13 +564,96 @@ function KanbanColumn({
   );
 }
 
+function formatRelativeTime(dateStr: string): string {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const sec = Math.floor((now.getTime() - d.getTime()) / 1000);
+  if (sec < 60) return "Just now";
+  if (sec < 3600) return `${Math.floor(sec / 60)} min ago`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)} hours ago`;
+  if (sec < 604800) return `${Math.floor(sec / 86400)} days ago`;
+  return d.toLocaleDateString();
+}
+
 interface EditTaskModalProps {
   opened: boolean;
   onClose: () => void;
   task: Task | null;
+  userById: Record<string, string>;
+  canDelete?: boolean;
+  onSaved?: () => void;
+  onDeleted?: () => void;
 }
 
-function EditTaskModal({ opened, onClose, task }: EditTaskModalProps) {
+function statusFromProgress(progress: number): "Not Started" | "In Progress" | "Completed" {
+  if (progress >= 100) return "Completed";
+  if (progress > 0) return "In Progress";
+  return "Not Started";
+}
+
+function EditTaskModal({ opened, onClose, task, userById, canDelete = true, onSaved, onDeleted }: EditTaskModalProps) {
+  const taskId = task ? (task._id ?? String(task.id)) : "";
+  const [progress, setProgress] = useState(task?.progress ?? 0);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [comments, setComments] = useState<TaskCommentDto[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [newComment, setNewComment] = useState("");
+  const [commentSubmitting, setCommentSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (task) setProgress(task.progress ?? 0);
+  }, [task]);
+
+  useEffect(() => {
+    if (!opened || !taskId) {
+      setComments([]);
+      return;
+    }
+    setCommentsLoading(true);
+    listTaskComments(taskId)
+      .then((list) => setComments(Array.isArray(list) ? list : []))
+      .catch(() => setComments([]))
+      .finally(() => setCommentsLoading(false));
+  }, [opened, taskId]);
+
+  const handleSave = async () => {
+    if (!taskId) return;
+    setSaving(true);
+    try {
+      await updateTask(taskId, { progress });
+      onSaved?.();
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!taskId || !window.confirm("Delete this task?")) return;
+    setDeleting(true);
+    try {
+      await deleteTask(taskId);
+      onDeleted?.();
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleAddComment = async () => {
+    const content = newComment.trim();
+    if (!taskId || !content) return;
+    setCommentSubmitting(true);
+    try {
+      await createTaskComment(taskId, content);
+      setNewComment("");
+      const list = await listTaskComments(taskId);
+      setComments(Array.isArray(list) ? list : []);
+    } finally {
+      setCommentSubmitting(false);
+    }
+  };
+
   if (!task) return null;
   return (
     <Modal
@@ -485,21 +696,9 @@ function EditTaskModal({ opened, onClose, task }: EditTaskModalProps) {
           <Box p="lg" pb="sm" style={{ borderBottom: "1px solid #f1f3f5" }}>
             <Group justify="space-between" align="flex-start">
               <Stack gap={6}>
-                <Badge
-                  size="sm"
-                  radius="lg"
-                  variant="light"
-                  color={
-                    task.status === "In Progress"
-                      ? "blue"
-                      : task.status === "Blocked"
-                        ? "red"
-                        : "gray"
-                  }
-                  fw={700}
-                >
-                  {task.status}
-                </Badge>
+                <Text fz="xs" fw={700} c="dimmed">
+                  Status: {statusFromProgress(progress)}
+                </Text>
                 <Text fz="sm" fw={700}>
                   {task.title}
                 </Text>
@@ -531,7 +730,7 @@ function EditTaskModal({ opened, onClose, task }: EditTaskModalProps) {
                       Phase
                     </Text>
                     <Text fz="sm" fw={700}>
-                      Discovery
+                      {task.phase ?? "Discovery"}
                     </Text>
                   </Box>
                   <Box>
@@ -562,15 +761,16 @@ function EditTaskModal({ opened, onClose, task }: EditTaskModalProps) {
                     </Text>
                     <Group gap="xs">
                       <Box style={{ flex: 1 }}>
-                        <Progress
-                          value={task.progress}
+                        <Slider
+                          value={progress}
+                          onChange={setProgress}
                           color={THEME_BLUE}
-                          h={6}
-                          radius="xl"
+                          size="sm"
+                          label={null}
                         />
                       </Box>
                       <Text fz="sm" fw={700}>
-                        {task.progress}%
+                        {progress}%
                       </Text>
                     </Group>
                   </Box>
@@ -578,75 +778,67 @@ function EditTaskModal({ opened, onClose, task }: EditTaskModalProps) {
               </Box>
 
               <Box>
-                <Group justify="space-between" mb={6}>
-                  <Text fz="xs" fw={700} c="dimmed">
-                    DESCRIPTION
-                  </Text>
-                  <Text fz="xs" c="blue" fw={600}>
-                    Edit
-                  </Text>
-                </Group>
-                <Textarea
-                  placeholder="Click to add description..."
-                  minRows={3}
-                  radius="md"
-                  size="sm"
-                />
+                <Text fz="xs" fw={700} c="dimmed" mb={6}>
+                  DESCRIPTION
+                </Text>
+                <Text fz="sm" c="dimmed" style={{ whiteSpace: "pre-wrap" }}>
+                  {task.description?.trim() || "No description."}
+                </Text>
               </Box>
 
               <Box>
                 <Text fz="xs" fw={700} c="dimmed" mb={8}>
-                  ACTIVITY LOG
+                  PROGRESS LOG (COMMENTS)
                 </Text>
                 <Stack gap="md">
-                  <Group align="flex-start" gap="sm">
-                    <Avatar size="sm" radius="xl" color="blue" />
-                    <Box>
-                      <Text fz="sm" fw={600}>
-                        Marcus Lee{" "}
-                        <Text span fz="xs" c="dimmed">
-                          changed status to{" "}
-                          <Badge size="xs" radius="sm" color="blue" variant="light">
-                            In Progress
-                          </Badge>
-                        </Text>
-                      </Text>
-                      <Text fz="xs" c="dimmed">
-                        2 hours ago
-                      </Text>
-                    </Box>
-                  </Group>
-                  <Group align="flex-start" gap="sm">
-                    <Avatar size="sm" radius="xl" color="grape" />
-                    <Box>
-                      <Text fz="sm" fw={600}>
-                        Alex Rivera
-                      </Text>
-                      <Text fz="xs" c="dimmed">
-                        Scheduled the first three interviews for Thursday. Waiting on
-                        the legal team for NDA templates.
-                      </Text>
-                      <Text fz="xs" c="dimmed" mt={4}>
-                        Yesterday at 4:32 PM
-                      </Text>
-                    </Box>
-                  </Group>
+                  {commentsLoading ? (
+                    <Text fz="sm" c="dimmed">
+                      Loading comments…
+                    </Text>
+                  ) : comments.length === 0 ? (
+                    <Text fz="sm" c="dimmed">
+                      No comments yet. Add a comment to log progress.
+                    </Text>
+                  ) : (
+                    comments.map((c) => (
+                      <Group key={c._id} align="flex-start" gap="sm">
+                        <Avatar size="sm" radius="xl" color="blue" />
+                        <Box style={{ flex: 1 }}>
+                          <Text fz="sm" fw={600}>
+                            {userById[String(c.userId ?? "")] ?? "Unknown"}
+                          </Text>
+                          <Text fz="sm" c="dimmed" style={{ whiteSpace: "pre-wrap" }}>
+                            {c.content}
+                          </Text>
+                          <Text fz="xs" c="dimmed" mt={4}>
+                            {formatRelativeTime(c.createdAt)}
+                          </Text>
+                        </Box>
+                      </Group>
+                    ))
+                  )}
                   <Box>
                     <Text fz="xs" c="dimmed" mb={4}>
-                      Write a comment...
+                      Add a comment (admins can see progress logs)
                     </Text>
                     <Group gap="xs">
                       <TextInput
-                        placeholder="Add a comment"
+                        placeholder="Add a comment..."
                         radius="xl"
                         size="sm"
                         style={{ flex: 1 }}
+                        value={newComment}
+                        onChange={(e) => setNewComment(e.currentTarget.value)}
+                        onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleAddComment()}
                       />
                       <Button
                         radius="xl"
                         size="sm"
                         bg={THEME_BLUE}
                         px="md"
+                        onClick={handleAddComment}
+                        loading={commentSubmitting}
+                        disabled={!newComment.trim()}
                       >
                         Send
                       </Button>
@@ -667,15 +859,19 @@ function EditTaskModal({ opened, onClose, task }: EditTaskModalProps) {
               alignItems: "center",
             }}
           >
-            <Button variant="subtle" color="red" fw={700}>
-              Delete Task
-            </Button>
+            {canDelete && (
+              <Button variant="subtle" color="red" fw={700} onClick={handleDelete} loading={deleting}>
+                Delete Task
+              </Button>
+            )}
             <Button
               bg={THEME_BLUE}
               radius="md"
               fw={700}
               px={30}
               h={40}
+              onClick={handleSave}
+              loading={saving}
             >
               Save Changes
             </Button>
@@ -689,10 +885,48 @@ function EditTaskModal({ opened, onClose, task }: EditTaskModalProps) {
 function CreateTaskModal({
   opened,
   onClose,
+  initiativeId,
+  users,
+  onCreated,
 }: {
   opened: boolean;
   onClose: () => void;
+  initiativeId: string | null;
+  users: { _id: string; name: string }[];
+  onCreated: () => void;
 }) {
+  const form = useForm({
+    initialValues: {
+      title: "",
+      description: "",
+      phase: "Discovery" as TaskPhase,
+      dueDate: "" as string | Date | null,
+      assigneeId: "",
+      progress: 0,
+    },
+    validate: { title: (v) => (!v?.trim() ? "Title is required" : null), assigneeId: (v) => (!v ? "Owner is required" : null) },
+  });
+
+  const handleSubmit = form.onSubmit(async (values) => {
+    if (!initiativeId) return;
+    try {
+      await createTask({
+        initiativeId,
+        title: values.title.trim(),
+        description: values.description?.trim() || undefined,
+        phase: values.phase,
+        dueDate: values.dueDate ? (typeof values.dueDate === "string" ? values.dueDate : (values.dueDate as Date).toISOString().slice(0, 10)) : undefined,
+        assigneeId: values.assigneeId,
+        progress: values.progress,
+      });
+      onCreated();
+      form.reset();
+      onClose();
+    } catch {
+      // keep modal open
+    }
+  });
+
   return (
     <Modal
       opened={opened}
@@ -710,135 +944,73 @@ function CreateTaskModal({
         header: { borderBottom: "1px solid #f1f3f5", marginBottom: rem(20) },
       }}
     >
-      <Stack gap="xl">
-        <TextInput
-          label={
-            <Text fw={700} fz="sm" mb={5}>
-              Task Title
-            </Text>
-          }
-          placeholder="e.g., Define target audience personas"
-          radius="md"
-          size="md"
-        />
-        <Textarea
-          label={
-            <Text fw={700} fz="sm" mb={5}>
-              Description
-            </Text>
-          }
-          placeholder="Describe the task details..."
-          minRows={4}
-          radius="md"
-          size="md"
-        />
-
-        <SimpleGrid cols={2}>
+      <form onSubmit={handleSubmit}>
+        <Stack gap="xl">
+          <TextInput
+            label={<Text fw={700} fz="sm" mb={5}>Task Title</Text>}
+            placeholder="e.g., Define target audience personas"
+            radius="md"
+            size="md"
+            {...form.getInputProps("title")}
+          />
+          <Textarea
+            label={<Text fw={700} fz="sm" mb={5}>Description</Text>}
+            placeholder="Describe the task details..."
+            minRows={4}
+            radius="md"
+            size="md"
+            {...form.getInputProps("description")}
+          />
+          <SimpleGrid cols={2}>
+            <Select
+              label={<Text fw={700} fz="sm" mb={5}>Phase</Text>}
+              data={["Discovery", "Awareness", "Alignment", "Implementation", "Adoption", "Reinforcement"]}
+              radius="md"
+              size="md"
+              rightSection={<IconChevronDown size={18} />}
+              {...form.getInputProps("phase")}
+            />
+            <DateInput
+              label={<Text fw={700} fz="sm" mb={5}>Due Date</Text>}
+              placeholder="Pick date"
+              radius="md"
+              size="md"
+              valueFormat="YYYY-MM-DD"
+              popoverProps={{ withinPortal: true, zIndex: 10000 }}
+              clearable
+              {...form.getInputProps("dueDate")}
+            />
+          </SimpleGrid>
           <Select
-            label={
-              <Text fw={700} fz="sm" mb={5}>
-                Phase
-              </Text>
-            }
-            placeholder="Discovery"
-            data={["Discovery", "Awareness", "Alignment"]}
+            label={<Text fw={700} fz="sm" mb={5}>Task Owner</Text>}
+            placeholder="Select member"
+            data={users.map((u) => ({ value: u._id, label: u.name }))}
             radius="md"
             size="md"
-            rightSection={<IconChevronDown size={18} />}
+            {...form.getInputProps("assigneeId")}
           />
-          <DateInput
-            label={
-              <Text fw={700} fz="sm" mb={5}>
-                Due Date
-              </Text>
-            }
-            placeholder="mm/dd/yyyy"
-            radius="md"
-            size="md"
-          />
-        </SimpleGrid>
-
-        <Box>
-          <Text fw={700} fz="sm" mb={8}>
-            Task Owner
-          </Text>
-          <Box
-            p="md"
-            style={{
-              border: "1px solid #e9ecef",
-              borderRadius: "12px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <Group gap="sm">
-              <Avatar radius="xl" size="sm" color="blue" />
-              <Stack gap={0}>
-                <Text fz="sm" fw={800}>
-                  Alex Rivera
-                </Text>
-                <Text fz="xs" c="dimmed" fw={600}>
-                  Project Lead
-                </Text>
-              </Stack>
+          <Box>
+            <Group justify="space-between" mb={8}>
+              <Text fw={700} fz="sm">Progress</Text>
+              <Badge variant="light" color="teal" radius="sm" fw={800}>{form.values.progress}%</Badge>
             </Group>
-            <IconSearch size={20} color="#adb5bd" />
+            <Slider
+              color={TEAL_BLUE}
+              value={form.values.progress}
+              onChange={(v) => form.setFieldValue("progress", v)}
+              label={null}
+              thumbSize={20}
+            />
           </Box>
-        </Box>
-
-        <Box>
-          <Text fw={700} fz="sm" mb={10}>
-            Status
-          </Text>
-          <SegmentedControl
-            fullWidth
-            radius="md"
-            size="md"
-            data={["Not Started", "In Progress", "Completed", "Blocked"]}
-            styles={{
-              root: { backgroundColor: "#f1f3f5", padding: "4px" },
-              indicator: { backgroundColor: "white" },
-              label: { fontWeight: 800, fontSize: rem(12) },
-            }}
-          />
-        </Box>
-
-        <Box>
-          <Group justify="space-between" mb={8}>
-            <Text fw={700} fz="sm">
-              Progress
-            </Text>
-            <Badge variant="light" color="teal" radius="sm" fw={800}>
-              0%
-            </Badge>
+          <Divider />
+          <Group justify="flex-end" gap="md" mt="md">
+            <Button type="button" variant="transparent" c="gray.6" fw={700} onClick={onClose}>Cancel</Button>
+            <Button type="submit" bg={TEAL_BLUE} radius="md" px={30} h={45} fw={700} leftSection={<IconRocket size={18} />}>
+              Save Task
+            </Button>
           </Group>
-          <Slider
-            color={TEAL_BLUE}
-            defaultValue={0}
-            label={null}
-            thumbSize={20}
-          />
-        </Box>
-
-        <Divider />
-
-        <Group justify="flex-end" gap="md" mt="md">
-          <Button variant="transparent" c="gray.6" fw={700} onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            bg={TEAL_BLUE}
-            radius="md"
-            px={30}
-            h={45}
-            fw={700}
-            leftSection={<IconRocket size={18} />}
-          >
-            Save Task
-          </Button>
-        </Group>
-      </Stack>
+        </Stack>
+      </form>
     </Modal>
   );
 }

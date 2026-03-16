@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import AdminLayout from "@/roles/admin/layout/AdminLayout";
 import {
   Box,
@@ -11,10 +12,8 @@ import {
   Avatar,
   Stack,
   TextInput,
-  Select,
   Grid,
   Divider,
-  Switch,
   ActionIcon,
   Center,
 } from "@mantine/core";
@@ -22,12 +21,39 @@ import {
   IconCamera,
   IconUser,
   IconLock,
-  IconBell,
-  IconChevronDown,
 } from "@tabler/icons-react";
 import { THEME_BLUE, TEAL_BLUE } from "@/constants";
+import { useAuth } from "@/contexts/AuthContext";
+import { getMyOrganization } from "@/api/organizations";
+import type { MyOrganization } from "@/api/organizations";
+
+function getInitials(name: string | undefined): string {
+  if (!name?.trim()) return "?";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+
+function formatRole(role: string | undefined): string {
+  if (!role) return "—";
+  return role.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 export default function AdminSettings() {
+  const { user } = useAuth();
+  const [org, setOrg] = useState<MyOrganization | null>(null);
+
+  useEffect(() => {
+    getMyOrganization()
+      .then(setOrg)
+      .catch(() => setOrg(null));
+  }, []);
+
+  const nameParts = user?.name?.trim()?.split(/\s+/) ?? [];
+  const firstName = nameParts[0] ?? "";
+  const lastName = nameParts.slice(1).join(" ") ?? "";
+  const departmentsDisplay = user?.departments?.length ? user.departments.join(", ") : "—";
+
   return (
     <AdminLayout>
       <Box style={{ width: "100%" }}>
@@ -51,7 +77,7 @@ export default function AdminSettings() {
                     fz={rem(40)}
                     fw={700}
                   >
-                    JD
+                    {getInitials(user?.name)}
                   </Avatar>
                   <ActionIcon
                     variant="filled"
@@ -71,7 +97,7 @@ export default function AdminSettings() {
               </Center>
 
               <Title order={2} fw={800} fz={rem(24)} mb={5}>
-                Jane Doe
+                {user?.name ?? "—"}
               </Title>
               <Badge
                 variant="light"
@@ -82,34 +108,34 @@ export default function AdminSettings() {
                 fw={800}
                 fz={10}
               >
-                SENIOR DIRECTOR
+                {formatRole(user?.role)}
               </Badge>
 
               <Divider my={30} color="#f1f3f5" />
 
               <Stack gap="xl" align="flex-start">
-                <Box ta="left">
+                <Box ta="left" style={{ width: "100%" }}>
                   <Text fz={10} fw={800} c="dimmed" lts={1} mb={4}>
                     EMAIL ADDRESS
                   </Text>
                   <Text fz="sm" fw={600}>
-                    jane.doe@globalcorp.com
+                    {user?.email ?? "—"}
                   </Text>
                 </Box>
-                <Box ta="left">
+                <Box ta="left" style={{ width: "100%" }}>
                   <Text fz={10} fw={800} c="dimmed" lts={1} mb={4}>
                     ORGANIZATION
                   </Text>
                   <Text fz="sm" fw={600}>
-                    Global Tech Solutions Inc.
+                    {org?.name ?? "—"}
                   </Text>
                 </Box>
-                <Box ta="left">
+                <Box ta="left" style={{ width: "100%" }}>
                   <Text fz={10} fw={800} c="dimmed" lts={1} mb={4}>
-                    MEMBER SINCE
+                    DEPARTMENT(S)
                   </Text>
                   <Text fz="sm" fw={600}>
-                    January 14, 2023
+                    {departmentsDisplay}
                   </Text>
                 </Box>
               </Stack>
@@ -142,34 +168,18 @@ export default function AdminSettings() {
                   <Divider mb="xl" color="#f1f3f5" />
                   <Grid gutter="xl">
                     <Grid.Col span={6}>
-                      <SettingInput label="FIRST NAME" defaultValue="Jane" />
+                      <SettingInput label="FIRST NAME" defaultValue={firstName} />
                     </Grid.Col>
                     <Grid.Col span={6}>
-                      <SettingInput label="LAST NAME" defaultValue="Doe" />
+                      <SettingInput label="LAST NAME" defaultValue={lastName} />
                     </Grid.Col>
-                    <Grid.Col span={6}>
-                      <SettingInput
-                        label="JOB TITLE"
-                        defaultValue="Senior Director of Operations"
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={6}>
-                      <Select
-                        label={
-                          <Text fw={800} fz={10} c="dimmed" lts={1} mb={8}>
-                            DEPARTMENT
-                          </Text>
-                        }
-                        defaultValue="Strategy & Growth"
-                        data={[
-                          "Strategy & Growth",
-                          "Engineering",
-                          "Operations",
-                        ]}
-                        radius="md"
-                        size="md"
-                        rightSection={<IconChevronDown size={16} />}
-                      />
+                    <Grid.Col span={12}>
+                      <Text fz={10} fw={800} c="dimmed" lts={1} mb={8}>
+                        DEPARTMENT(S)
+                      </Text>
+                      <Text fz="sm" fw={600}>
+                        {departmentsDisplay}
+                      </Text>
                     </Grid.Col>
                   </Grid>
                 </Box>
@@ -208,36 +218,6 @@ export default function AdminSettings() {
                     Password must be at least 12 characters and include at least
                     one uppercase letter, one number, and one special character.
                   </Text>
-                </Box>
-              </Card>
-
-              <Card withBorder radius="lg" p={0} shadow="xs">
-                <Box p="xl">
-                  <Group gap="sm" mb="xl">
-                    <IconBell size={22} color={TEAL_BLUE} stroke={2.5} />
-                    <Title order={4} fw={800}>
-                      Notification Preferences
-                    </Title>
-                  </Group>
-                  <Divider color="#f1f3f5" />
-                  <Stack gap={0}>
-                    <NotificationToggle
-                      title="Task Assignment"
-                      desc="Email me when I'm assigned a new task"
-                      active
-                    />
-                    <NotificationToggle
-                      title="Assessment Updates"
-                      desc="Email me when an assessment is completed"
-                      active
-                    />
-                    <NotificationToggle
-                      title="Initiative Status"
-                      desc="Email me when an initiative status changes"
-                      active={false}
-                      isLast
-                    />
-                  </Stack>
                 </Box>
               </Card>
 
@@ -288,41 +268,5 @@ function SettingInput({
         input: { backgroundColor: "#f8f9fa" },
       }}
     />
-  );
-}
-
-function NotificationToggle({
-  title,
-  desc,
-  active,
-  isLast,
-}: {
-  title: string;
-  desc: string;
-  active: boolean;
-  isLast?: boolean;
-}) {
-  return (
-    <Box
-      py="xl"
-      style={{ borderBottom: isLast ? "none" : "1px solid #f1f3f5" }}
-    >
-      <Group justify="space-between" wrap="nowrap">
-        <Stack gap={2}>
-          <Text fw={800} fz="sm">
-            {title}
-          </Text>
-          <Text fz="xs" c="dimmed" fw={500}>
-            {desc}
-          </Text>
-        </Stack>
-        <Switch
-          defaultChecked={active}
-          color="teal"
-          size="md"
-          styles={{ track: { cursor: "pointer" } }}
-        />
-      </Group>
-    </Box>
   );
 }

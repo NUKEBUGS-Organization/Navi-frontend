@@ -22,6 +22,7 @@ import {
   Table,
   Paper,
   ThemeIcon,
+  MultiSelect,
 } from "@mantine/core";
 
 import { useDisclosure } from "@mantine/hooks";
@@ -36,8 +37,14 @@ import {
   IconCircle,
   IconUsers,
 } from "@tabler/icons-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { THEME_BLUE, NAVY, ROUTES } from "@/constants";
+import { getInitiative, updateInitiative, type InitiativeListItem } from "@/api/initiatives";
+import { listOrganizationUsers } from "@/api/auth";
+import { getMyOrganization } from "@/api/organizations";
+import { listAssessmentsByInitiative, listSubmissions, type Assessment, type AssessmentSubmission } from "@/api/assessments";
+import { listTasks, type TaskDto } from "@/api/tasks";
 
 interface Initiative {
   id: string;
@@ -68,237 +75,238 @@ interface Initiative {
   }[];
 }
 
-const INITIATIVES: Record<string, Initiative> = {
-  "cloud-migration-phase-2": {
-    id: "cloud-migration-phase-2",
-    title: "Strategic Digital Transformation",
-    status: "In Progress",
-    dateRange: "Q4 2023 - Q2 2024",
-    lead: "Sarah Chen",
-    departments: "IT, Ops, Finance".split(", "),
-    description:
-      "This initiative focuses on modernizing legacy infrastructure across the organization to support rapid scaling and improve operational efficiency. By migrating core services to a cloud-native architecture, we aim to reduce downtime by 40% and increase developer velocity by streamlining CI/CD pipelines.",
-    impactedDepts: [
-      "Information Technology",
-      "Global Operations",
-      "Finance & Accounting",
-      "Customer Experience",
-    ],
-    goals: [
-      {
-        objective: "Cloud Migration",
-        kpi: "90% of legacy apps migrated",
-        targetDate: "Dec 2023",
-        status: "On Track",
-      },
-      {
-        objective: "Infra Cost Reduction",
-        kpi: "25% reduction in yearly spend",
-        targetDate: "Mar 2024",
-        status: "In Progress",
-      },
-      {
-        objective: "System Performance",
-        kpi: "Sub-200ms API response time",
-        targetDate: "Jun 2024",
-        status: "Planned",
-      },
-    ],
-    progress: 64,
-    readiness: "High",
-    riskLevel: "Med",
-    pendingTasks: { done: 12, total: 28 },
-    team: [
-      {
-        name: "Sarah Chen",
-        role: "Change Lead",
-        initials: "SC",
-        color: THEME_BLUE,
-      },
-    ],
-    teamAvatars: [
-      { initials: "M", color: "#1c7ed6" },
-      { initials: "AI", color: "#495057" },
-      { initials: "R", color: "#e03131" },
-      { initials: "+8", color: "#868e96" },
-    ],
-    milestones: [
-      {
-        label: "COMPLETED",
-        title: "Audit Infrastructure",
-        date: "Oct 15, 2023",
-        status: "completed",
-      },
-      {
-        label: "CURRENT",
-        title: "Security Hardening",
-        date: "In Progress (Due Nov 30)",
-        status: "current",
-      },
-      {
-        label: "UPCOMING",
-        title: "Region Rollout: APAC",
-        date: "Jan 12, 2024",
-        status: "upcoming",
-      },
-    ],
-  },
-  "hr-platform-refresh": {
-    id: "hr-platform-refresh",
-    title: "HR Platform Refresh",
-    status: "Draft",
-    dateRange: "Q2 2025 - Q4 2025",
-    lead: "Mark Thompson",
-    departments: ["HR"],
-    description:
-      "Modernizing the HR platform to improve efficiency, employee self-service, and compliance tracking across the organization.",
-    impactedDepts: ["Human Resources", "IT", "Legal"],
-    goals: [
-      {
-        objective: "Platform Migration",
-        kpi: "Full migration to new HRIS",
-        targetDate: "Sep 2025",
-        status: "Planned",
-      },
-    ],
-    progress: 12,
-    readiness: "Medium",
-    riskLevel: "Low",
-    pendingTasks: { done: 2, total: 18 },
-    team: [
-      {
-        name: "Mark Thompson",
-        role: "Change Lead",
-        initials: "MT",
-        color: THEME_BLUE,
-      },
-    ],
-    teamAvatars: [
-      { initials: "J", color: "#2f9e44" },
-      { initials: "+3", color: "#868e96" },
-    ],
-    milestones: [
-      {
-        label: "UPCOMING",
-        title: "Requirements Gathering",
-        date: "May 2025",
-        status: "upcoming",
-      },
-    ],
-  },
-  "customer-success-ai": {
-    id: "customer-success-ai",
-    title: "Customer Success AI",
-    status: "Planning",
-    dateRange: "Q2 2025 - Q4 2025",
-    lead: "David Chen",
-    departments: ["Customer Support", "Product"],
-    description:
-      "Implementing AI-driven customer success tools to improve response times and customer satisfaction scores.",
-    impactedDepts: ["Customer Support", "Product", "Engineering"],
-    goals: [
-      {
-        objective: "AI Chatbot",
-        kpi: "50% ticket deflection rate",
-        targetDate: "Oct 2025",
-        status: "Planned",
-      },
-    ],
-    progress: 4,
-    readiness: "Low",
-    riskLevel: "High",
-    pendingTasks: { done: 1, total: 22 },
-    team: [
-      {
-        name: "David Chen",
-        role: "Change Lead",
-        initials: "DC",
-        color: THEME_BLUE,
-      },
-    ],
-    teamAvatars: [
-      { initials: "K", color: "#e64980" },
-      { initials: "+5", color: "#868e96" },
-    ],
-    milestones: [
-      {
-        label: "UPCOMING",
-        title: "Vendor Selection",
-        date: "Jun 2025",
-        status: "upcoming",
-      },
-    ],
-  },
-  "agile-transformation": {
-    id: "agile-transformation",
-    title: "Agile Transformation",
-    status: "Active",
-    dateRange: "Q1 2025 - Q2 2025",
-    lead: "Elena Rodriguez",
-    departments: ["Engineering", "Leadership"],
-    description:
-      "Transitioning the engineering organization to agile methodologies to increase delivery speed and team autonomy.",
-    impactedDepts: ["Engineering", "Leadership", "Product"],
-    goals: [
-      {
-        objective: "Agile Adoption",
-        kpi: "100% of teams on Scrum/Kanban",
-        targetDate: "Jun 2025",
-        status: "On Track",
-      },
-    ],
-    progress: 88,
-    readiness: "High",
-    riskLevel: "Low",
-    pendingTasks: { done: 22, total: 25 },
-    team: [
-      {
-        name: "Elena Rodriguez",
-        role: "Change Lead",
-        initials: "ER",
-        color: THEME_BLUE,
-      },
-    ],
-    teamAvatars: [
-      { initials: "T", color: "#7048e8" },
-      { initials: "+4", color: "#868e96" },
-    ],
-    milestones: [
-      {
-        label: "COMPLETED",
-        title: "Training Sessions",
-        date: "Feb 2025",
-        status: "completed",
-      },
-      {
-        label: "CURRENT",
-        title: "Sprint Cadence Rollout",
-        date: "In Progress (Due Apr 30)",
-        status: "current",
-      },
-    ],
-  },
+/** Map audience value to display label and which roles can take the assessment. */
+const AUDIENCE_LABELS: Record<string, string> = {
+  "all-roles": "All roles",
+  leadership: "Leadership team",
+  admin: "Admins only",
+  managers: "Managers only",
+  "all-employees": "All employees",
 };
+const AUDIENCE_ROLES: Record<string, string[]> = {
+  "all-roles": ["super_admin", "admin", "manager", "employee"],
+  leadership: ["admin", "super_admin"],
+  admin: ["admin", "super_admin"],
+  managers: ["manager"],
+  "all-employees": ["employee"],
+};
+function canUserTakeAssessment(audience: string | undefined, userRole: string): boolean {
+  const a = (audience || "").trim();
+  if (!a) return true;
+  const roles = AUDIENCE_ROLES[a];
+  if (!roles) return true;
+  return roles.includes(userRole || "");
+}
+function getAudienceLabel(audience: string | undefined): string {
+  return AUDIENCE_LABELS[(audience || "").trim()] ?? (audience || "All");
+}
+
+function toId(val: string | { toString?: () => string; $oid?: string } | undefined): string {
+  if (val == null) return "";
+  if (typeof val === "string") return val;
+  if (typeof val === "object" && val !== null && typeof (val as { $oid?: string }).$oid === "string")
+    return (val as { $oid: string }).$oid;
+  if (typeof (val as { toString?: () => string }).toString === "function")
+    return (val as { toString: () => string }).toString();
+  return String(val);
+}
+
+function filterTasksByRoleAndDept<T extends { assigneeId?: string; id?: string; _id?: string }>(
+  tasks: T[],
+  users: { _id: string; departments?: string[] }[],
+  currentUserId: string,
+  userRole: string | undefined,
+  userDepartments: string[]
+): T[] {
+  const assigneeIdOf = (t: T) => String(t.assigneeId ?? "");
+  if (userRole === "employee") {
+    return tasks.filter((t) => assigneeIdOf(t) === currentUserId);
+  }
+  if (userRole === "manager") {
+    const myDepts = new Set(userDepartments.map((d) => String(d).toLowerCase()));
+    const assigneeIdsInMyDept = new Set(
+      users
+        .filter(
+          (u) =>
+            u._id !== currentUserId &&
+            u.departments?.some((d) => myDepts.has(String(d).toLowerCase()))
+        )
+        .map((u) => u._id)
+    );
+    return tasks.filter(
+      (t) =>
+        assigneeIdOf(t) === currentUserId ||
+        assigneeIdsInMyDept.has(String(t.assigneeId ?? ""))
+    );
+  }
+  return tasks;
+}
+
+function mapApiToInitiative(raw: InitiativeListItem): Initiative {
+  const goals = (raw.goals ?? []).map((g) => ({
+    objective: g.goal ?? "",
+    kpi: g.metric ?? "",
+    targetDate: "",
+    status: "On Track" as const,
+  }));
+  const depts = raw.departments ?? [];
+  const lead = raw.leadName ?? "";
+  const initials = lead
+    .split(" ")
+    .map((s) => s[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+  const statusMap: Record<string, Initiative["status"]> = {
+    ACTIVE: "Active",
+    DRAFT: "Draft",
+    PLANNING: "Planning",
+  };
+  return {
+    id: raw.id,
+    title: raw.title,
+    status: statusMap[raw.status ?? ""] ?? "Draft",
+    dateRange: raw.dateRange ?? "",
+    lead,
+    departments: depts,
+    description: raw.description ?? "",
+    impactedDepts: depts.length ? depts : ["—"],
+    goals: goals.length ? goals : [{ objective: "", kpi: "", targetDate: "", status: "Planned" as const }],
+    progress: raw.progress ?? 0,
+    readiness: (raw.readiness as Initiative["readiness"]) ?? "Medium",
+    riskLevel: "Low",
+    pendingTasks: { done: 0, total: 0 },
+    team: [{ name: lead, role: "Change Lead", initials, color: THEME_BLUE }],
+    teamAvatars: [],
+    milestones: [
+      { label: "UPCOMING", title: "Initiative started", date: "—", status: "upcoming" as const },
+    ],
+  };
+}
 
 export default function InitiativeDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const canEditInitiative = user?.role === "admin" || user?.role === "manager";
   const [editOpened, { open: openEdit, close: closeEdit }] =
     useDisclosure(false);
+  const [initiative, setInitiative] = useState<Initiative | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [managers, setManagers] = useState<{ name: string; id: string }[]>([]);
+  const [orgDepartments, setOrgDepartments] = useState<string[]>([]);
+  const [assessmentsList, setAssessmentsList] = useState<Assessment[]>([]);
+  const [assessmentsLoading, setAssessmentsLoading] = useState(false);
+  const [mySubmissions, setMySubmissions] = useState<AssessmentSubmission[]>([]);
+  const [orgUsers, setOrgUsers] = useState<{ _id: string; name: string; departments?: string[] }[]>([]);
+  const [roadmapTasks, setRoadmapTasks] = useState<TaskDto[]>([]);
+  const [roadmapLoading, setRoadmapLoading] = useState(false);
 
-  const defaultData =
-    INITIATIVES[id || "cloud-migration-phase-2"] ||
-    INITIATIVES["cloud-migration-phase-2"];
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([listOrganizationUsers(), getMyOrganization()])
+      .then(([users, org]) => {
+        if (cancelled) return;
+        setManagers(users.filter((u) => u.role === "manager").map((u) => ({ name: u.name, id: u._id })));
+        setOrgDepartments(org.departments ?? []);
+        setOrgUsers(users.map((u) => ({ _id: u._id, name: u.name, departments: u.departments })));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const [initiative, setInitiative] = useState<Initiative>({
-    ...defaultData,
-    goals: defaultData.goals.map((g) => ({ ...g })),
-    team: defaultData.team.map((t) => ({ ...t })),
-    teamAvatars: defaultData.teamAvatars.map((a) => ({ ...a })),
-    milestones: defaultData.milestones.map((m) => ({ ...m })),
-    impactedDepts: [...defaultData.impactedDepts],
-    departments: [...defaultData.departments],
-  });
+  useEffect(() => {
+    if (!id) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    getInitiative(id)
+      .then((data) => {
+        if (!cancelled) setInitiative(mapApiToInitiative(data));
+      })
+      .catch(() => {
+        if (!cancelled) setInitiative(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  useEffect(() => {
+    if (!initiative?.id) {
+      setAssessmentsList([]);
+      return;
+    }
+    setAssessmentsLoading(true);
+    let cancelled = false;
+    Promise.all([
+      listAssessmentsByInitiative(initiative.id),
+      listSubmissions({ mine: true }),
+    ])
+      .then(([list, submissions]) => {
+        if (!cancelled) {
+          setAssessmentsList(Array.isArray(list) ? list : []);
+          setMySubmissions(Array.isArray(submissions) ? submissions : []);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAssessmentsList([]);
+      })
+      .finally(() => {
+        if (!cancelled) setAssessmentsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [initiative?.id]);
+
+  useEffect(() => {
+    if (!initiative?.id) {
+      setRoadmapTasks([]);
+      return;
+    }
+    setRoadmapLoading(true);
+    let cancelled = false;
+    listTasks(initiative.id)
+      .then((list) => {
+        if (!cancelled) setRoadmapTasks(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {
+        if (!cancelled) setRoadmapTasks([]);
+      })
+      .finally(() => {
+        if (!cancelled) setRoadmapLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [initiative?.id]);
+
+  if (loading) {
+    return (
+      <AdminLayout>
+        <Text c="dimmed" size="sm" py="xl">
+          Loading initiative...
+        </Text>
+      </AdminLayout>
+    );
+  }
+  if (!initiative) {
+    return (
+      <AdminLayout>
+        <Text c="dimmed" mb="md">Initiative not found.</Text>
+        <Button variant="light" onClick={() => navigate(ROUTES.ADMIN_INITIATIVES)}>
+          Back to Initiatives
+        </Button>
+      </AdminLayout>
+    );
+  }
 
   const getStatusBadge = (status: string) => {
     const map: Record<string, { bg: string; c: string }> = {
@@ -368,6 +376,7 @@ export default function InitiativeDetail() {
           >
             Share
           </Button>
+          {canEditInitiative && (
           <Button
             bg={THEME_BLUE}
             radius="md"
@@ -379,6 +388,7 @@ export default function InitiativeDetail() {
           >
             Edit Initiative
           </Button>
+        )}
         </Group>
       </Group>
 
@@ -511,7 +521,7 @@ export default function InitiativeDetail() {
                           <Progress
                             value={initiative.progress}
                             color={THEME_BLUE}
-                            size="md"
+                            h={6}
                             radius="xl"
                           />
                         </Box>
@@ -527,8 +537,9 @@ export default function InitiativeDetail() {
                       <Badge
                         variant="light"
                         color="gray"
-                        size="lg"
-                        fw={700}
+                        size="sm"
+                        fz="xs"
+                        fw={600}
                         fullWidth
                         style={{ justifyContent: "center" }}
                       >
@@ -542,8 +553,9 @@ export default function InitiativeDetail() {
                       <Badge
                         variant="light"
                         color={initiative.riskLevel === "High" ? "red" : initiative.riskLevel === "Med" ? "yellow" : "gray"}
-                        size="lg"
-                        fw={700}
+                        size="sm"
+                        fz="xs"
+                        fw={600}
                         fullWidth
                         style={{
                           justifyContent: "center",
@@ -693,33 +705,167 @@ export default function InitiativeDetail() {
 
         <Tabs.Panel value="roadmap" pt="xl">
           <Card withBorder radius="lg" p="xl" shadow="xs">
-            <Text c="dimmed">Roadmap content coming soon.</Text>
+            <Title order={4} fw={700} c={NAVY} mb="md">
+              Roadmap tasks
+            </Title>
+            <Text c="dimmed" size="sm" mb="lg">
+              Tasks are filtered by your role and department. Employees see only tasks assigned to them; managers see tasks in their department and those assigned to them; admins see all.
+            </Text>
+            <Group justify="flex-end" mb="md">
+              <Button
+                variant="light"
+                size="sm"
+                onClick={() =>
+                  navigate(ROUTES.ADMIN_ROADMAP, { state: { initiativeId: initiative?.id } })
+                }
+              >
+                Open full Roadmap
+              </Button>
+            </Group>
+            {roadmapLoading ? (
+              <Text size="sm" c="dimmed">Loading tasks…</Text>
+            ) : (() => {
+              const userById: Record<string, string> = {};
+              orgUsers.forEach((u) => {
+                userById[toId(u._id)] = u.name;
+              });
+              const filtered = filterTasksByRoleAndDept(
+                roadmapTasks,
+                orgUsers,
+                user?._id ?? "",
+                user?.role,
+                user?.departments ?? []
+              );
+              if (filtered.length === 0) {
+                return (
+                  <Text size="sm" c="dimmed">
+                    {roadmapTasks.length === 0
+                      ? "No roadmap tasks for this initiative yet."
+                      : "No tasks match your role or department for this initiative."}
+                  </Text>
+                );
+              }
+              return (
+                <Table withTableBorder withColumnBorders striped>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th fw={700} fz="xs" c="dimmed">Task</Table.Th>
+                      <Table.Th fw={700} fz="xs" c="dimmed">Phase</Table.Th>
+                      <Table.Th fw={700} fz="xs" c="dimmed">Assignee</Table.Th>
+                      <Table.Th fw={700} fz="xs" c="dimmed">Progress</Table.Th>
+                      <Table.Th fw={700} fz="xs" c="dimmed">Due date</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {filtered.map((t) => (
+                      <Table.Tr key={t._id}>
+                        <Table.Td fw={500}>{t.title}</Table.Td>
+                        <Table.Td>
+                          <Badge variant="light" size="sm">
+                            {t.phase ?? "Discovery"}
+                          </Badge>
+                        </Table.Td>
+                        <Table.Td>{t.assigneeName ?? userById[toId(t.assigneeId)] ?? (t.assigneeId != null ? toId(t.assigneeId) : "—")}</Table.Td>
+                        <Table.Td>
+                          <Progress value={t.progress ?? 0} size="sm" h={6} radius="xl" />
+                          <Text size="xs" c="dimmed" mt={4}>{t.progress ?? 0}%</Text>
+                        </Table.Td>
+                        <Table.Td>
+                          {t.dueDate
+                            ? new Date(t.dueDate).toLocaleDateString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                              })
+                            : "—"}
+                        </Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              );
+            })()}
           </Card>
         </Tabs.Panel>
         <Tabs.Panel value="assessment" pt="xl">
           <Card withBorder radius="lg" p="xl" shadow="xs">
-            <Group justify="space-between" align="center">
-              <Text fw={700} fz={20}>
-                Assessment
-              </Text>
-              <Button
-                bg={THEME_BLUE}
-                radius="md"
-                fw={700}
-                onClick={() =>
-                  navigate(
-                    `/admin/initiatives/${initiative.id}/assessment-form`,
-                  )
-                }
-              >
-                Take Assessment
-              </Button>
-            </Group>
-            <Divider my="md" />
-            <Text c="dimmed">
-              Complete the assessment to evaluate readiness and view results for
-              this initiative.
+            <Title order={4} fw={700} c={NAVY} mb="md">
+              Assessments for this initiative
+            </Title>
+            <Text c="dimmed" size="sm" mb="lg">
+              Each assessment is assigned to specific roles. You can only take assessments that are for your role.
             </Text>
+            {assessmentsLoading ? (
+              <Text size="sm" c="dimmed">Loading assessments…</Text>
+            ) : assessmentsList.length === 0 ? (
+              <Text size="sm" c="dimmed">No assessments have been created for this initiative yet.</Text>
+            ) : (
+              <Table withTableBorder withColumnBorders striped>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th fw={700} fz="xs" c="dimmed">Assessment</Table.Th>
+                    <Table.Th fw={700} fz="xs" c="dimmed">For (roles)</Table.Th>
+                    <Table.Th fw={700} fz="xs" c="dimmed">Due date</Table.Th>
+                    <Table.Th fw={700} fz="xs" c="dimmed">Your status</Table.Th>
+                    <Table.Th fw={700} fz="xs" c="dimmed">Action</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {assessmentsList.map((a) => {
+                    const canTake = canUserTakeAssessment(a.audience, user?.role ?? "");
+                    const submitted = mySubmissions.some((s) => String(s.assessmentId) === String(a._id));
+                    return (
+                      <Table.Tr key={a._id}>
+                        <Table.Td fw={600}>{a.name}</Table.Td>
+                        <Table.Td>
+                          <Badge variant="light" color="blue" size="sm">
+                            {getAudienceLabel(a.audience)}
+                          </Badge>
+                        </Table.Td>
+                        <Table.Td>
+                          {a.dueDate ? new Date(a.dueDate).toLocaleDateString() : "—"}
+                        </Table.Td>
+                        <Table.Td>
+                          {!canTake ? (
+                            <Text size="xs" c="dimmed">Not for your role</Text>
+                          ) : submitted ? (
+                            <Badge color="green" variant="light" size="sm">Completed</Badge>
+                          ) : (
+                            <Badge color="gray" variant="light" size="sm">Not started</Badge>
+                          )}
+                        </Table.Td>
+                        <Table.Td>
+                          {canTake && !submitted && (
+                            <Button
+                              size="xs"
+                              variant="filled"
+                              color={NAVY}
+                              onClick={() =>
+                                navigate(ROUTES.ADMIN_ASSESSMENTS_FORM, {
+                                  state: {
+                                    initiativeId: initiative.id,
+                                    initiativeTitle: initiative.title,
+                                    assessmentId: a._id,
+                                  },
+                                })
+                              }
+                            >
+                              Take Assessment
+                            </Button>
+                          )}
+                          {canTake && submitted && (
+                            <Text size="xs" c="dimmed">Submitted</Text>
+                          )}
+                          {!canTake && (
+                            <Text size="xs" c="dimmed">—</Text>
+                          )}
+                        </Table.Td>
+                      </Table.Tr>
+                    );
+                  })}
+                </Table.Tbody>
+              </Table>
+            )}
           </Card>
         </Tabs.Panel>
         <Tabs.Panel value="activity" pt="xl">
@@ -733,26 +879,50 @@ export default function InitiativeDetail() {
         opened={editOpened}
         onClose={closeEdit}
         initiative={initiative}
+        managers={managers}
+        orgDepartments={orgDepartments}
         onSave={(updated) => {
-          setInitiative(updated);
-          closeEdit();
+          const statusToApi = (s: string) =>
+            s === "Active" ? "ACTIVE" : s === "Draft" ? "DRAFT" : s === "Planning" ? "PLANNING" : "DRAFT";
+          updateInitiative(initiative.id, {
+            title: updated.title,
+            description: updated.description,
+            status: statusToApi(updated.status),
+            leadName: updated.lead,
+            dateRange: updated.dateRange,
+            departments: updated.departments ?? updated.impactedDepts ?? [],
+            progress: updated.progress,
+            readiness: updated.readiness,
+            goals: updated.goals.map((g) => ({ goal: g.objective, metric: g.kpi })),
+          })
+            .then((data) => setInitiative(mapApiToInitiative(data)))
+            .catch(() => {})
+            .finally(() => closeEdit());
         }}
       />
     </AdminLayout>
   );
 }
 
+const FALLBACK_DEPARTMENTS = ["Engineering", "Operations", "Sales", "Human Resources", "IT"];
+
 function EditInitiativeModal({
   opened,
   onClose,
   initiative,
   onSave,
+  managers,
+  orgDepartments,
 }: {
   opened: boolean;
   onClose: () => void;
   initiative: Initiative;
   onSave: (updated: Initiative) => void;
+  managers: { name: string; id: string }[];
+  orgDepartments: string[];
 }) {
+  const departmentOptions = orgDepartments.length > 0 ? orgDepartments : FALLBACK_DEPARTMENTS;
+  const leadOptions = managers.map((m) => ({ value: m.name, label: m.name }));
   const [title, setTitle] = useState(initiative.title);
   const [description, setDescription] = useState(initiative.description);
   const [lead, setLead] = useState(initiative.lead);
@@ -761,12 +931,12 @@ function EditInitiativeModal({
   const [progress, setProgress] = useState(initiative.progress);
   const [readiness, setReadiness] = useState(initiative.readiness);
   const [riskLevel, setRiskLevel] = useState(initiative.riskLevel);
-  const [impactedDepts, setImpactedDepts] = useState(
-    initiative.impactedDepts.join(", "),
+  const [departments, setDepartments] = useState<string[]>(
+    initiative.departments?.length ? initiative.departments : initiative.impactedDepts ?? [],
   );
   const [goals, setGoals] = useState(initiative.goals.map((g) => ({ ...g })));
 
-  useState(() => {
+  useEffect(() => {
     setTitle(initiative.title);
     setDescription(initiative.description);
     setLead(initiative.lead);
@@ -775,9 +945,9 @@ function EditInitiativeModal({
     setProgress(initiative.progress);
     setReadiness(initiative.readiness);
     setRiskLevel(initiative.riskLevel);
-    setImpactedDepts(initiative.impactedDepts.join(", "));
+    setDepartments(initiative.departments?.length ? initiative.departments : initiative.impactedDepts ?? []);
     setGoals(initiative.goals.map((g) => ({ ...g })));
-  });
+  }, [initiative]);
 
   const handleGoalChange = (
     index: number,
@@ -800,10 +970,8 @@ function EditInitiativeModal({
       progress,
       readiness,
       riskLevel,
-      impactedDepts: impactedDepts
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
+      departments,
+      impactedDepts: departments,
       goals,
     });
   };
@@ -857,14 +1025,10 @@ function EditInitiativeModal({
                   Change Lead
                 </Text>
               }
+              placeholder="Select a manager..."
               value={lead}
               onChange={(val) => setLead(val || lead)}
-              data={[
-                "Sarah Chen",
-                "Mark Thompson",
-                "David Chen",
-                "Elena Rodriguez",
-              ]}
+              data={leadOptions}
               rightSection={<IconChevronDown size={16} />}
               radius="md"
               size="md"
@@ -960,15 +1124,16 @@ function EditInitiativeModal({
           </Grid.Col>
         </Grid>
 
-        <TextInput
+        <MultiSelect
           label={
             <Text fw={700} fz="sm" mb={4}>
-              Impacted Departments (comma separated)
+              Impacted Departments
             </Text>
           }
-          value={impactedDepts}
-          onChange={(e) => setImpactedDepts(e.currentTarget.value)}
-          placeholder="Information Technology, Global Operations, Finance & Accounting"
+          placeholder="Select departments..."
+          value={departments}
+          onChange={setDepartments}
+          data={departmentOptions}
           radius="md"
           size="md"
         />

@@ -25,8 +25,20 @@ import {
   Grid,
 } from "@mantine/core";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  listInitiatives,
+  createInitiative,
+  updateInitiative,
+  type InitiativeListItem,
+  type CreateInitiativePayload,
+} from "@/api/initiatives";
+import { listOrganizationUsers } from "@/api/auth";
+import { getMyOrganization } from "@/api/organizations";
+import { listTasks } from "@/api/tasks";
+import type { ApiError } from "@/api/client";
 import { DateInput } from "@mantine/dates";
 import { useDisclosure } from "@mantine/hooks";
 import { PageHeader } from "@/components";
@@ -43,91 +55,123 @@ import { IconBulb } from "@tabler/icons-react";
 import { IconRocket } from "@tabler/icons-react";
 import { useForm } from "@mantine/form";
 import { THEME_BLUE, TEAL_BLUE, ROUTES } from "@/constants";
-import { slugify } from "@/utils";
 import type { InitiativeSummary, InitiativeStatus } from "@/types";
-
-const DEPARTMENTS = [
-  "Engineering",
-  "Marketing",
-  "Operations",
-  "Sales",
-  "Human Resources",
-  "IT Infrastructure",
-  "Product",
-  "Customer Support",
-  "Leadership",
-];
 
 export default function AdminInitiatives() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const canCreateInitiatives = user?.role === "admin";
   const [opened, { open, close }] = useDisclosure(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [search, setSearch] = useState("");
-  const [initiatives, setInitiatives] = useState<InitiativeSummary[]>([
-    {
-      id: "cloud-migration-phase-2",
-      status: "ACTIVE",
-      readiness: "4.2/5",
-      title: "Cloud Migration Phase 2",
-      leadName: "Sarah Jenkins",
-      dateRange: "Mar 1 – Sep 30, 2025",
-      departments: ["IT Infrastructure", "Operations"],
-      progress: 65,
-      goals: [
-        { goal: "Migrate 80% workloads", metric: "80% by Q3" },
-        { goal: "Reduce downtime", metric: "<2 hours/month" },
-      ],
-    },
-    {
-      id: "hr-platform-refresh",
-      status: "DRAFT",
-      readiness: "3.8/5",
-      title: "HR Platform Refresh",
-      leadName: "Mark Thompson",
-      dateRange: "Apr 15 – Oct 20, 2025",
-      departments: ["Human Resources"],
-      progress: 12,
-      goals: [{ goal: "Launch new HRIS", metric: "Go-live by Q4" }],
-    },
-    {
-      id: "customer-success-ai",
-      status: "PLANNING",
-      readiness: "2.1/5",
-      title: "Customer Success AI",
-      leadName: "David Chen",
-      dateRange: "May 1 – Dec 15, 2025",
-      departments: ["Customer Support", "Product"],
-      progress: 4,
-      goals: [{ goal: "Deploy AI chatbot", metric: "Pilot by Q2" }],
-    },
-    {
-      id: "agile-transformation",
-      status: "ACTIVE",
-      readiness: "3.5/5",
-      title: "Agile Transformation",
-      leadName: "Elena Rodriguez",
-      dateRange: "Jan 1 – Jun 30, 2025",
-      departments: ["Engineering", "Leadership"],
-      progress: 88,
-      goals: [{ goal: "Train all teams", metric: "100% by Q2" }],
-    },
-  ]);
+  const [initiatives, setInitiatives] = useState<InitiativeListItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [managers, setManagers] = useState<{ name: string; id: string }[]>([]);
+  const [orgDepartments, setOrgDepartments] = useState<string[]>([]);
+  const [tasksByInitiative, setTasksByInitiative] = useState<Record<string, { total: number; completed: number }>>({});
 
-  // Add or update initiative
-  const handleSave = (data: InitiativeSummary) => {
-    const withId: InitiativeSummary = {
-      ...data,
-      id: data.id ?? slugify(data.title || "initiative"),
-    };
-    if (editIndex !== null) {
-      setInitiatives((prev) =>
-        prev.map((item, idx) => (idx === editIndex ? withId : item)),
-      );
-    } else {
-      setInitiatives((prev) => [withId, ...prev]);
+  const fetchInitiatives = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await listInitiatives();
+      setInitiatives(data);
+    } catch (err) {
+      setError((err as ApiError).message ?? "Failed to load initiatives");
+    } finally {
+      setLoading(false);
     }
-    setEditIndex(null);
-    close();
+  };
+
+  useEffect(() => {
+    fetchInitiatives();
+  }, []);
+
+  useEffect(() => {
+    listTasks()
+      .then((list) => {
+        const byInit: Record<string, { total: number; completed: number }> = {};
+        (list ?? []).forEach((t) => {
+          const id = String(t.initiativeId ?? "");
+          if (!byInit[id]) byInit[id] = { total: 0, completed: 0 };
+          byInit[id].total += 1;
+          if ((t.progress ?? 0) >= 100) byInit[id].completed += 1;
+        });
+        setTasksByInitiative(byInit);
+      })
+      .catch(() => setTasksByInitiative({}));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([listOrganizationUsers(), getMyOrganization()])
+      .then(([users, org]) => {
+        if (cancelled) return;
+        const managerList = users
+          .filter((u) => u.role === "manager")
+          .map((u) => ({ name: u.name, id: u._id }));
+        setManagers(managerList);
+        setOrgDepartments(org.departments ?? []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleSave = async (data: InitiativeSummary) => {
+    if (editIndex === null) return;
+    const initiative = initiatives[editIndex];
+    const id = initiative?.id ?? (initiative as InitiativeListItem).id;
+    if (!id) return;
+    setSaveLoading(true);
+    setError(null);
+    try {
+      await updateInitiative(id, {
+        title: data.title,
+        leadName: data.leadName,
+        status: data.status,
+        dateRange: data.dateRange,
+        departments: data.departments,
+        progress: data.progress ?? 0,
+        goals: data.goals,
+        readiness: data.readiness,
+      });
+      await fetchInitiatives();
+      setEditIndex(null);
+      close();
+    } catch (err) {
+      setError((err as ApiError).message ?? "Failed to update initiative");
+    } finally {
+      setSaveLoading(false);
+    }
+  };
+
+  const handleAdd = async (data: InitiativeSummary & { description?: string }) => {
+    setSaveLoading(true);
+    setError(null);
+    try {
+      const payload: CreateInitiativePayload = {
+        title: data.title,
+        description: data.description,
+        leadName: data.leadName,
+        status: data.status,
+        dateRange: data.dateRange,
+        departments: data.departments ?? [],
+        progress: data.progress ?? 0,
+        goals: data.goals ?? [],
+        readiness: data.readiness,
+      };
+      await createInitiative(payload);
+      await fetchInitiatives();
+      close();
+    } catch (err) {
+      setError((err as ApiError).message ?? "Failed to create initiative");
+    } finally {
+      setSaveLoading(false);
+    }
   };
 
   // Filter by search
@@ -143,22 +187,30 @@ export default function AdminInitiatives() {
         title="Change Initiatives"
         subtitle="Manage and track all organizational change initiatives"
         actions={
-          <Button
-            onClick={() => {
-              setEditIndex(null);
-              open();
-            }}
-            leftSection={<IconPlus size={18} />}
-            bg={THEME_BLUE}
-            radius="md"
-            h={45}
-            px="xl"
-            fw={700}
-          >
-            New Initiative
-          </Button>
+          canCreateInitiatives ? (
+            <Button
+              onClick={() => {
+                setEditIndex(null);
+                open();
+              }}
+              leftSection={<IconPlus size={18} />}
+              bg={THEME_BLUE}
+              radius="md"
+              h={45}
+              px="xl"
+              fw={700}
+            >
+              New Initiative
+            </Button>
+          ) : undefined
         }
       />
+
+      {error && (
+        <Text c="red" size="sm" mb="md">
+          {error}
+        </Text>
+      )}
 
       <Card withBorder radius="md" p="md" mb={40} shadow="xs">
         <Group grow>
@@ -173,8 +225,16 @@ export default function AdminInitiatives() {
       </Card>
 
       <Grid gutter={32} mb={40}>
-        {filtered.map((i, idx) => (
-          <Grid.Col span={{ base: 12, sm: 6, md: 4 }} key={(i as { id?: string }).id ?? i.title + idx}>
+        {loading ? (
+          <Grid.Col span={12}>
+            <Text c="dimmed" size="sm" py="xl" ta="center">
+              Loading initiatives...
+            </Text>
+          </Grid.Col>
+        ) : (
+          <>
+            {filtered.map((i, idx) => (
+          <Grid.Col span={{ base: 12, sm: 6, md: 4 }} key={i.id}>
             <Card
               withBorder
               radius="md"
@@ -262,13 +322,25 @@ export default function AdminInitiatives() {
                 <Progress
                   value={i.progress}
                   color={THEME_BLUE}
-                  h={8}
+                  h={6}
                   radius="xl"
                 />
                 <Text fz={11} c="dimmed" mt={2}>
                   {i.progress}%
                 </Text>
               </Box>
+              {(() => {
+                const road = tasksByInitiative[String(i.id)] ?? { total: 0, completed: 0 };
+                return road.total > 0 ? (
+                  <Group gap={6} mb={8}>
+                    <IconRocket size={14} color={THEME_BLUE} />
+                    <Text fz={11} fw={600} c="dimmed">
+                      Roadmap: {road.total} task{road.total !== 1 ? "s" : ""}
+                      {road.completed > 0 ? ` · ${road.completed} completed` : ""}
+                    </Text>
+                  </Group>
+                ) : null;
+              })()}
               <Group grow mt={8}>
                 <Button
                   variant="subtle"
@@ -278,11 +350,7 @@ export default function AdminInitiatives() {
                   h={38}
                   style={{ fontSize: 14 }}
                   onClick={() =>
-                    navigate(
-                      ROUTES.ADMIN_INITIATIVE_DETAIL(
-                        (i as { id?: string }).id ?? slugify(i.title)
-                      )
-                    )
+                    navigate(ROUTES.ADMIN_INITIATIVE_DETAIL(i.id))
                   }
                 >
                   View Details
@@ -294,7 +362,9 @@ export default function AdminInitiatives() {
                   radius="md"
                   h={38}
                   style={{ fontSize: 14 }}
-                  onClick={() => navigate(ROUTES.ADMIN_ROADMAP)}
+                  onClick={() =>
+                    navigate(ROUTES.ADMIN_ROADMAP, { state: { initiativeId: i.id } })
+                  }
                 >
                   View Roadmap
                 </Button>
@@ -302,37 +372,15 @@ export default function AdminInitiatives() {
             </Card>
           </Grid.Col>
         ))}
-        {/* Create New Initiative Card */}
-        <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
-          <Card
-            withBorder
-            radius="md"
-            p="lg"
-            shadow="xs"
-            style={{
-              minHeight: 340,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              border: "1.5px dashed #d0d7e7",
-              background: "#f7f8fa",
-              cursor: "pointer",
-            }}
-            onClick={() => {
-              setEditIndex(null);
-              open();
-            }}
-          >
-            <Stack align="center" gap={8}>
-              <Box style={{ fontSize: 40, color: THEME_BLUE, lineHeight: 1 }}>
-                +
-              </Box>
-              <Text fw={800} fz={16} c={THEME_BLUE} mt={8}>
-                Create New Initiative
-              </Text>
-            </Stack>
-          </Card>
-        </Grid.Col>
+        {!loading && filtered.length === 0 && (
+          <Grid.Col span={12}>
+            <Text c="dimmed" size="md" py="xl" ta="center">
+              All initiatives will display here.
+            </Text>
+          </Grid.Col>
+        )}
+          </>
+        )}
       </Grid>
 
       {editIndex === null ? (
@@ -342,7 +390,9 @@ export default function AdminInitiatives() {
             setEditIndex(null);
             close();
           }}
-          onAdd={handleSave}
+          onAdd={handleAdd}
+          managers={managers}
+          orgDepartments={orgDepartments}
         />
       ) : (
         <InitiativeModal
@@ -353,11 +403,15 @@ export default function AdminInitiatives() {
           }}
           onSave={handleSave}
           initial={initiatives[editIndex]}
+          managers={managers}
+          orgDepartments={orgDepartments}
         />
       )}
     </AdminLayout>
   );
 }
+
+const FALLBACK_DEPARTMENTS = ["Engineering", "Operations", "Sales", "Human Resources", "IT"];
 
 // Modal with repeater for goals, Mantine form
 interface InitiativeModalProps {
@@ -365,6 +419,8 @@ interface InitiativeModalProps {
   onClose: () => void;
   onSave: (data: InitiativeSummary) => void;
   initial: InitiativeSummary | null;
+  managers: { name: string; id: string }[];
+  orgDepartments: string[];
 }
 
 function InitiativeModal({
@@ -372,7 +428,11 @@ function InitiativeModal({
   onClose,
   onSave,
   initial,
+  managers,
+  orgDepartments,
 }: InitiativeModalProps) {
+  const departmentOptions = orgDepartments.length > 0 ? orgDepartments : FALLBACK_DEPARTMENTS;
+  const leadOptions = managers.map((m) => ({ value: m.name, label: m.name }));
   const form = useForm({
     initialValues: {
       title: initial?.title || "",
@@ -410,7 +470,12 @@ function InitiativeModal({
       >
         <Stack gap="md">
           <TextInput label="Title" {...form.getInputProps("title")} />
-          <TextInput label="Change Lead" {...form.getInputProps("leadName")} />
+          <Select
+            label="Change Lead"
+            placeholder="Select a manager..."
+            data={leadOptions}
+            {...form.getInputProps("leadName")}
+          />
           <Select
             label="Status"
             data={["ACTIVE", "DRAFT", "PLANNING"]}
@@ -422,7 +487,7 @@ function InitiativeModal({
           />
           <MultiSelect
             label="Departments Impacted"
-            data={DEPARTMENTS}
+            data={departmentOptions}
             {...form.getInputProps("departments")}
           />
           <TextInput
@@ -496,8 +561,6 @@ function InitiativeModal({
   );
 }
 
-const DEPT_OPTIONS = ["Engineering", "Marketing", "Operations", "Sales", "Human Resources"];
-const LEAD_OPTIONS = ["Sarah Jenkins", "Alex Rivera", "Mark Thompson", "David Chen", "Elena Rodriguez"];
 const DEPT_ABBREV: Record<string, string> = {
   Engineering: "ENG",
   Marketing: "MKT",
@@ -510,19 +573,25 @@ interface CreateInitiativeModalProps {
   opened: boolean;
   onClose: () => void;
   onAdd: (data: InitiativeSummary) => void;
+  managers: { name: string; id: string }[];
+  orgDepartments: string[];
 }
 
 function CreateInitiativeModal({
   opened,
   onClose,
   onAdd,
+  managers,
+  orgDepartments,
 }: CreateInitiativeModalProps) {
+  const departmentOptions = orgDepartments.length > 0 ? orgDepartments : ["Engineering", "Operations", "Sales", "Human Resources"];
+  const leadOptions = managers.map((m) => ({ value: m.name, label: m.name }));
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [lead, setLead] = useState("");
   const [startDate, setStartDate] = useState<Date | null>(new Date(2024, 9, 12));
   const [endDate, setEndDate] = useState<Date | null>(null);
-  const [selectedDepts, setSelectedDepts] = useState<string[]>(["Operations"]);
+  const [selectedDepts, setSelectedDepts] = useState<string[]>(departmentOptions.length > 0 ? [departmentOptions[0]] : []);
   const [goals, setGoals] = useState<{ goal: string; metric: string }[]>([
     { goal: "Reduce latency", metric: "<200ms" },
     { goal: "Staff Training", metric: "90% completion" },
@@ -628,9 +697,9 @@ function CreateInitiativeModal({
                           Change Lead
                         </Text>
                       }
-                      placeholder="Select a lead..."
+                      placeholder="Select a manager..."
                       rightSection={<IconChevronDown size={18} />}
-                      data={LEAD_OPTIONS}
+                      data={leadOptions}
                       radius="md"
                       size="md"
                       value={lead}
@@ -660,6 +729,8 @@ function CreateInitiativeModal({
                         size="md"
                         value={startDate}
                         onChange={(v) => setStartDate(v != null ? new Date(v as string | Date) : null)}
+                        popoverProps={{ withinPortal: true, zIndex: 10000 }}
+                        clearable
                       />
                     </Grid.Col>
                     <Grid.Col span={6}>
@@ -674,6 +745,8 @@ function CreateInitiativeModal({
                         size="md"
                         value={endDate}
                         onChange={(v) => setEndDate(v != null ? new Date(v as string | Date) : null)}
+                        popoverProps={{ withinPortal: true, zIndex: 10000 }}
+                        clearable
                       />
                     </Grid.Col>
                   </Grid>
@@ -688,7 +761,7 @@ function CreateInitiativeModal({
                   </Group>
                   <Divider mb="xl" color="#e9ecef" />
                   <Group gap="sm">
-                    {DEPT_OPTIONS.map((dept) => {
+                    {departmentOptions.map((dept) => {
                       const selected = selectedDepts.includes(dept);
                       return (
                         <Button
@@ -1008,6 +1081,7 @@ function CreateInitiativeModal({
                     status: "DRAFT",
                     readiness: "3.0/5",
                     title: title || "Untitled Initiative",
+                    description,
                     leadName: lead,
                     dateRange,
                     departments: selectedDepts,
@@ -1052,6 +1126,7 @@ function CreateInitiativeModal({
                     status: statusMap[initialStatus],
                     readiness: "3.0/5",
                     title,
+                    description,
                     leadName: lead,
                     dateRange,
                     departments: selectedDepts,

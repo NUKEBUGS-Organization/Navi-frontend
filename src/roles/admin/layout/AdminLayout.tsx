@@ -9,25 +9,22 @@ import {
   rem,
   UnstyledButton,
   Burger,
+  Menu,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { useNavigate, useLocation } from "react-router-dom";
-import {
-  IconLayoutDashboard,
-  IconTarget,
-  IconCheckbox,
-  IconRoute,
-  IconHierarchy,
-  IconSettings,
-} from "@tabler/icons-react";
+import { IconLayoutDashboard, IconTarget, IconCheckbox, IconRoute, IconHierarchy, IconSettings, IconLogout, IconUsers, IconMessage, IconChartLine, IconAlertTriangle } from "@tabler/icons-react";
 import type { IconProps } from "@tabler/icons-react";
 import { COLORS, ROUTES } from "@/constants";
 import naviLogo from "@/assets/navi-logo.jpeg";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface NavItem {
   icon: React.FC<IconProps>;
   label: string;
   path: string;
+  /** Only show for these roles; omit to show for all (admin, manager, employee). */
+  roles?: ("admin" | "manager" | "employee")[];
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -35,7 +32,11 @@ const NAV_ITEMS: NavItem[] = [
   { icon: IconTarget, label: "Initiatives", path: ROUTES.ADMIN_INITIATIVES },
   { icon: IconCheckbox, label: "Assessments", path: ROUTES.ADMIN_ASSESSMENTS },
   { icon: IconRoute, label: "Roadmap", path: ROUTES.ADMIN_ROADMAP },
-  { icon: IconHierarchy, label: "Organization", path: ROUTES.ADMIN_ORGANIZATION },
+  { icon: IconUsers, label: "Stakeholder Mapping", path: ROUTES.ADMIN_STAKEHOLDERS, roles: ["admin", "manager"] },
+  { icon: IconMessage, label: "Communication Planning", path: ROUTES.ADMIN_COMMUNICATIONS, roles: ["admin", "manager"] },
+  { icon: IconChartLine, label: "Adoption Tracking", path: ROUTES.ADMIN_ADOPTION, roles: ["admin", "manager"] },
+  { icon: IconAlertTriangle, label: "Risk Monitoring", path: ROUTES.ADMIN_RISKS, roles: ["admin", "manager", "employee"] },
+  { icon: IconHierarchy, label: "Organization", path: ROUTES.ADMIN_ORGANIZATION, roles: ["admin"] },
   { icon: IconSettings, label: "Settings", path: ROUTES.ADMIN_SETTINGS },
 ];
 
@@ -47,6 +48,7 @@ export default function AdminLayout({
   const [opened, { toggle }] = useDisclosure();
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, logout } = useAuth();
 
   return (
     <AppShell
@@ -112,7 +114,11 @@ export default function AdminLayout({
         </Group>
 
         <Stack gap={4}>
-          {NAV_ITEMS.map((item) => {
+          {NAV_ITEMS.filter((item) => {
+            const role = user?.role as "admin" | "manager" | "employee" | undefined;
+            if (!item.roles) return true;
+            return role && item.roles.includes(role);
+          }).map((item) => {
             const isActive = location.pathname.startsWith(item.path);
             return (
               <UnstyledButton
@@ -143,6 +149,26 @@ export default function AdminLayout({
               </UnstyledButton>
             );
           })}
+          <UnstyledButton
+            onClick={() => {
+              logout();
+              navigate(ROUTES.AUTH_LOGIN, { replace: true });
+              if (opened) toggle();
+            }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              padding: `${rem(12)} ${rem(16)}`,
+              borderRadius: "8px",
+              color: COLORS.sidebarText,
+              marginTop: rem(8),
+            }}
+          >
+            <IconLogout size={22} stroke={1.5} style={{ marginRight: rem(12) }} />
+            <Text size="sm" fw={500}>
+              Log out
+            </Text>
+          </UnstyledButton>
         </Stack>
 
         <Box
@@ -153,17 +179,35 @@ export default function AdminLayout({
             borderRadius: "12px",
           }}
         >
-          <Group gap="sm">
-            <Avatar radius="md" size="md" />
-            <Stack gap={0}>
-              <Text size="sm" fw={700} c="white">
-                James Wilson
-              </Text>
-              <Text size="xs" c={COLORS.sidebarText} fw={500}>
-                Chief Officer
-              </Text>
-            </Stack>
-          </Group>
+          <Menu shadow="md" width={200} position="top-end">
+            <Menu.Target>
+              <UnstyledButton style={{ width: "100%" }}>
+                <Group gap="sm">
+                  <Avatar radius="md" size="md" />
+                  <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
+                    <Text size="sm" fw={700} c="white" truncate>
+                      {user?.name ?? "User"}
+                    </Text>
+                    <Text size="xs" c={COLORS.sidebarText} fw={500}>
+                      {user?.role ?? "—"}
+                    </Text>
+                  </Stack>
+                </Group>
+              </UnstyledButton>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item
+                leftSection={<IconLogout size={14} />}
+                color="red"
+                onClick={() => {
+                  logout();
+                  navigate(ROUTES.AUTH_LOGIN, { replace: true });
+                }}
+              >
+                Log out
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
         </Box>
       </AppShell.Navbar>
 

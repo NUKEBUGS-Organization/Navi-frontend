@@ -82,7 +82,7 @@ export function TaskCard({
             {progress}%
           </Text>
         </Group>
-        <Progress value={progress} color={THEME_BLUE} h={6} radius="xl" />
+        <Progress value={progress} color={THEME_BLUE} h={5} radius="xl" />
       </Stack>
     </Card>
   );
