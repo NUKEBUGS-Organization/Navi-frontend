@@ -14,7 +14,7 @@ import {
 } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { ROUTES, THEME_BLUE } from "@/constants";
-import logo from "@/assets/navi-logo.jpeg";
+import logo from "@/assets/vite.svg";
 
 const Signup = () => {
   const isMobile = useMediaQuery("(max-width: 768px)");
@@ -87,9 +87,9 @@ const Signup = () => {
               ></Input>
             </Stack>
             <Stack mt={"25px"} gap={0} w={isMobile ? "100%" : "440px"}>
-              <Text c={"#0F2B5C"}>Organization Owner</Text>
+              <Text c={"#0F2B5C"}>Organization Contact</Text>
               <Input
-                placeholder="Enter owner name"
+                placeholder="Enter primary contact name"
                 styles={{ input: { height: "49px" } }}
               ></Input>
             </Stack>

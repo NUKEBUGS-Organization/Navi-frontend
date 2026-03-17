@@ -15,4 +15,5 @@ export interface Task {
   assigneeId?: string;
   initiativeId?: string;
   dueDate?: string;
+  adoptionMilestoneId?: string;
 }

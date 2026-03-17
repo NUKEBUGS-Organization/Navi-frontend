@@ -25,9 +25,10 @@ import {
   Grid,
 } from "@mantine/core";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAppRoutes } from "@/hooks/useAppRoutes";
 import {
   listInitiatives,
   createInitiative,
@@ -36,7 +37,7 @@ import {
   type CreateInitiativePayload,
 } from "@/api/initiatives";
 import { listOrganizationUsers } from "@/api/auth";
-import { getMyOrganization } from "@/api/organizations";
+import { getMyOrganization, updateMyOrganization } from "@/api/organizations";
 import { listTasks } from "@/api/tasks";
 import type { ApiError } from "@/api/client";
 import { DateInput } from "@mantine/dates";
@@ -53,14 +54,16 @@ import { IconHistory } from "@tabler/icons-react";
 import { IconTrash } from "@tabler/icons-react";
 import { IconBulb } from "@tabler/icons-react";
 import { IconRocket } from "@tabler/icons-react";
+import { IconCheck } from "@tabler/icons-react";
 import { useForm } from "@mantine/form";
-import { THEME_BLUE, TEAL_BLUE, ROUTES } from "@/constants";
+import { THEME_BLUE, TEAL_BLUE } from "@/constants";
 import type { InitiativeSummary, InitiativeStatus } from "@/types";
 
 export default function AdminInitiatives() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const canCreateInitiatives = user?.role === "admin";
+  const appRoutes = useAppRoutes();
+  const canCreateInitiatives = user?.role === "admin" || user?.role === "manager";
   const [opened, { open, close }] = useDisclosure(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [search, setSearch] = useState("");
@@ -104,22 +107,61 @@ export default function AdminInitiatives() {
       .catch(() => setTasksByInitiative({}));
   }, []);
 
+  const fetchManagersAndOrg = useCallback(async () => {
+    const [users, org] = await Promise.all([listOrganizationUsers(), getMyOrganization()]);
+    const allStaff = (users ?? [])
+      .filter((u) => u && u._id && u.name)
+      .map((u) => ({ name: u.name, id: String(u._id) }));
+    const currentUserId = user?._id != null ? String(user._id) : "";
+    if (currentUserId && !allStaff.some((m) => m.id === currentUserId) && user?.name) {
+      allStaff.push({ name: user.name, id: currentUserId });
+    }
+    setManagers(allStaff);
+    setOrgDepartments(org.departments ?? []);
+  }, [user?._id, user?.name]);
+
   useEffect(() => {
     let cancelled = false;
     Promise.all([listOrganizationUsers(), getMyOrganization()])
       .then(([users, org]) => {
         if (cancelled) return;
-        const managerList = users
-          .filter((u) => u.role === "manager")
-          .map((u) => ({ name: u.name, id: u._id }));
-        setManagers(managerList);
+        // Any staff member (admins, managers, employees) can be selected as Change Lead
+        const allStaff = (users ?? [])
+          .filter((u) => u && u._id && u.name)
+          .map((u) => ({ name: u.name, id: String(u._id) }));
+        const currentUserId = user?._id != null ? String(user._id) : "";
+        if (currentUserId && !allStaff.some((m) => m.id === currentUserId) && user?.name) {
+          allStaff.push({ name: user.name, id: currentUserId });
+        }
+        setManagers(allStaff);
         setOrgDepartments(org.departments ?? []);
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [user?._id, user?.role, user?.name]);
+
+  const handleOpenCreateModal = useCallback(() => {
+    fetchManagersAndOrg().catch(() => {});
+    open();
+  }, [fetchManagersAndOrg, open]);
+
+  const handleAddDepartment = useCallback(
+    async (newDept: string) => {
+      const trimmed = newDept?.trim();
+      if (!trimmed) return;
+      if (orgDepartments.includes(trimmed)) return;
+      try {
+        await updateMyOrganization({ departments: [...orgDepartments, trimmed] });
+        const org = await getMyOrganization();
+        setOrgDepartments(org.departments ?? []);
+      } catch {
+        // leave orgDepartments unchanged on error
+      }
+    },
+    [orgDepartments]
+  );
 
   const handleSave = async (data: InitiativeSummary) => {
     if (editIndex === null) return;
@@ -157,7 +199,7 @@ export default function AdminInitiatives() {
         title: data.title,
         description: data.description,
         leadName: data.leadName,
-        status: data.status,
+        status: user?.role === "manager" ? "DRAFT" : data.status,
         dateRange: data.dateRange,
         departments: data.departments ?? [],
         progress: data.progress ?? 0,
@@ -191,7 +233,7 @@ export default function AdminInitiatives() {
             <Button
               onClick={() => {
                 setEditIndex(null);
-                open();
+                handleOpenCreateModal();
               }}
               leftSection={<IconPlus size={18} />}
               bg={THEME_BLUE}
@@ -341,6 +383,28 @@ export default function AdminInitiatives() {
                   </Group>
                 ) : null;
               })()}
+              {i.status === "DRAFT" && user?.role === "admin" && (
+                <Button
+                  fullWidth
+                  variant="filled"
+                  color="teal"
+                  fw={700}
+                  radius="md"
+                  h={38}
+                  mb={8}
+                  leftSection={<IconCheck size={16} />}
+                  onClick={async () => {
+                    try {
+                      await updateInitiative(i.id, { status: "ACTIVE" });
+                      await fetchInitiatives();
+                    } catch {
+                      // keep state
+                    }
+                  }}
+                >
+                  Approve initiative
+                </Button>
+              )}
               <Group grow mt={8}>
                 <Button
                   variant="subtle"
@@ -350,7 +414,7 @@ export default function AdminInitiatives() {
                   h={38}
                   style={{ fontSize: 14 }}
                   onClick={() =>
-                    navigate(ROUTES.ADMIN_INITIATIVE_DETAIL(i.id))
+                    navigate(appRoutes.INITIATIVE_DETAIL(i.id))
                   }
                 >
                   View Details
@@ -363,7 +427,7 @@ export default function AdminInitiatives() {
                   h={38}
                   style={{ fontSize: 14 }}
                   onClick={() =>
-                    navigate(ROUTES.ADMIN_ROADMAP, { state: { initiativeId: i.id } })
+                    navigate(appRoutes.ROADMAP, { state: { initiativeId: i.id } })
                   }
                 >
                   View Roadmap
@@ -393,6 +457,7 @@ export default function AdminInitiatives() {
           onAdd={handleAdd}
           managers={managers}
           orgDepartments={orgDepartments}
+          onAddDepartment={handleAddDepartment}
         />
       ) : (
         <InitiativeModal
@@ -405,13 +470,12 @@ export default function AdminInitiatives() {
           initial={initiatives[editIndex]}
           managers={managers}
           orgDepartments={orgDepartments}
+          onAddDepartment={handleAddDepartment}
         />
       )}
     </AdminLayout>
   );
 }
-
-const FALLBACK_DEPARTMENTS = ["Engineering", "Operations", "Sales", "Human Resources", "IT"];
 
 // Modal with repeater for goals, Mantine form
 interface InitiativeModalProps {
@@ -421,6 +485,7 @@ interface InitiativeModalProps {
   initial: InitiativeSummary | null;
   managers: { name: string; id: string }[];
   orgDepartments: string[];
+  onAddDepartment: (name: string) => void | Promise<void>;
 }
 
 function InitiativeModal({
@@ -430,8 +495,11 @@ function InitiativeModal({
   initial,
   managers,
   orgDepartments,
+  onAddDepartment,
 }: InitiativeModalProps) {
-  const departmentOptions = orgDepartments.length > 0 ? orgDepartments : FALLBACK_DEPARTMENTS;
+  const [addDeptOpen, { open: openAddDept, close: closeAddDept }] = useDisclosure(false);
+  const [newDeptName, setNewDeptName] = useState("");
+  const departmentOptions = orgDepartments;
   const leadOptions = managers.map((m) => ({ value: m.name, label: m.name }));
   const form = useForm({
     initialValues: {
@@ -485,11 +553,71 @@ function InitiativeModal({
             label="Timeline (e.g., Mar 1 – Sep 30, 2025)"
             {...form.getInputProps("dateRange")}
           />
-          <MultiSelect
-            label="Departments Impacted"
-            data={departmentOptions}
-            {...form.getInputProps("departments")}
-          />
+          <Group align="flex-end" gap="xs">
+            <MultiSelect
+              label="Departments Impacted"
+              data={departmentOptions}
+              {...form.getInputProps("departments")}
+              style={{ flex: 1 }}
+            />
+            <Button
+              type="button"
+              variant="light"
+              leftSection={<IconPlus size={16} />}
+              onClick={openAddDept}
+              mb={4}
+            >
+              Add Dept
+            </Button>
+          </Group>
+          <Modal
+            opened={addDeptOpen}
+            onClose={() => {
+              closeAddDept();
+              setNewDeptName("");
+            }}
+            title="Add Department"
+            size="sm"
+          >
+            <Stack gap="md">
+              <TextInput
+                placeholder="Department name"
+                value={newDeptName}
+                onChange={(e) => setNewDeptName(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    const trimmed = newDeptName.trim();
+                    if (trimmed) {
+                      onAddDepartment(trimmed);
+                      form.setFieldValue("departments", [...form.values.departments, trimmed]);
+                      closeAddDept();
+                      setNewDeptName("");
+                    }
+                  }
+                }}
+              />
+              <Group justify="flex-end">
+                <Button variant="subtle" onClick={() => { closeAddDept(); setNewDeptName(""); }}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    const trimmed = newDeptName.trim();
+                    if (trimmed) {
+                      onAddDepartment(trimmed);
+                      form.setFieldValue("departments", [...form.values.departments, trimmed]);
+                      closeAddDept();
+                      setNewDeptName("");
+                    }
+                  }}
+                  disabled={!newDeptName.trim()}
+                >
+                  Add
+                </Button>
+              </Group>
+            </Stack>
+          </Modal>
           <TextInput
             label="Progress (%)"
             type="number"
@@ -575,6 +703,7 @@ interface CreateInitiativeModalProps {
   onAdd: (data: InitiativeSummary) => void;
   managers: { name: string; id: string }[];
   orgDepartments: string[];
+  onAddDepartment: (name: string) => void | Promise<void>;
 }
 
 function CreateInitiativeModal({
@@ -583,15 +712,18 @@ function CreateInitiativeModal({
   onAdd,
   managers,
   orgDepartments,
+  onAddDepartment,
 }: CreateInitiativeModalProps) {
-  const departmentOptions = orgDepartments.length > 0 ? orgDepartments : ["Engineering", "Operations", "Sales", "Human Resources"];
+  const departmentOptions = orgDepartments;
   const leadOptions = managers.map((m) => ({ value: m.name, label: m.name }));
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [lead, setLead] = useState("");
   const [startDate, setStartDate] = useState<Date | null>(new Date(2024, 9, 12));
   const [endDate, setEndDate] = useState<Date | null>(null);
-  const [selectedDepts, setSelectedDepts] = useState<string[]>(departmentOptions.length > 0 ? [departmentOptions[0]] : []);
+  const [selectedDepts, setSelectedDepts] = useState<string[]>([]);
+  const [addDeptOpen, { open: openAddDept, close: closeAddDept }] = useDisclosure(false);
+  const [newDeptName, setNewDeptName] = useState("");
   const [goals, setGoals] = useState<{ goal: string; metric: string }[]>([
     { goal: "Reduce latency", metric: "<200ms" },
     { goal: "Staff Training", metric: "90% completion" },
@@ -785,15 +917,65 @@ function CreateInitiativeModal({
                       );
                     })}
                     <Button
+                      type="button"
                       variant="subtle"
                       color="blue"
                       leftSection={<IconPlus size={16} />}
                       size="sm"
                       fw={700}
+                      onClick={openAddDept}
                     >
                       + Add Dept
                     </Button>
                   </Group>
+                  <Modal
+                    opened={addDeptOpen}
+                    onClose={() => {
+                      closeAddDept();
+                      setNewDeptName("");
+                    }}
+                    title="Add Department"
+                    size="sm"
+                  >
+                    <Stack gap="md">
+                      <TextInput
+                        placeholder="Department name"
+                        value={newDeptName}
+                        onChange={(e) => setNewDeptName(e.currentTarget.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            const trimmed = newDeptName.trim();
+                            if (trimmed) {
+                              onAddDepartment(trimmed);
+                              setSelectedDepts((prev) => [...prev, trimmed]);
+                              closeAddDept();
+                              setNewDeptName("");
+                            }
+                          }
+                        }}
+                      />
+                      <Group justify="flex-end">
+                        <Button variant="subtle" onClick={() => { closeAddDept(); setNewDeptName(""); }}>
+                          Cancel
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            const trimmed = newDeptName.trim();
+                            if (trimmed) {
+                              onAddDepartment(trimmed);
+                              setSelectedDepts((prev) => [...prev, trimmed]);
+                              closeAddDept();
+                              setNewDeptName("");
+                            }
+                          }}
+                          disabled={!newDeptName.trim()}
+                        >
+                          Add
+                        </Button>
+                      </Group>
+                    </Stack>
+                  </Modal>
                 </Box>
 
                 <Box>

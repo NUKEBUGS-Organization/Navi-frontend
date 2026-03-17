@@ -37,6 +37,19 @@ export interface RiskSummary {
   open: number;
 }
 
+export interface AssessmentDerivedRisk {
+  initiativeId: string;
+  initiativeTitle: string;
+  riskLevel: "Medium" | "High";
+  avgScore: number;
+  submissionCount: number;
+  lastSubmittedAt?: string;
+}
+
+export function getAssessmentDerivedRisks(): Promise<AssessmentDerivedRisk[]> {
+  return api.get<AssessmentDerivedRisk[]>("/risks/assessment-derived");
+}
+
 export function listRisks(initiativeId?: string, status?: string, severity?: string): Promise<RiskDto[]> {
   const params = new URLSearchParams();
   if (initiativeId) params.set("initiativeId", initiativeId);

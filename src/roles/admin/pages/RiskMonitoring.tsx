@@ -19,17 +19,20 @@ import {
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { PageHeader } from "@/components";
-import { THEME_BLUE, ROUTES } from "@/constants";
+import { THEME_BLUE } from "@/constants";
+import { useAppRoutes } from "@/hooks/useAppRoutes";
 import { listInitiatives } from "@/api/initiatives";
 import {
   listRisks,
   getRiskSummary,
+  getAssessmentDerivedRisks,
   createRisk,
   updateRisk,
   deleteRisk,
   type RiskDto,
   type CreateRiskPayload,
   type RiskSummary,
+  type AssessmentDerivedRisk,
 } from "@/api/risks";
 import { useAuth } from "@/contexts/AuthContext";
 import { IconPlus, IconPencil, IconTrash, IconAlertTriangle } from "@tabler/icons-react";
@@ -56,10 +59,12 @@ function severityColor(s: string): string {
 
 export default function RiskMonitoring() {
   const { user } = useAuth();
+  const appRoutes = useAppRoutes();
   const canEdit = user?.role === "admin" || user?.role === "manager";
   const [initiatives, setInitiatives] = useState<{ id: string; title: string }[]>([]);
   const [selectedInitiativeId, setSelectedInitiativeId] = useState<string | null>(null);
   const [list, setList] = useState<RiskDto[]>([]);
+  const [assessmentRisks, setAssessmentRisks] = useState<AssessmentDerivedRisk[]>([]);
   const [summary, setSummary] = useState<RiskSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [modalOpen, { open: openModal, close: closeModal }] = useDisclosure(false);
@@ -92,6 +97,9 @@ export default function RiskMonitoring() {
     getRiskSummary()
       .then(setSummary)
       .catch(() => setSummary(null));
+    getAssessmentDerivedRisks()
+      .then((d) => setAssessmentRisks(Array.isArray(d) ? d : []))
+      .catch(() => setAssessmentRisks([]));
   }, []);
 
   useEffect(() => {
@@ -103,6 +111,7 @@ export default function RiskMonitoring() {
     setLoading(true);
     loadList();
     getRiskSummary().then(setSummary).catch(() => {});
+    getAssessmentDerivedRisks().then((d) => setAssessmentRisks(Array.isArray(d) ? d : [])).catch(() => setAssessmentRisks([]));
     setLoading(false);
   }, [selectedInitiativeId]);
 
@@ -174,8 +183,8 @@ export default function RiskMonitoring() {
   };
 
   const breadcrumbs = [
-    { title: "Dashboard", href: ROUTES.ADMIN_DASHBOARD },
-    { title: "Risk Monitoring", href: ROUTES.ADMIN_RISKS },
+    { title: "Dashboard", href: appRoutes.DASHBOARD },
+    { title: "Risk Monitoring", href: appRoutes.RISKS },
   ];
 
   return (
@@ -210,6 +219,47 @@ export default function RiskMonitoring() {
             </Group>
           }
         />
+
+        {assessmentRisks.length > 0 && (
+          <Paper withBorder radius="md" p="md" mb="lg">
+            <Text fw={700} size="sm" c="dimmed" mb="md" tt="uppercase" lts={0.5}>
+              Assessment Risks (from initiative assessments)
+            </Text>
+            <Text size="sm" c="dimmed" mb="md">
+              Initiatives with medium or high risk based on assessment scores (avg &lt; 4.0/5).
+            </Text>
+            <Table striped highlightOnHover>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Initiative</Table.Th>
+                  <Table.Th>Risk Level</Table.Th>
+                  <Table.Th>Avg Score</Table.Th>
+                  <Table.Th>Submissions</Table.Th>
+                  <Table.Th>Last Submitted</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {assessmentRisks.map((r) => (
+                  <Table.Tr key={r.initiativeId}>
+                    <Table.Td fw={600}>{r.initiativeTitle}</Table.Td>
+                    <Table.Td>
+                      <Badge color={severityColor(r.riskLevel)} variant="light" size="sm">
+                        {r.riskLevel}
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td>{r.avgScore.toFixed(1)} / 5</Table.Td>
+                    <Table.Td>{r.submissionCount}</Table.Td>
+                    <Table.Td>
+                      {r.lastSubmittedAt
+                        ? new Date(r.lastSubmittedAt).toLocaleDateString()
+                        : "—"}
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Paper>
+        )}
 
         {summary && (
           <Grid mb="lg" gutter="md">

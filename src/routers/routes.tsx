@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { ROUTES } from "@/constants";
+import { ROUTES, getAppDashboardRoute } from "@/constants";
 import { ProtectedRoute } from "@/components/auth";
+import { useAuth } from "@/contexts/AuthContext";
 import Login from "@/roles/employee/pages/Employee_login";
 import SignupLead from "@/roles/employee/pages/Signup";
 import AdminDashboard from "@/roles/admin/pages/AdminDashboard";
@@ -19,12 +20,18 @@ import SuperAdminDashboard from "@/roles/super-admin/pages/SuperAdminDashboard";
 import Organizations from "@/roles/super-admin/pages/Organizations";
 import SuperAdminSettings from "@/roles/super-admin/pages/SuperAdminSettings";
 
+function DashboardRedirect() {
+  const { user } = useAuth();
+  const to = getAppDashboardRoute(user?.role);
+  return <Navigate to={to} replace />;
+}
+
 export default function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path={ROUTES.HOME} element={<Navigate to={ROUTES.AUTH_LOGIN} replace />} />
-        <Route path="/dashboard" element={<Navigate to={ROUTES.ADMIN_DASHBOARD} replace />} />
+        <Route path="/dashboard" element={<DashboardRedirect />} />
 
         {/* Auth (public) */}
         <Route path={ROUTES.AUTH_LOGIN} element={<Login />} />
@@ -156,6 +163,36 @@ export default function AppRoutes() {
           }
         />
         <Route path={ROUTES.ADMIN} element={<Navigate to={ROUTES.ADMIN_DASHBOARD} replace />} />
+
+        {/* Manager (same components, /manager/* paths) */}
+        <Route path={ROUTES.MANAGER_DASHBOARD} element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><AdminDashboard /></ProtectedRoute>} />
+        <Route path={ROUTES.MANAGER_INITIATIVES} element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><AdminInitiatives /></ProtectedRoute>} />
+        <Route path="/manager/initiatives/:id" element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><InitiativeDetail /></ProtectedRoute>} />
+        <Route path={ROUTES.MANAGER_ASSESSMENTS} element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><AssessmentResults /></ProtectedRoute>} />
+        <Route path={ROUTES.MANAGER_ASSESSMENTS_FORM} element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><AssessmentForm /></ProtectedRoute>} />
+        <Route path={ROUTES.MANAGER_ROADMAP} element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><AdminRoadmap /></ProtectedRoute>} />
+        <Route path={ROUTES.MANAGER_STAKEHOLDERS} element={<ProtectedRoute allowedRoles={["admin", "manager"]}><StakeholderMapping /></ProtectedRoute>} />
+        <Route path={ROUTES.MANAGER_COMMUNICATIONS} element={<ProtectedRoute allowedRoles={["admin", "manager"]}><CommunicationPlanning /></ProtectedRoute>} />
+        <Route path={ROUTES.MANAGER_ADOPTION} element={<ProtectedRoute allowedRoles={["admin", "manager"]}><AdoptionTracking /></ProtectedRoute>} />
+        <Route path={ROUTES.MANAGER_RISKS} element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><RiskMonitoring /></ProtectedRoute>} />
+        <Route path={ROUTES.MANAGER_ORGANIZATION} element={<ProtectedRoute allowedRoles={["admin"]}><AdminOrganization /></ProtectedRoute>} />
+        <Route path={ROUTES.MANAGER_SETTINGS} element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><AdminSettings /></ProtectedRoute>} />
+        <Route path={ROUTES.MANAGER} element={<Navigate to={ROUTES.MANAGER_DASHBOARD} replace />} />
+
+        {/* Employee (same components, /employee/* paths) */}
+        <Route path={ROUTES.EMPLOYEE_DASHBOARD} element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><AdminDashboard /></ProtectedRoute>} />
+        <Route path={ROUTES.EMPLOYEE_INITIATIVES} element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><AdminInitiatives /></ProtectedRoute>} />
+        <Route path="/employee/initiatives/:id" element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><InitiativeDetail /></ProtectedRoute>} />
+        <Route path={ROUTES.EMPLOYEE_ASSESSMENTS} element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><AssessmentResults /></ProtectedRoute>} />
+        <Route path={ROUTES.EMPLOYEE_ASSESSMENTS_FORM} element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><AssessmentForm /></ProtectedRoute>} />
+        <Route path={ROUTES.EMPLOYEE_ROADMAP} element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><AdminRoadmap /></ProtectedRoute>} />
+        <Route path={ROUTES.EMPLOYEE_STAKEHOLDERS} element={<ProtectedRoute allowedRoles={["admin", "manager"]}><StakeholderMapping /></ProtectedRoute>} />
+        <Route path={ROUTES.EMPLOYEE_COMMUNICATIONS} element={<ProtectedRoute allowedRoles={["admin", "manager"]}><CommunicationPlanning /></ProtectedRoute>} />
+        <Route path={ROUTES.EMPLOYEE_ADOPTION} element={<ProtectedRoute allowedRoles={["admin", "manager"]}><AdoptionTracking /></ProtectedRoute>} />
+        <Route path={ROUTES.EMPLOYEE_RISKS} element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><RiskMonitoring /></ProtectedRoute>} />
+        <Route path={ROUTES.EMPLOYEE_ORGANIZATION} element={<ProtectedRoute allowedRoles={["admin"]}><AdminOrganization /></ProtectedRoute>} />
+        <Route path={ROUTES.EMPLOYEE_SETTINGS} element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><AdminSettings /></ProtectedRoute>} />
+        <Route path={ROUTES.EMPLOYEE_APP} element={<Navigate to={ROUTES.EMPLOYEE_DASHBOARD} replace />} />
       </Routes>
     </BrowserRouter>
   );

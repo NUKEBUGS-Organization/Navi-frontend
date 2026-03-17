@@ -22,6 +22,7 @@ import {
   Slider,
   SimpleGrid,
   Menu,
+  Paper,
 } from "@mantine/core";
 import type { ReactNode } from "react";
 import { DateInput } from "@mantine/dates";
@@ -40,7 +41,7 @@ import {
   IconChevronDown,
   IconRocket,
 } from "@tabler/icons-react";
-import { THEME_BLUE, TEAL_BLUE, ROUTES } from "@/constants";
+import { THEME_BLUE, TEAL_BLUE } from "@/constants";
 import { PageHeader } from "@/components";
 import { TaskCard } from "@/components/roadmap/TaskCard";
 import type { Task } from "@/types";
@@ -56,8 +57,10 @@ import {
   type TaskPhase,
   type TaskCommentDto,
 } from "@/api/tasks";
+import { listAdoption, type AdoptionDto } from "@/api/adoption";
 import { listOrganizationUsers } from "@/api/auth";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAppRoutes } from "@/hooks/useAppRoutes";
 
 const PHASES: TaskPhase[] = ["Discovery", "Awareness", "Alignment", "Implementation", "Adoption", "Reinforcement"];
 
@@ -69,6 +72,7 @@ function formatTaskDate(d: string | undefined): string {
 
 export default function AdminRoadmap() {
   const { user } = useAuth();
+  const appRoutes = useAppRoutes();
   const location = useLocation();
   const stateInitiativeId =
     location?.state && typeof location.state === "object" && "initiativeId" in location.state
@@ -79,16 +83,17 @@ export default function AdminRoadmap() {
   const [opened, { open, close }] = useDisclosure(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [initiatives, setInitiatives] = useState<{ id: string; title: string }[]>([]);
+  const [initiatives, setInitiatives] = useState<{ id: string; title: string; status?: string }[]>([]);
   const [selectedInitiativeId, setSelectedInitiativeId] = useState<string | null>(null);
   const [tasksRaw, setTasksRaw] = useState<TaskDto[]>([]);
   const [users, setUsers] = useState<{ _id: string; name: string; departments?: string[] }[]>([]);
+  const [adoptions, setAdoptions] = useState<AdoptionDto[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     listInitiatives()
       .then((list) => {
-        setInitiatives(list.map((i) => ({ id: i.id, title: i.title })));
+        setInitiatives(list.map((i) => ({ id: i.id, title: i.title, status: (i as { status?: string }).status })));
         const toSelect =
           stateInitiativeId && list.some((i) => i.id === stateInitiativeId)
             ? stateInitiativeId
@@ -111,13 +116,20 @@ export default function AdminRoadmap() {
   useEffect(() => {
     if (!selectedInitiativeId) {
       setTasksRaw([]);
+      setAdoptions([]);
       setLoading(false);
       return;
     }
     setLoading(true);
-    listTasks(selectedInitiativeId)
-      .then((list) => setTasksRaw(Array.isArray(list) ? list : []))
-      .catch(() => setTasksRaw([]))
+    Promise.all([
+      listTasks(selectedInitiativeId),
+      listAdoption(selectedInitiativeId),
+    ])
+      .then(([taskList, adoptionList]) => {
+        setTasksRaw(Array.isArray(taskList) ? taskList : []);
+        setAdoptions(Array.isArray(adoptionList) ? adoptionList : []);
+      })
+      .catch(() => { setTasksRaw([]); setAdoptions([]); })
       .finally(() => setLoading(false));
   }, [selectedInitiativeId]);
 
@@ -138,9 +150,11 @@ export default function AdminRoadmap() {
     isBlocked: t.isBlocked,
     phase: t.phase,
     description: t.description,
+    adoptionMilestoneId: t.adoptionMilestoneId,
   }));
 
   const selectedInitiative = initiatives.find((i) => i.id === selectedInitiativeId);
+  const isDraftInitiative = selectedInitiative?.status === "DRAFT" || selectedInitiative?.status === "Draft";
 
   const myDepts = new Set((user?.departments ?? []).map((d) => String(d).toLowerCase()));
   const assigneeIdsInMyDept = new Set(
@@ -163,7 +177,7 @@ export default function AdminRoadmap() {
           )
         : tasks;
   const breadcrumbs = [
-    { title: "Initiatives", href: ROUTES.ADMIN_INITIATIVES },
+    { title: "Initiatives", href: appRoutes.INITIATIVES },
     { title: selectedInitiative?.title ?? "Roadmap", href: "#" },
     { title: "Roadmap", href: "#" },
   ];
@@ -179,7 +193,15 @@ export default function AdminRoadmap() {
 
   const refetchTasks = () => {
     if (selectedInitiativeId) {
-      listTasks(selectedInitiativeId).then((list) => setTasksRaw(Array.isArray(list) ? list : [])).catch(() => {});
+      Promise.all([
+        listTasks(selectedInitiativeId),
+        listAdoption(selectedInitiativeId),
+      ])
+        .then(([taskList, adoptionList]) => {
+          setTasksRaw(Array.isArray(taskList) ? taskList : []);
+          setAdoptions(Array.isArray(adoptionList) ? adoptionList : []);
+        })
+        .catch(() => {});
     }
   };
 
@@ -210,7 +232,7 @@ export default function AdminRoadmap() {
                     px={30}
                     fw={700}
                     onClick={open}
-                    disabled={!selectedInitiativeId}
+                    disabled={!selectedInitiativeId || isDraftInitiative}
                   >
                     Add Task
                   </Button>
@@ -218,6 +240,13 @@ export default function AdminRoadmap() {
               </Group>
             }
           />
+          {isDraftInitiative && (
+            <Paper withBorder p="md" mb="md" bg="orange.0" radius="md">
+              <Text size="sm" fw={600} c="orange.8">
+                This initiative is in Draft. Tasks cannot be added or updated until an admin sets the initiative to Active.
+              </Text>
+            </Paper>
+          )}
           {(isEmployee || user?.role === "manager") && (
             <Text size="xs" c="dimmed" mb="xs">
               Showing tasks relevant to your role and department.
@@ -498,6 +527,7 @@ export default function AdminRoadmap() {
           onClose={close}
           initiativeId={selectedInitiativeId}
           users={users}
+          adoptions={adoptions}
           onCreated={refetchTasks}
         />
         <EditTaskModal
@@ -505,7 +535,9 @@ export default function AdminRoadmap() {
           onClose={handleCloseEditModal}
           task={selectedTask}
           userById={userById}
+          adoptions={adoptions}
           canDelete={!isEmployee}
+          isDraftInitiative={isDraftInitiative}
           onSaved={refetchTasks}
           onDeleted={() => { handleCloseEditModal(); refetchTasks(); }}
         />
@@ -580,7 +612,9 @@ interface EditTaskModalProps {
   onClose: () => void;
   task: Task | null;
   userById: Record<string, string>;
+  adoptions: AdoptionDto[];
   canDelete?: boolean;
+  isDraftInitiative?: boolean;
   onSaved?: () => void;
   onDeleted?: () => void;
 }
@@ -591,9 +625,10 @@ function statusFromProgress(progress: number): "Not Started" | "In Progress" | "
   return "Not Started";
 }
 
-function EditTaskModal({ opened, onClose, task, userById, canDelete = true, onSaved, onDeleted }: EditTaskModalProps) {
+function EditTaskModal({ opened, onClose, task, userById, adoptions, canDelete = true, isDraftInitiative = false, onSaved, onDeleted }: EditTaskModalProps) {
   const taskId = task ? (task._id ?? String(task.id)) : "";
   const [progress, setProgress] = useState(task?.progress ?? 0);
+  const [adoptionMilestoneId, setAdoptionMilestoneId] = useState<string | null>(task?.adoptionMilestoneId ?? null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [comments, setComments] = useState<TaskCommentDto[]>([]);
@@ -602,7 +637,10 @@ function EditTaskModal({ opened, onClose, task, userById, canDelete = true, onSa
   const [commentSubmitting, setCommentSubmitting] = useState(false);
 
   useEffect(() => {
-    if (task) setProgress(task.progress ?? 0);
+    if (task) {
+      setProgress(task.progress ?? 0);
+      setAdoptionMilestoneId(task.adoptionMilestoneId ?? null);
+    }
   }, [task]);
 
   useEffect(() => {
@@ -621,7 +659,11 @@ function EditTaskModal({ opened, onClose, task, userById, canDelete = true, onSa
     if (!taskId) return;
     setSaving(true);
     try {
-      await updateTask(taskId, { progress });
+      const payload: { progress: number; adoptionMilestoneId?: string } = { progress };
+      if (canDelete && !isDraftInitiative) {
+        payload.adoptionMilestoneId = adoptionMilestoneId ?? "";
+      }
+      await updateTask(taskId, payload);
       onSaved?.();
       onClose();
     } finally {
@@ -714,6 +756,14 @@ function EditTaskModal({ opened, onClose, task, userById, canDelete = true, onSa
             </Group>
           </Box>
 
+          {isDraftInitiative && (
+            <Box px="lg" py="xs" bg="orange.0">
+              <Text size="xs" fw={600} c="orange.8">
+                This initiative is in Draft. Tasks cannot be updated until an admin sets it to Active.
+              </Text>
+            </Box>
+          )}
+
           <Box
             px="lg"
             py="md"
@@ -767,6 +817,7 @@ function EditTaskModal({ opened, onClose, task, userById, canDelete = true, onSa
                           color={THEME_BLUE}
                           size="sm"
                           label={null}
+                          disabled={isDraftInitiative}
                         />
                       </Box>
                       <Text fz="sm" fw={700}>
@@ -774,6 +825,25 @@ function EditTaskModal({ opened, onClose, task, userById, canDelete = true, onSa
                       </Text>
                     </Group>
                   </Box>
+                  {canDelete && !isDraftInitiative && adoptions.length > 0 && (
+                    <Box style={{ gridColumn: "1 / -1" }}>
+                      <Text fz="xs" c="dimmed" fw={600} mb={4}>
+                        Adoption milestone
+                      </Text>
+                      <Select
+                        placeholder="None"
+                        clearable
+                        size="sm"
+                        data={[
+                          { value: "", label: "None" },
+                          ...adoptions.map((a) => ({ value: a._id, label: `${a.milestone} (target ${a.targetPercent ?? 100}%)` })),
+                        ]}
+                        value={adoptionMilestoneId ?? ""}
+                        onChange={(v) => setAdoptionMilestoneId(v === null || v === "" ? null : v)}
+                        rightSection={<IconChevronDown size={16} />}
+                      />
+                    </Box>
+                  )}
                 </SimpleGrid>
               </Box>
 
@@ -872,6 +942,7 @@ function EditTaskModal({ opened, onClose, task, userById, canDelete = true, onSa
               h={40}
               onClick={handleSave}
               loading={saving}
+              disabled={isDraftInitiative}
             >
               Save Changes
             </Button>
@@ -887,12 +958,14 @@ function CreateTaskModal({
   onClose,
   initiativeId,
   users,
+  adoptions,
   onCreated,
 }: {
   opened: boolean;
   onClose: () => void;
   initiativeId: string | null;
   users: { _id: string; name: string }[];
+  adoptions: AdoptionDto[];
   onCreated: () => void;
 }) {
   const form = useForm({
@@ -903,6 +976,7 @@ function CreateTaskModal({
       dueDate: "" as string | Date | null,
       assigneeId: "",
       progress: 0,
+      adoptionMilestoneId: "" as string | null,
     },
     validate: { title: (v) => (!v?.trim() ? "Title is required" : null), assigneeId: (v) => (!v ? "Owner is required" : null) },
   });
@@ -918,6 +992,7 @@ function CreateTaskModal({
         dueDate: values.dueDate ? (typeof values.dueDate === "string" ? values.dueDate : (values.dueDate as Date).toISOString().slice(0, 10)) : undefined,
         assigneeId: values.assigneeId,
         progress: values.progress,
+        adoptionMilestoneId: values.adoptionMilestoneId?.trim() || undefined,
       });
       onCreated();
       form.reset();
@@ -989,6 +1064,21 @@ function CreateTaskModal({
             size="md"
             {...form.getInputProps("assigneeId")}
           />
+          {adoptions.length > 0 && (
+            <Select
+              label={<Text fw={700} fz="sm" mb={5}>Adoption milestone (optional)</Text>}
+              placeholder="None"
+              clearable
+              data={[
+                { value: "", label: "None" },
+                ...adoptions.map((a) => ({ value: a._id, label: `${a.milestone} (target ${a.targetPercent ?? 100}%)` })),
+              ]}
+              radius="md"
+              size="md"
+              rightSection={<IconChevronDown size={18} />}
+              {...form.getInputProps("adoptionMilestoneId")}
+            />
+          )}
           <Box>
             <Group justify="space-between" mb={8}>
               <Text fw={700} fz="sm">Progress</Text>

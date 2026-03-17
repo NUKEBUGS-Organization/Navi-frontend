@@ -18,7 +18,8 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import { DateInput } from "@mantine/dates";
 import { PageHeader } from "@/components";
-import { THEME_BLUE, ROUTES } from "@/constants";
+import { THEME_BLUE } from "@/constants";
+import { useAppRoutes } from "@/hooks/useAppRoutes";
 import { listInitiatives } from "@/api/initiatives";
 import {
   listAdoption,
@@ -45,6 +46,7 @@ function formatDate(s: string | undefined): string {
 
 export default function AdoptionTracking() {
   const { user } = useAuth();
+  const appRoutes = useAppRoutes();
   const canEdit = user?.role === "admin" || user?.role === "manager";
   const [initiatives, setInitiatives] = useState<{ id: string; title: string }[]>([]);
   const [selectedInitiativeId, setSelectedInitiativeId] = useState<string | null>(null);
@@ -56,6 +58,7 @@ export default function AdoptionTracking() {
   const [formTargetDate, setFormTargetDate] = useState<Date | null>(null);
   const [formStatus, setFormStatus] = useState<string | null>("Not Started");
   const [formPercent, setFormPercent] = useState<number>(0);
+  const [formTargetPercent, setFormTargetPercent] = useState<number>(100);
   const [formNotes, setFormNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<AdoptionDto | null>(null);
@@ -88,6 +91,7 @@ export default function AdoptionTracking() {
     setFormTargetDate(null);
     setFormStatus("Not Started");
     setFormPercent(0);
+    setFormTargetPercent(100);
     setFormNotes("");
   };
 
@@ -102,6 +106,7 @@ export default function AdoptionTracking() {
     setFormTargetDate(row.targetDate ? new Date(row.targetDate) : null);
     setFormStatus(row.status ?? "Not Started");
     setFormPercent(row.percentAdopted ?? 0);
+    setFormTargetPercent(row.targetPercent ?? 100);
     setFormNotes(row.notes ?? "");
     openModal();
   };
@@ -117,6 +122,7 @@ export default function AdoptionTracking() {
           targetDate: targetStr,
           status: formStatus ?? undefined,
           percentAdopted: formPercent,
+          targetPercent: formTargetPercent,
           notes: formNotes.trim() || undefined,
         });
       } else {
@@ -126,6 +132,7 @@ export default function AdoptionTracking() {
           targetDate: targetStr,
           status: formStatus ?? undefined,
           percentAdopted: formPercent,
+          targetPercent: formTargetPercent,
           notes: formNotes.trim() || undefined,
         };
         await createAdoption(payload);
@@ -149,8 +156,8 @@ export default function AdoptionTracking() {
   };
 
   const breadcrumbs = [
-    { title: "Dashboard", href: ROUTES.ADMIN_DASHBOARD },
-    { title: "Adoption Tracking", href: ROUTES.ADMIN_ADOPTION },
+    { title: "Dashboard", href: appRoutes.DASHBOARD },
+    { title: "Adoption Tracking", href: appRoutes.ADOPTION },
   ];
 
   return (
@@ -249,7 +256,8 @@ export default function AdoptionTracking() {
               clearable
             />
             <Select label="Status" data={STATUS_OPTIONS} value={formStatus} onChange={setFormStatus} />
-            <TextInput type="number" label="% Adopted" min={0} max={100} value={String(formPercent)} onChange={(e) => setFormPercent(Math.min(100, Math.max(0, Number(e.currentTarget.value) || 0)))} />
+            <TextInput type="number" label="Target % (goal for this milestone)" min={0} max={100} value={String(formTargetPercent)} onChange={(e) => setFormTargetPercent(Math.min(100, Math.max(0, Number(e.currentTarget.value) || 100)))} description="Progress is auto-calculated from linked roadmap tasks when you assign them to this milestone." />
+            <TextInput type="number" label="% Adopted (current)" min={0} max={100} value={String(formPercent)} onChange={(e) => setFormPercent(Math.min(100, Math.max(0, Number(e.currentTarget.value) || 0)))} />
             <Textarea label="Notes" value={formNotes} onChange={(e) => setFormNotes(e.currentTarget.value)} placeholder="Notes" minRows={2} />
             <Group justify="flex-end" mt="md">
               <Button variant="default" onClick={() => { closeModal(); resetForm(); }}>Cancel</Button>

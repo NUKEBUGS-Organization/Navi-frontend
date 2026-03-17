@@ -17,6 +17,7 @@ export interface TaskDto {
   status: TaskStatus;
   progress: number;
   isBlocked?: boolean;
+  adoptionMilestoneId?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -31,6 +32,7 @@ export interface CreateTaskPayload {
   status?: TaskStatus;
   progress?: number;
   isBlocked?: boolean;
+  adoptionMilestoneId?: string;
 }
 
 export interface UpdateTaskPayload {
@@ -42,6 +44,7 @@ export interface UpdateTaskPayload {
   status?: TaskStatus;
   progress?: number;
   isBlocked?: boolean;
+  adoptionMilestoneId?: string;
 }
 
 export function listTasks(initiativeId?: string): Promise<TaskDto[]> {

@@ -16,6 +16,7 @@ import {
   TextInput,
   Textarea,
   Select,
+  MultiSelect,
   ActionIcon,
   Divider,
   Tabs,
@@ -25,7 +26,8 @@ import { DateInput } from "@mantine/dates";
 import { useForm } from "@mantine/form";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { NAVY, TEAL, PAGE_BG, ROUTES } from "@/constants";
+import { NAVY, TEAL, PAGE_BG } from "@/constants";
+import { useAppRoutes } from "@/hooks/useAppRoutes";
 import {
   IconCheck,
   IconAlertTriangle,
@@ -39,6 +41,7 @@ import {
 } from "@tabler/icons-react";
 import { listOrganizationUsers } from "@/api/auth";
 import { listInitiatives } from "@/api/initiatives";
+import { getMyOrganization } from "@/api/organizations";
 import {
   createAssessment,
   listAssessments,
@@ -68,6 +71,7 @@ interface AssessmentCreateValues {
   owner: string;
   initiative: string;
   audience: string;
+  audienceDepartments: string[];
   dueDate: string;
   description: string;
   steps: AssessmentStep[];
@@ -79,6 +83,7 @@ const AUDIENCE_OPTIONS = [
   { value: "admin", label: "Admins only" },
   { value: "managers", label: "Managers only" },
   { value: "all-employees", label: "All employees" },
+  { value: "department", label: "Department" },
 ];
 
 function getRiskLevel(score: number) {
@@ -111,10 +116,12 @@ export default function AssessmentResults() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const appRoutes = useAppRoutes();
   const canCreateAssessment = user?.role === "admin";
   const [createOpen, setCreateOpen] = useState(false);
   const [managers, setManagers] = useState<{ value: string; label: string }[]>([]);
   const [initiatives, setInitiatives] = useState<{ value: string; label: string }[]>([]);
+  const [orgDepartments, setOrgDepartments] = useState<string[]>([]);
   const [assessmentsList, setAssessmentsList] = useState<Assessment[]>([]);
   const [mySubmissions, setMySubmissions] = useState<AssessmentSubmission[]>([]);
   const [assessmentsLoading, setAssessmentsLoading] = useState(true);
@@ -135,6 +142,9 @@ export default function AssessmentResults() {
         setInitiatives(list.map((i) => ({ value: i.id, label: i.title })));
       })
       .catch(() => setInitiatives([]));
+    getMyOrganization()
+      .then((org) => setOrgDepartments(org.departments ?? []))
+      .catch(() => setOrgDepartments([]));
   }, [createOpen]);
 
   useEffect(() => {
@@ -174,6 +184,7 @@ export default function AssessmentResults() {
       owner: "",
       initiative: "",
       audience: "",
+      audienceDepartments: [],
       dueDate: "",
       description: "",
       steps: [{ title: "", questions: [""] }],
@@ -215,7 +226,7 @@ export default function AssessmentResults() {
     : null;
 
   const breadcrumbs = [
-    { title: "Assessments", href: ROUTES.ADMIN_ASSESSMENTS },
+    { title: "Assessments", href: appRoutes.ASSESSMENTS },
     { title: "Results", href: "#" },
   ];
 
@@ -241,6 +252,7 @@ export default function AssessmentResults() {
                   ownerId: values.owner || undefined,
                   dueDate: values.dueDate || undefined,
                   audience: values.audience || undefined,
+                  audienceDepartments: values.audience === "department" ? (values.audienceDepartments ?? []) : undefined,
                   description: values.description || undefined,
                   steps: (values.steps ?? []).map((s) => ({
                     title: s.title ?? "",
@@ -307,6 +319,16 @@ export default function AssessmentResults() {
                 clearable
                 {...createForm.getInputProps("audience")}
               />
+              {createForm.values.audience === "department" && (
+                <MultiSelect
+                  label="Primary departments"
+                  placeholder="Select departments"
+                  description="Users in these departments can take this assessment."
+                  data={orgDepartments}
+                  {...createForm.getInputProps("audienceDepartments")}
+                  clearable
+                />
+              )}
               <Textarea
                 label="Description"
                 placeholder="Short description so others understand the purpose of this assessment."
@@ -436,7 +458,7 @@ export default function AssessmentResults() {
                   variant="light"
                   color="dark"
                   leftSection={<IconRefresh size={18} />}
-                  onClick={() => navigate(ROUTES.ADMIN_ASSESSMENTS_FORM)}
+                  onClick={() => navigate(appRoutes.ASSESSMENTS_FORM)}
                 >
                   Retake Assessment
                 </Button>
@@ -445,7 +467,7 @@ export default function AssessmentResults() {
                 variant="light"
                 color="dark"
                 leftSection={<IconRoute size={18} />}
-                onClick={() => navigate(ROUTES.ADMIN_ROADMAP)}
+                onClick={() => navigate(appRoutes.ROADMAP)}
               >
                 View Roadmap
               </Button>
@@ -561,7 +583,7 @@ export default function AssessmentResults() {
                               color={NAVY}
                               variant="light"
                               onClick={() =>
-                                navigate(ROUTES.ADMIN_ASSESSMENTS_FORM, {
+                                navigate(appRoutes.ASSESSMENTS_FORM, {
                                   state: { initiativeId, initiativeTitle },
                                 })
                               }
@@ -594,7 +616,7 @@ export default function AssessmentResults() {
               </Box>
               <Button
                 color={NAVY}
-                onClick={() => navigate(ROUTES.ADMIN_INITIATIVES)}
+                onClick={() => navigate(appRoutes.INITIATIVES)}
               >
                 View Initiatives
               </Button>

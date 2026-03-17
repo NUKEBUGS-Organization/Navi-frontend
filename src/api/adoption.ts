@@ -8,6 +8,7 @@ export interface AdoptionDto {
   targetDate?: string;
   status?: "Not Started" | "In Progress" | "Achieved" | "At Risk";
   percentAdopted?: number;
+  targetPercent?: number;
   notes?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -19,6 +20,7 @@ export interface CreateAdoptionPayload {
   targetDate?: string;
   status?: string;
   percentAdopted?: number;
+  targetPercent?: number;
   notes?: string;
 }
 
@@ -27,6 +29,7 @@ export interface UpdateAdoptionPayload {
   targetDate?: string;
   status?: string;
   percentAdopted?: number;
+  targetPercent?: number;
   notes?: string;
   initiativeId?: string;
 }

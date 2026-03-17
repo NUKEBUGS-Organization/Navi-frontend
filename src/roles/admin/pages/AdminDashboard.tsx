@@ -27,7 +27,8 @@ import {
   IconAlertTriangle,
 } from "@tabler/icons-react";
 import type { IconProps } from "@tabler/icons-react";
-import { THEME_BLUE, ROUTES } from "@/constants";
+import { THEME_BLUE } from "@/constants";
+import { useAppRoutes } from "@/hooks/useAppRoutes";
 import { listInitiatives, type InitiativeListItem } from "@/api/initiatives";
 import { listAssessments, listSubmissions, type Assessment, type AssessmentSubmission } from "@/api/assessments";
 import { getMyOrganization, type MyOrganization } from "@/api/organizations";
@@ -97,6 +98,7 @@ function formatRelativeTime(date: Date): string {
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const appRoutes = useAppRoutes();
   const [initiatives, setInitiatives] = useState<InitiativeListItem[]>([]);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [submissions, setSubmissions] = useState<AssessmentSubmission[]>([]);
@@ -314,7 +316,7 @@ export default function AdminDashboard() {
       </Grid>
 
       {riskSummary && (riskSummary.open > 0 || riskSummary.high > 0 || riskSummary.critical > 0) && (
-        <Card withBorder radius="lg" p="md" mb="xl" style={{ cursor: "pointer" }} onClick={() => navigate(ROUTES.ADMIN_RISKS)}>
+        <Card withBorder radius="lg" p="md" mb="xl" style={{ cursor: "pointer" }} onClick={() => navigate(appRoutes.RISKS)}>
           <Group justify="space-between">
             <Group>
               <IconAlertTriangle size={24} color="var(--mantine-color-red-6)" />
@@ -347,7 +349,7 @@ export default function AdminDashboard() {
                 fw={700}
                 fz="sm"
                 style={{ cursor: "pointer" }}
-                onClick={() => navigate(ROUTES.ADMIN_INITIATIVES)}
+                onClick={() => navigate(appRoutes.INITIATIVES)}
               >
                 View All
               </Text>
@@ -408,7 +410,7 @@ export default function AdminDashboard() {
                               ? "#fab005"
                               : "#fa5252"
                         }
-                        onRowClick={() => navigate(ROUTES.ADMIN_INITIATIVE_DETAIL(i.id))}
+                        onRowClick={() => navigate(appRoutes.INITIATIVE_DETAIL(i.id))}
                       />
                     ))
                   )}
@@ -451,7 +453,7 @@ export default function AdminDashboard() {
                     <Text size="xs" c="dimmed" mb={8}>
                       {assessments.length} assessment{assessments.length === 1 ? "" : "s"} available.
                     </Text>
-                    <Button variant="light" size="xs" color="blue" onClick={() => navigate(ROUTES.ADMIN_ASSESSMENTS)}>
+                    <Button variant="light" size="xs" color="blue" onClick={() => navigate(appRoutes.ASSESSMENTS)}>
                       Go to Assessments
                     </Button>
                   </Box>
@@ -564,7 +566,7 @@ export default function AdminDashboard() {
                   variant="light"
                   size="xs"
                   color="blue"
-                  onClick={() => navigate(ROUTES.ADMIN_ASSESSMENTS)}
+                  onClick={() => navigate(appRoutes.ASSESSMENTS)}
                 >
                   Go to Assessments
                 </Button>

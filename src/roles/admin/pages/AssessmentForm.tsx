@@ -16,7 +16,8 @@ import { useForm } from "@mantine/form";
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { getAssessment, getAssessmentByInitiative, createSubmission } from "@/api/assessments";
-import { NAVY, TEAL, PAGE_BG, ROUTES } from "@/constants";
+import { NAVY, TEAL, PAGE_BG } from "@/constants";
+import { useAppRoutes } from "@/hooks/useAppRoutes";
 import {
   IconCircleFilled,
   IconCircle,
@@ -167,6 +168,7 @@ function mapStepsToCategories(
 export default function AssessmentForm() {
   const navigate = useNavigate();
   const location = useLocation();
+  const appRoutes = useAppRoutes();
   const initiativeTitle = (location.state as { initiativeTitle?: string } | null)?.initiativeTitle;
   const initiativeId = (location.state as { initiativeId?: string } | null)?.initiativeId;
   const stateAssessmentId = (location.state as { assessmentId?: string } | null)?.assessmentId;
@@ -267,7 +269,7 @@ export default function AssessmentForm() {
         // still navigate to results
       }
     }
-    navigate(ROUTES.ADMIN_ASSESSMENTS, {
+    navigate(appRoutes.ASSESSMENTS, {
       state: { categoryScores, overall, initiativeId, initiativeTitle, dimensionScores: categoryScores.map((x) => ({ label: x.category, score: x.score })) },
     });
   };
@@ -291,7 +293,7 @@ export default function AssessmentForm() {
               <Text size="sm" c="dimmed" ta="center">
                 No assessment selected. Open an assessment from the Assessments page (Pending tab) to take it.
               </Text>
-              <Button variant="light" onClick={() => navigate(ROUTES.ADMIN_ASSESSMENTS)}>
+              <Button variant="light" onClick={() => navigate(appRoutes.ASSESSMENTS)}>
                 Back to Assessments
               </Button>
             </Stack>

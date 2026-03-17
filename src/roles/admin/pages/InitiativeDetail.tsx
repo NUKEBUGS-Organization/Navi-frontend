@@ -1,5 +1,6 @@
 import AdminLayout from "@/roles/admin/layout/AdminLayout";
 import { useNavigate, useParams } from "react-router-dom";
+import { useAppRoutes } from "@/hooks/useAppRoutes";
 import {
   Grid,
   Card,
@@ -32,19 +33,25 @@ import {
   IconShare,
   IconEdit,
   IconChevronDown,
+  IconCheck,
   IconCircleCheck,
   IconClock,
   IconCircle,
   IconUsers,
+  IconPlus,
+  IconMessageCircle,
+  IconTarget,
+  IconRocket,
 } from "@tabler/icons-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { THEME_BLUE, NAVY, ROUTES } from "@/constants";
+import { THEME_BLUE, NAVY } from "@/constants";
 import { getInitiative, updateInitiative, type InitiativeListItem } from "@/api/initiatives";
 import { listOrganizationUsers } from "@/api/auth";
-import { getMyOrganization } from "@/api/organizations";
+import { getMyOrganization, updateMyOrganization } from "@/api/organizations";
 import { listAssessmentsByInitiative, listSubmissions, type Assessment, type AssessmentSubmission } from "@/api/assessments";
 import { listTasks, type TaskDto } from "@/api/tasks";
+import { getInitiativeActivity, type ActivityItem } from "@/api/activity";
 
 interface Initiative {
   id: string;
@@ -82,6 +89,7 @@ const AUDIENCE_LABELS: Record<string, string> = {
   admin: "Admins only",
   managers: "Managers only",
   "all-employees": "All employees",
+  department: "Department",
 };
 const AUDIENCE_ROLES: Record<string, string[]> = {
   "all-roles": ["super_admin", "admin", "manager", "employee"],
@@ -89,16 +97,32 @@ const AUDIENCE_ROLES: Record<string, string[]> = {
   admin: ["admin", "super_admin"],
   managers: ["manager"],
   "all-employees": ["employee"],
+  department: [], // checked via audienceDepartments + user departments
 };
-function canUserTakeAssessment(audience: string | undefined, userRole: string): boolean {
+function canUserTakeAssessment(
+  audience: string | undefined,
+  userRole: string,
+  userDepartments?: string[],
+  audienceDepartments?: string[],
+): boolean {
   const a = (audience || "").trim();
   if (!a) return true;
+  if (a === "department") {
+    if (!audienceDepartments?.length) return true;
+    if (!userDepartments?.length) return false;
+    const deptSet = new Set((audienceDepartments ?? []).map((d) => String(d).trim().toLowerCase()));
+    return userDepartments.some((d) => deptSet.has(String(d).trim().toLowerCase()));
+  }
   const roles = AUDIENCE_ROLES[a];
   if (!roles) return true;
   return roles.includes(userRole || "");
 }
-function getAudienceLabel(audience: string | undefined): string {
-  return AUDIENCE_LABELS[(audience || "").trim()] ?? (audience || "All");
+function getAudienceLabel(audience: string | undefined, audienceDepartments?: string[]): string {
+  const a = (audience || "").trim();
+  if (a === "department" && audienceDepartments?.length) {
+    return `Department: ${audienceDepartments.join(", ")}`;
+  }
+  return AUDIENCE_LABELS[a] ?? (audience || "All");
 }
 
 function toId(val: string | { toString?: () => string; $oid?: string } | undefined): string {
@@ -188,6 +212,7 @@ export default function InitiativeDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const appRoutes = useAppRoutes();
   const canEditInitiative = user?.role === "admin" || user?.role === "manager";
   const [editOpened, { open: openEdit, close: closeEdit }] =
     useDisclosure(false);
@@ -201,13 +226,39 @@ export default function InitiativeDetail() {
   const [orgUsers, setOrgUsers] = useState<{ _id: string; name: string; departments?: string[] }[]>([]);
   const [roadmapTasks, setRoadmapTasks] = useState<TaskDto[]>([]);
   const [roadmapLoading, setRoadmapLoading] = useState(false);
+  const [activityList, setActivityList] = useState<ActivityItem[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+
+  const handleAddDepartment = useCallback(
+    async (newDept: string) => {
+      const trimmed = newDept?.trim();
+      if (!trimmed) return;
+      if (orgDepartments.includes(trimmed)) return;
+      try {
+        await updateMyOrganization({ departments: [...orgDepartments, trimmed] });
+        const org = await getMyOrganization();
+        setOrgDepartments(org.departments ?? []);
+      } catch {
+        // leave orgDepartments unchanged on error
+      }
+    },
+    [orgDepartments]
+  );
 
   useEffect(() => {
     let cancelled = false;
     Promise.all([listOrganizationUsers(), getMyOrganization()])
       .then(([users, org]) => {
         if (cancelled) return;
-        setManagers(users.filter((u) => u.role === "manager").map((u) => ({ name: u.name, id: u._id })));
+        // Any staff member (admins, managers, employees) can be selected as Change Lead
+        const allStaff = (users ?? [])
+          .filter((u) => u && u._id && u.name)
+          .map((u) => ({ name: u.name, id: String(u._id) }));
+        const currentUserId = user?._id != null ? String(user._id) : "";
+        if (currentUserId && !allStaff.some((m) => m.id === currentUserId) && user?.name) {
+          allStaff.push({ name: user.name, id: currentUserId });
+        }
+        setManagers(allStaff);
         setOrgDepartments(org.departments ?? []);
         setOrgUsers(users.map((u) => ({ _id: u._id, name: u.name, departments: u.departments })));
       })
@@ -215,7 +266,7 @@ export default function InitiativeDetail() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [user?._id, user?.role, user?.name]);
 
   useEffect(() => {
     if (!id) {
@@ -288,6 +339,29 @@ export default function InitiativeDetail() {
     };
   }, [initiative?.id]);
 
+  useEffect(() => {
+    if (!initiative?.id) {
+      setActivityList([]);
+      setActivityLoading(false);
+      return;
+    }
+    setActivityLoading(true);
+    let cancelled = false;
+    getInitiativeActivity(initiative.id)
+      .then((list) => {
+        if (!cancelled) setActivityList(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {
+        if (!cancelled) setActivityList([]);
+      })
+      .finally(() => {
+        if (!cancelled) setActivityLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [initiative?.id]);
+
   if (loading) {
     return (
       <AdminLayout>
@@ -301,7 +375,7 @@ export default function InitiativeDetail() {
     return (
       <AdminLayout>
         <Text c="dimmed" mb="md">Initiative not found.</Text>
-        <Button variant="light" onClick={() => navigate(ROUTES.ADMIN_INITIATIVES)}>
+        <Button variant="light" onClick={() => navigate(appRoutes.INITIATIVES)}>
           Back to Initiatives
         </Button>
       </AdminLayout>
@@ -324,6 +398,7 @@ export default function InitiativeDetail() {
     return map[status] || map["ACTIVE"];
   };
   const statusColors = getStatusBadge(initiative.status);
+  const isDraft = initiative.status === "Draft";
   const activeMilestoneIndex = initiative.milestones.findIndex(
     (m) => m.status === "current",
   );
@@ -338,7 +413,7 @@ export default function InitiativeDetail() {
         gap={6}
         mb="md"
         style={{ cursor: "pointer" }}
-        onClick={() => navigate(ROUTES.ADMIN_INITIATIVES)}
+        onClick={() => navigate(appRoutes.INITIATIVES)}
       >
         <IconArrowLeft size={16} color="#868e96" />
         <Text fz="sm" fw={600} c="dimmed">
@@ -376,6 +451,24 @@ export default function InitiativeDetail() {
           >
             Share
           </Button>
+          {isDraft && user?.role === "admin" && (
+            <Button
+              variant="filled"
+              color="teal"
+              radius="md"
+              h={40}
+              px="lg"
+              fw={600}
+              leftSection={<IconCheck size={16} />}
+              onClick={() => {
+                updateInitiative(initiative.id, { status: "ACTIVE" })
+                  .then((data) => setInitiative(mapApiToInitiative(data)))
+                  .catch(() => {});
+              }}
+            >
+              Approve initiative
+            </Button>
+          )}
           {canEditInitiative && (
           <Button
             bg={THEME_BLUE}
@@ -391,6 +484,14 @@ export default function InitiativeDetail() {
         )}
         </Group>
       </Group>
+
+      {isDraft && (
+        <Paper withBorder p="md" mb="lg" bg="orange.0" radius="md">
+          <Text size="sm" fw={600} c="orange.8">
+            This initiative is in Draft. No one can take assessments, perform tasks, or use other initiative features until an admin changes the status to Active.
+          </Text>
+        </Paper>
+      )}
 
       <Group gap="lg" mb="xl">
         <Group gap={6}>
@@ -708,6 +809,12 @@ export default function InitiativeDetail() {
             <Title order={4} fw={700} c={NAVY} mb="md">
               Roadmap tasks
             </Title>
+            {isDraft ? (
+              <Text size="sm" c="dimmed">
+                Tasks are not available while this initiative is in Draft. An admin must change the status to Active first.
+              </Text>
+            ) : (
+              <>
             <Text c="dimmed" size="sm" mb="lg">
               Tasks are filtered by your role and department. Employees see only tasks assigned to them; managers see tasks in their department and those assigned to them; admins see all.
             </Text>
@@ -716,7 +823,7 @@ export default function InitiativeDetail() {
                 variant="light"
                 size="sm"
                 onClick={() =>
-                  navigate(ROUTES.ADMIN_ROADMAP, { state: { initiativeId: initiative?.id } })
+                  navigate(appRoutes.ROADMAP, { state: { initiativeId: initiative?.id } })
                 }
               >
                 Open full Roadmap
@@ -785,6 +892,8 @@ export default function InitiativeDetail() {
                 </Table>
               );
             })()}
+              </>
+            )}
           </Card>
         </Tabs.Panel>
         <Tabs.Panel value="assessment" pt="xl">
@@ -792,6 +901,12 @@ export default function InitiativeDetail() {
             <Title order={4} fw={700} c={NAVY} mb="md">
               Assessments for this initiative
             </Title>
+            {isDraft ? (
+              <Text size="sm" c="dimmed">
+                Assessments cannot be taken while this initiative is in Draft. An admin must change the status to Active first.
+              </Text>
+            ) : (
+              <>
             <Text c="dimmed" size="sm" mb="lg">
               Each assessment is assigned to specific roles. You can only take assessments that are for your role.
             </Text>
@@ -812,14 +927,19 @@ export default function InitiativeDetail() {
                 </Table.Thead>
                 <Table.Tbody>
                   {assessmentsList.map((a) => {
-                    const canTake = canUserTakeAssessment(a.audience, user?.role ?? "");
+                    const canTake = canUserTakeAssessment(
+                    a.audience,
+                    user?.role ?? "",
+                    user?.departments,
+                    a.audienceDepartments,
+                  );
                     const submitted = mySubmissions.some((s) => String(s.assessmentId) === String(a._id));
                     return (
                       <Table.Tr key={a._id}>
                         <Table.Td fw={600}>{a.name}</Table.Td>
                         <Table.Td>
                           <Badge variant="light" color="blue" size="sm">
-                            {getAudienceLabel(a.audience)}
+                            {getAudienceLabel(a.audience, a.audienceDepartments)}
                           </Badge>
                         </Table.Td>
                         <Table.Td>
@@ -841,7 +961,7 @@ export default function InitiativeDetail() {
                               variant="filled"
                               color={NAVY}
                               onClick={() =>
-                                navigate(ROUTES.ADMIN_ASSESSMENTS_FORM, {
+                                navigate(appRoutes.ASSESSMENTS_FORM, {
                                   state: {
                                     initiativeId: initiative.id,
                                     initiativeTitle: initiative.title,
@@ -849,6 +969,7 @@ export default function InitiativeDetail() {
                                   },
                                 })
                               }
+                              disabled={isDraft}
                             >
                               Take Assessment
                             </Button>
@@ -866,11 +987,106 @@ export default function InitiativeDetail() {
                 </Table.Tbody>
               </Table>
             )}
+              </>
+            )}
           </Card>
         </Tabs.Panel>
         <Tabs.Panel value="activity" pt="xl">
           <Card withBorder radius="lg" p="xl" shadow="xs">
-            <Text c="dimmed">Activity content coming soon.</Text>
+            <Title order={4} fw={800} mb="md" c={NAVY}>
+              Recent activity
+            </Title>
+            <Text fz="sm" c="dimmed" mb="lg">
+              Tasks, comments, and adoption milestones for this initiative. Visible to everyone in your organization.
+            </Text>
+            {activityLoading ? (
+              <Text c="dimmed" size="sm">Loading activity…</Text>
+            ) : activityList.length === 0 ? (
+              <Text c="dimmed" size="sm">No recent activity yet.</Text>
+            ) : (
+              <Timeline active={-1} bulletSize={28} lineWidth={2}>
+                {(() => {
+                  const userById: Record<string, string> = {};
+                  orgUsers.forEach((u) => {
+                    userById[String(u._id)] = u.name;
+                  });
+                  return activityList.map((item, idx) => {
+                    const date = new Date(item.date);
+                    const now = new Date();
+                    const sec = Math.floor((now.getTime() - date.getTime()) / 1000);
+                    const relative =
+                      sec < 60 ? "Just now" : sec < 3600 ? `${Math.floor(sec / 60)}m ago` : sec < 86400 ? `${Math.floor(sec / 3600)}h ago` : sec < 604800 ? `${Math.floor(sec / 86400)}d ago` : date.toLocaleDateString();
+                    if (item.type === "task_created") {
+                    return (
+                      <Timeline.Item
+                        key={`task-created-${item.taskId}-${idx}`}
+                        bullet={<IconRocket size={14} />}
+                        title={
+                          <Group gap="xs">
+                            <Text fw={700} fz="sm">Task created</Text>
+                            <Text fz="xs" c="dimmed">{relative}</Text>
+                          </Group>
+                        }
+                      >
+                        <Text fz="sm" c="dimmed">{item.taskTitle ?? "Task"}</Text>
+                      </Timeline.Item>
+                    );
+                  }
+                  if (item.type === "task_updated") {
+                    return (
+                      <Timeline.Item
+                        key={`task-updated-${item.taskId}-${idx}`}
+                        bullet={<IconCircleCheck size={14} />}
+                        title={
+                          <Group gap="xs">
+                            <Text fw={700} fz="sm">Task updated</Text>
+                            <Text fz="xs" c="dimmed">{relative}</Text>
+                          </Group>
+                        }
+                      >
+                        <Text fz="sm" c="dimmed">{item.taskTitle ?? "Task"}{item.progress != null ? ` — ${item.progress}%` : ""}</Text>
+                      </Timeline.Item>
+                    );
+                  }
+                  if (item.type === "comment") {
+                    const author = item.userId ? (userById[item.userId] ?? "Someone") : "Someone";
+                    return (
+                      <Timeline.Item
+                        key={`comment-${item.taskId}-${item.date}-${idx}`}
+                        bullet={<IconMessageCircle size={14} />}
+                        title={
+                          <Group gap="xs">
+                            <Text fw={700} fz="sm">{author} commented</Text>
+                            <Text fz="xs" c="dimmed">{relative}</Text>
+                          </Group>
+                        }
+                      >
+                        <Text fz="sm" c="dimmed" mb={4}>On task: {item.taskTitle ?? "Task"}</Text>
+                        <Text fz="sm" style={{ whiteSpace: "pre-wrap" }}>{item.content}</Text>
+                      </Timeline.Item>
+                    );
+                  }
+                  if (item.type === "adoption_milestone") {
+                    return (
+                      <Timeline.Item
+                        key={`adoption-${item.milestone}-${item.date}-${idx}`}
+                        bullet={<IconTarget size={14} />}
+                        title={
+                          <Group gap="xs">
+                            <Text fw={700} fz="sm">Adoption milestone</Text>
+                            <Text fz="xs" c="dimmed">{relative}</Text>
+                          </Group>
+                        }
+                      >
+                        <Text fz="sm" c="dimmed">{item.milestone ?? "Milestone"}{item.percentAdopted != null ? ` — ${item.percentAdopted}%` : ""}</Text>
+                      </Timeline.Item>
+                    );
+                    }
+                    return null;
+                  });
+                })()}
+              </Timeline>
+            )}
           </Card>
         </Tabs.Panel>
       </Tabs>
@@ -881,6 +1097,8 @@ export default function InitiativeDetail() {
         initiative={initiative}
         managers={managers}
         orgDepartments={orgDepartments}
+        onAddDepartment={handleAddDepartment}
+        currentUserRole={user?.role}
         onSave={(updated) => {
           const statusToApi = (s: string) =>
             s === "Active" ? "ACTIVE" : s === "Draft" ? "DRAFT" : s === "Planning" ? "PLANNING" : "DRAFT";
@@ -904,8 +1122,6 @@ export default function InitiativeDetail() {
   );
 }
 
-const FALLBACK_DEPARTMENTS = ["Engineering", "Operations", "Sales", "Human Resources", "IT"];
-
 function EditInitiativeModal({
   opened,
   onClose,
@@ -913,6 +1129,8 @@ function EditInitiativeModal({
   onSave,
   managers,
   orgDepartments,
+  onAddDepartment,
+  currentUserRole,
 }: {
   opened: boolean;
   onClose: () => void;
@@ -920,8 +1138,15 @@ function EditInitiativeModal({
   onSave: (updated: Initiative) => void;
   managers: { name: string; id: string }[];
   orgDepartments: string[];
+  onAddDepartment: (name: string) => void | Promise<void>;
+  currentUserRole?: string;
 }) {
-  const departmentOptions = orgDepartments.length > 0 ? orgDepartments : FALLBACK_DEPARTMENTS;
+  const statusOptions = currentUserRole === "admin"
+    ? ["In Progress", "Active", "Draft", "Planning"]
+    : ["In Progress", "Draft", "Planning"];
+  const [addDeptOpen, { open: openAddDept, close: closeAddDept }] = useDisclosure(false);
+  const [newDeptName, setNewDeptName] = useState("");
+  const departmentOptions = orgDepartments;
   const leadOptions = managers.map((m) => ({ value: m.name, label: m.name }));
   const [title, setTitle] = useState(initiative.title);
   const [description, setDescription] = useState(initiative.description);
@@ -1045,7 +1270,7 @@ function EditInitiativeModal({
               onChange={(val) =>
                 setStatus((val as Initiative["status"]) || status)
               }
-              data={["In Progress", "Active", "Draft", "Planning"]}
+              data={statusOptions}
               rightSection={<IconChevronDown size={16} />}
               radius="md"
               size="md"
@@ -1124,19 +1349,79 @@ function EditInitiativeModal({
           </Grid.Col>
         </Grid>
 
-        <MultiSelect
-          label={
-            <Text fw={700} fz="sm" mb={4}>
-              Impacted Departments
-            </Text>
-          }
-          placeholder="Select departments..."
-          value={departments}
-          onChange={setDepartments}
-          data={departmentOptions}
-          radius="md"
-          size="md"
-        />
+        <Group align="flex-end" gap="xs">
+          <MultiSelect
+            label={
+              <Text fw={700} fz="sm" mb={4}>
+                Impacted Departments
+              </Text>
+            }
+            placeholder="Select departments..."
+            value={departments}
+            onChange={setDepartments}
+            data={departmentOptions}
+            radius="md"
+            size="md"
+            style={{ flex: 1 }}
+          />
+          <Button
+            type="button"
+            variant="light"
+            leftSection={<IconPlus size={16} />}
+            onClick={openAddDept}
+            mb={4}
+          >
+            Add Dept
+          </Button>
+        </Group>
+        <Modal
+          opened={addDeptOpen}
+          onClose={() => {
+            closeAddDept();
+            setNewDeptName("");
+          }}
+          title="Add Department"
+          size="sm"
+        >
+          <Stack gap="md">
+            <TextInput
+              placeholder="Department name"
+              value={newDeptName}
+              onChange={(e) => setNewDeptName(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  const trimmed = newDeptName.trim();
+                  if (trimmed) {
+                    onAddDepartment(trimmed);
+                    setDepartments((prev) => [...prev, trimmed]);
+                    closeAddDept();
+                    setNewDeptName("");
+                  }
+                }
+              }}
+            />
+            <Group justify="flex-end">
+              <Button variant="subtle" onClick={() => { closeAddDept(); setNewDeptName(""); }}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  const trimmed = newDeptName.trim();
+                  if (trimmed) {
+                    onAddDepartment(trimmed);
+                    setDepartments((prev) => [...prev, trimmed]);
+                    closeAddDept();
+                    setNewDeptName("");
+                  }
+                }}
+                disabled={!newDeptName.trim()}
+              >
+                Add
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
 
         <Divider label="Goals & Success Measures" labelPosition="center" />
 

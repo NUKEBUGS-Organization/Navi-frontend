@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "@/roles/admin/layout/AdminLayout";
 import {
   Box,
@@ -13,11 +13,13 @@ import {
   Textarea,
   ActionIcon,
   Group,
+  ScrollArea,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { DateInput } from "@mantine/dates";
 import { PageHeader } from "@/components";
-import { THEME_BLUE, ROUTES } from "@/constants";
+import { THEME_BLUE } from "@/constants";
+import { useAppRoutes } from "@/hooks/useAppRoutes";
 import { listInitiatives } from "@/api/initiatives";
 import {
   listCommunications,
@@ -50,8 +52,173 @@ function formatDate(s: string | undefined): string {
   return new Date(s).toLocaleDateString();
 }
 
+const GANTT_ROW_HEIGHT = 40;
+const GANTT_DAY_WIDTH = 24;
+const GANTT_LABEL_WIDTH = 220;
+
+function CommunicationGanttChart({
+  list,
+  onEdit,
+  canEdit,
+}: {
+  list: CommunicationDto[];
+  onEdit: (row: CommunicationDto) => void;
+  canEdit: boolean;
+}) {
+  const { startDate, endDate, scaleDays } = useMemo(() => {
+    const dates = list
+      .map((c) => c.scheduledDate ? new Date(c.scheduledDate).getTime() : null)
+      .filter((t): t is number => t != null);
+    const now = Date.now();
+    const min = dates.length ? Math.min(...dates) : now - 30 * 24 * 60 * 60 * 1000;
+    const max = dates.length ? Math.max(...dates) : now + 60 * 24 * 60 * 60 * 1000;
+    const start = new Date(min);
+    start.setDate(1);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(max);
+    end.setMonth(end.getMonth() + 2);
+    end.setDate(1);
+    end.setHours(0, 0, 0, 0);
+    const scaleDays = Math.max(90, Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)));
+    return { startDate: start, endDate: end, scaleDays };
+  }, [list]);
+
+  const getLeftPercent = (scheduledDate: string | undefined): number => {
+    if (!scheduledDate) return 0;
+    const t = new Date(scheduledDate).getTime();
+    const start = startDate.getTime();
+    const end = endDate.getTime();
+    return Math.max(0, Math.min(1, (t - start) / (end - start))) * 100;
+  };
+
+  const monthLabels: { date: Date; left: number }[] = useMemo(() => {
+    const out: { date: Date; left: number }[] = [];
+    const d = new Date(startDate);
+    const end = endDate.getTime();
+    while (d.getTime() < end) {
+      const t = d.getTime();
+      const left = ((t - startDate.getTime()) / (endDate.getTime() - startDate.getTime())) * 100;
+      out.push({ date: new Date(d), left });
+      d.setMonth(d.getMonth() + 1);
+    }
+    return out;
+  }, [startDate, endDate]);
+
+  const sortedList = useMemo(() => {
+    return [...list].sort((a, b) => {
+      if (!a.scheduledDate) return 1;
+      if (!b.scheduledDate) return -1;
+      return new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime();
+    });
+  }, [list]);
+
+  if (list.length === 0) return null;
+
+  return (
+    <Paper withBorder radius="md" p="md" mb="md">
+      <Text fw={700} size="sm" mb="md" c="dark.7">
+        Timeline (Gantt)
+      </Text>
+      <ScrollArea scrollbarSize={8} type="auto" offsetScrollbars>
+        <Box style={{ minWidth: GANTT_LABEL_WIDTH + scaleDays * GANTT_DAY_WIDTH }}>
+          {/* Month header */}
+          <Box style={{ display: "flex", marginLeft: GANTT_LABEL_WIDTH, height: 28, position: "relative", borderBottom: "1px solid #e9ecef" }}>
+            {monthLabels.map((m) => (
+              <Box
+                key={m.date.toISOString()}
+                style={{
+                  position: "absolute",
+                  left: `${m.left}%`,
+                  transform: "translateX(-50%)",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "#868e96",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {m.date.toLocaleDateString("en-US", { month: "short", year: "numeric" })}
+              </Box>
+            ))}
+          </Box>
+          {/* Rows */}
+          {sortedList.map((row) => {
+            const hasDate = !!row.scheduledDate;
+            const leftPct = getLeftPercent(row.scheduledDate);
+            return (
+              <Box
+                key={row._id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  height: GANTT_ROW_HEIGHT,
+                  borderBottom: "1px solid #f1f3f5",
+                  cursor: canEdit ? "pointer" : "default",
+                }}
+                onClick={() => canEdit && onEdit(row)}
+              >
+                <Box
+                  style={{
+                    width: GANTT_LABEL_WIDTH,
+                    flexShrink: 0,
+                    paddingRight: 12,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
+                  <Text size="sm" fw={600} truncate title={row.title}>
+                    {row.title}
+                  </Text>
+                  {row.type && (
+                    <Text size="xs" c="dimmed">
+                      {row.type}
+                    </Text>
+                  )}
+                </Box>
+                <Box
+                  style={{
+                    flex: 1,
+                    position: "relative",
+                    height: GANTT_ROW_HEIGHT - 8,
+                    minHeight: 24,
+                  }}
+                >
+                  {/* Grid line for day boundaries not drawn - just the bar */}
+                  {hasDate && (
+                    <Box
+                      style={{
+                        position: "absolute",
+                        left: `${leftPct}%`,
+                        top: 4,
+                        width: "4%",
+                        minWidth: 48,
+                        height: GANTT_ROW_HEIGHT - 16,
+                        borderRadius: 4,
+                        backgroundColor: THEME_BLUE,
+                        opacity: 0.9,
+                        boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+                      }}
+                      title={`${row.title} – ${formatDate(row.scheduledDate)} ${row.status ?? ""}`}
+                    />
+                  )}
+                  {!hasDate && (
+                    <Text size="xs" c="dimmed" style={{ position: "absolute", left: 0, top: 10 }}>
+                      No date
+                    </Text>
+                  )}
+                </Box>
+              </Box>
+            );
+          })}
+        </Box>
+      </ScrollArea>
+    </Paper>
+  );
+}
+
 export default function CommunicationPlanning() {
   const { user } = useAuth();
+  const appRoutes = useAppRoutes();
   const canEdit = user?.role === "admin" || user?.role === "manager";
   const [initiatives, setInitiatives] = useState<{ id: string; title: string }[]>([]);
   const [selectedInitiativeId, setSelectedInitiativeId] = useState<string | null>(null);
@@ -161,8 +328,8 @@ export default function CommunicationPlanning() {
   };
 
   const breadcrumbs = [
-    { title: "Dashboard", href: ROUTES.ADMIN_DASHBOARD },
-    { title: "Communication Planning", href: ROUTES.ADMIN_COMMUNICATIONS },
+    { title: "Dashboard", href: appRoutes.DASHBOARD },
+    { title: "Communication Planning", href: appRoutes.COMMUNICATIONS },
   ];
 
   return (
@@ -198,51 +365,67 @@ export default function CommunicationPlanning() {
           }
         />
 
-        <Paper withBorder radius="md" p="md">
-          {loading ? (
+        {loading ? (
+          <Paper withBorder radius="md" p="md">
             <Text size="sm" c="dimmed">Loading…</Text>
-          ) : !selectedInitiativeId ? (
+          </Paper>
+        ) : !selectedInitiativeId ? (
+          <Paper withBorder radius="md" p="md">
             <Text size="sm" c="dimmed">Select an initiative to view communications.</Text>
-          ) : list.length === 0 ? (
-            <Text size="sm" c="dimmed">No communications yet. Add one to get started.</Text>
-          ) : (
-            <Table striped highlightOnHover>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Title</Table.Th>
-                  <Table.Th>Type</Table.Th>
-                  <Table.Th>Audience</Table.Th>
-                  <Table.Th>Date</Table.Th>
-                  <Table.Th>Status</Table.Th>
-                  {canEdit && <Table.Th w={80}></Table.Th>}
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {list.map((row) => (
-                  <Table.Tr key={row._id}>
-                    <Table.Td fw={600}>{row.title}</Table.Td>
-                    <Table.Td>{row.type ?? "—"}</Table.Td>
-                    <Table.Td>{row.audience ?? "—"}</Table.Td>
-                    <Table.Td>{formatDate(row.scheduledDate)}</Table.Td>
-                    <Table.Td>{row.status ?? "—"}</Table.Td>
-                    {canEdit && (
-                      <Table.Td>
-                        <Group gap="xs">
-                          <ActionIcon variant="subtle" size="sm" onClick={() => openEdit(row)}>
-                            <IconPencil size={16} />
-                          </ActionIcon>
-                          <ActionIcon variant="subtle" color="red" size="sm" onClick={() => setDeleteConfirm(row)}>
-                            <IconTrash size={16} />
-                          </ActionIcon>
-                        </Group>
-                      </Table.Td>
-                    )}
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          )}
-        </Paper>
+          </Paper>
+        ) : (
+          <>
+            {list.length > 0 && (
+              <CommunicationGanttChart list={list} onEdit={openEdit} canEdit={!!canEdit} />
+            )}
+            <Paper withBorder radius="md" p="md">
+              {list.length === 0 ? (
+                <Text size="sm" c="dimmed">No communications yet. Add one to get started.</Text>
+              ) : (
+                <>
+                  <Text fw={700} size="sm" mb="md" c="dark.7">
+                    Table
+                  </Text>
+                  <Table striped highlightOnHover>
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th>Title</Table.Th>
+                        <Table.Th>Type</Table.Th>
+                        <Table.Th>Audience</Table.Th>
+                        <Table.Th>Date</Table.Th>
+                        <Table.Th>Status</Table.Th>
+                        {canEdit && <Table.Th w={80}></Table.Th>}
+                      </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {list.map((row) => (
+                        <Table.Tr key={row._id}>
+                          <Table.Td fw={600}>{row.title}</Table.Td>
+                          <Table.Td>{row.type ?? "—"}</Table.Td>
+                          <Table.Td>{row.audience ?? "—"}</Table.Td>
+                          <Table.Td>{formatDate(row.scheduledDate)}</Table.Td>
+                          <Table.Td>{row.status ?? "—"}</Table.Td>
+                          {canEdit && (
+                            <Table.Td>
+                              <Group gap="xs">
+                                <ActionIcon variant="subtle" size="sm" onClick={() => openEdit(row)}>
+                                  <IconPencil size={16} />
+                                </ActionIcon>
+                                <ActionIcon variant="subtle" color="red" size="sm" onClick={() => setDeleteConfirm(row)}>
+                                  <IconTrash size={16} />
+                                </ActionIcon>
+                              </Group>
+                            </Table.Td>
+                          )}
+                        </Table.Tr>
+                      ))}
+                    </Table.Tbody>
+                  </Table>
+                </>
+              )}
+            </Paper>
+          </>
+        )}
 
         <Modal opened={modalOpen} onClose={() => { closeModal(); resetForm(); }} title={editing ? "Edit Communication" : "Add Communication"} centered size="md">
           <Stack gap="md">

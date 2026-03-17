@@ -16,7 +16,8 @@ import {
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { PageHeader } from "@/components";
-import { THEME_BLUE, ROUTES } from "@/constants";
+import { THEME_BLUE } from "@/constants";
+import { useAppRoutes } from "@/hooks/useAppRoutes";
 import { listInitiatives } from "@/api/initiatives";
 import {
   listStakeholders,
@@ -43,6 +44,7 @@ const SUPPORT_OPTIONS = [
 
 export default function StakeholderMapping() {
   const { user } = useAuth();
+  const appRoutes = useAppRoutes();
   const canEdit = user?.role === "admin" || user?.role === "manager";
   const [initiatives, setInitiatives] = useState<{ id: string; title: string }[]>([]);
   const [selectedInitiativeId, setSelectedInitiativeId] = useState<string | null>(null);
@@ -146,8 +148,8 @@ export default function StakeholderMapping() {
   };
 
   const breadcrumbs = [
-    { title: "Dashboard", href: ROUTES.ADMIN_DASHBOARD },
-    { title: "Stakeholder Mapping", href: ROUTES.ADMIN_STAKEHOLDERS },
+    { title: "Dashboard", href: appRoutes.DASHBOARD },
+    { title: "Stakeholder Mapping", href: appRoutes.STAKEHOLDERS },
   ];
 
   return (

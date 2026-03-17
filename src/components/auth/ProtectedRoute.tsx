@@ -1,5 +1,5 @@
 import { Navigate, useLocation } from "react-router-dom";
-import { ROUTES } from "@/constants";
+import { ROUTES, getAppDashboardRoute } from "@/constants";
 import { useAuth } from "@/contexts/AuthContext";
 import type { UserRole } from "@/api/auth";
 
@@ -33,11 +33,15 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
   }
 
   if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
-    const redirect =
-      user.role === "super_admin"
-        ? ROUTES.SUPER_ADMIN_DASHBOARD
-        : ROUTES.ADMIN_DASHBOARD;
+    const redirect = getAppDashboardRoute(user.role);
     return <Navigate to={redirect} replace />;
+  }
+
+  // If manager/employee landed on /admin/* (e.g. bookmark), redirect to their role path
+  const pathname = location.pathname;
+  if (pathname.startsWith("/admin/") && (user.role === "manager" || user.role === "employee")) {
+    const prefix = user.role === "manager" ? "/manager" : "/employee";
+    return <Navigate to={prefix + pathname.slice(6)} replace />;
   }
 
   return <>{children}</>;

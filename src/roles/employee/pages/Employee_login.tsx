@@ -15,7 +15,7 @@ import {
   Input,
 } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
-import { ROUTES, THEME_BLUE } from "@/constants";
+import { ROUTES, THEME_BLUE, getAppDashboardRoute } from "@/constants";
 import logo from "@/assets/navi-logo.jpeg";
 import { useNavigate, Navigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -51,10 +51,7 @@ const EmployeeLogin = () => {
     try {
       const data = await apiLogin(normalizedEmail, password);
       authLogin(data.access_token, data.user);
-      const redirect =
-        data.user.role === "super_admin"
-          ? ROUTES.SUPER_ADMIN_DASHBOARD
-          : ROUTES.ADMIN_DASHBOARD;
+      const redirect = getAppDashboardRoute(data.user.role);
       navigate(redirect, { replace: true });
     } catch (err) {
       const message = err instanceof Error ? err.message : (err as ApiError)?.message ?? "Invalid email or password.";

@@ -18,6 +18,7 @@ import type { IconProps } from "@tabler/icons-react";
 import { COLORS, ROUTES } from "@/constants";
 import naviLogo from "@/assets/navi-logo.jpeg";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAppRoutes } from "@/hooks/useAppRoutes";
 
 interface NavItem {
   icon: React.FC<IconProps>;
@@ -26,19 +27,6 @@ interface NavItem {
   /** Only show for these roles; omit to show for all (admin, manager, employee). */
   roles?: ("admin" | "manager" | "employee")[];
 }
-
-const NAV_ITEMS: NavItem[] = [
-  { icon: IconLayoutDashboard, label: "Dashboard", path: ROUTES.ADMIN_DASHBOARD },
-  { icon: IconTarget, label: "Initiatives", path: ROUTES.ADMIN_INITIATIVES },
-  { icon: IconCheckbox, label: "Assessments", path: ROUTES.ADMIN_ASSESSMENTS },
-  { icon: IconRoute, label: "Roadmap", path: ROUTES.ADMIN_ROADMAP },
-  { icon: IconUsers, label: "Stakeholder Mapping", path: ROUTES.ADMIN_STAKEHOLDERS, roles: ["admin", "manager"] },
-  { icon: IconMessage, label: "Communication Planning", path: ROUTES.ADMIN_COMMUNICATIONS, roles: ["admin", "manager"] },
-  { icon: IconChartLine, label: "Adoption Tracking", path: ROUTES.ADMIN_ADOPTION, roles: ["admin", "manager"] },
-  { icon: IconAlertTriangle, label: "Risk Monitoring", path: ROUTES.ADMIN_RISKS, roles: ["admin", "manager", "employee"] },
-  { icon: IconHierarchy, label: "Organization", path: ROUTES.ADMIN_ORGANIZATION, roles: ["admin"] },
-  { icon: IconSettings, label: "Settings", path: ROUTES.ADMIN_SETTINGS },
-];
 
 export default function AdminLayout({
   children,
@@ -49,6 +37,20 @@ export default function AdminLayout({
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
+  const appRoutes = useAppRoutes();
+
+  const NAV_ITEMS: NavItem[] = [
+    { icon: IconLayoutDashboard, label: "Dashboard", path: appRoutes.DASHBOARD },
+    { icon: IconTarget, label: "Initiatives", path: appRoutes.INITIATIVES },
+    { icon: IconCheckbox, label: "Assessments", path: appRoutes.ASSESSMENTS },
+    { icon: IconRoute, label: "Roadmap", path: appRoutes.ROADMAP },
+    { icon: IconUsers, label: "Stakeholder Mapping", path: appRoutes.STAKEHOLDERS, roles: ["admin", "manager"] },
+    { icon: IconMessage, label: "Communication Planning", path: appRoutes.COMMUNICATIONS, roles: ["admin", "manager"] },
+    { icon: IconChartLine, label: "Adoption Tracking", path: appRoutes.ADOPTION, roles: ["admin", "manager"] },
+    { icon: IconAlertTriangle, label: "Risk Monitoring", path: appRoutes.RISKS, roles: ["admin", "manager", "employee"] },
+    { icon: IconHierarchy, label: "Organization", path: appRoutes.ORGANIZATION, roles: ["admin"] },
+    { icon: IconSettings, label: "Settings", path: appRoutes.SETTINGS },
+  ];
 
   return (
     <AppShell

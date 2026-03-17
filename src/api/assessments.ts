@@ -13,6 +13,7 @@ export interface Assessment {
   ownerId?: string;
   dueDate?: string;
   audience?: string;
+  audienceDepartments?: string[];
   description?: string;
   steps: AssessmentStep[];
   completed?: boolean;
@@ -28,6 +29,7 @@ export interface CreateAssessmentPayload {
   ownerId?: string;
   dueDate?: string;
   audience?: string;
+  audienceDepartments?: string[];
   description?: string;
   steps?: AssessmentStep[];
 }
