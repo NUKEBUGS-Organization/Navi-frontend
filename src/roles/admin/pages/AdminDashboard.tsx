@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AdminLayout from "@/roles/admin/layout/AdminLayout";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Grid,
   Card,
@@ -25,6 +26,7 @@ import {
   IconChartBar,
   IconCircleCheck,
   IconAlertTriangle,
+  IconStarFilled,
 } from "@tabler/icons-react";
 import type { IconProps } from "@tabler/icons-react";
 import { THEME_BLUE } from "@/constants";
@@ -33,6 +35,7 @@ import { listInitiatives, type InitiativeListItem } from "@/api/initiatives";
 import { listAssessments, listSubmissions, type Assessment, type AssessmentSubmission } from "@/api/assessments";
 import { getMyOrganization, type MyOrganization } from "@/api/organizations";
 import { getRiskSummary, type RiskSummary } from "@/api/risks";
+import { getKudosSummary, type KudosSummary } from "@/api/kudos";
 
 /** Normalize backend _id/ObjectId to string for consistent lookup. */
 function toId(x: unknown): string {
@@ -99,27 +102,37 @@ function formatRelativeTime(date: Date): string {
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const appRoutes = useAppRoutes();
+  const { user } = useAuth();
+  const canViewRiskMonitoring = user?.role === "admin" || user?.role === "manager";
+  const isEmployee = user?.role === "employee";
+  const currentUserId = user?._id ?? "";
   const [initiatives, setInitiatives] = useState<InitiativeListItem[]>([]);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [submissions, setSubmissions] = useState<AssessmentSubmission[]>([]);
   const [org, setOrg] = useState<MyOrganization | null>(null);
   const [riskSummary, setRiskSummary] = useState<RiskSummary | null>(null);
+  const [kudosSummary, setKudosSummary] = useState<KudosSummary | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Employees shouldn't load risk monitoring data.
+    const riskPromise = canViewRiskMonitoring ? getRiskSummary().catch(() => null) : Promise.resolve(null);
+    const kudosPromise = isEmployee ? getKudosSummary().catch(() => null) : Promise.resolve(null);
     Promise.all([
       listInitiatives(),
       listAssessments(),
       listSubmissions(),
       getMyOrganization().catch(() => null),
-      getRiskSummary().catch(() => null),
+      riskPromise,
+      kudosPromise,
     ])
-      .then(([initList, assessList, subList, orgData, riskData]) => {
+      .then(([initList, assessList, subList, orgData, riskData, kudosData]) => {
         setInitiatives(Array.isArray(initList) ? initList : []);
         setAssessments(Array.isArray(assessList) ? assessList : []);
         setSubmissions(Array.isArray(subList) ? subList : []);
         setOrg(orgData ?? null);
         setRiskSummary(riskData ?? null);
+        setKudosSummary(kudosData ?? null);
       })
       .catch(() => {
         setInitiatives([]);
@@ -127,9 +140,10 @@ export default function AdminDashboard() {
         setSubmissions([]);
         setOrg(null);
         setRiskSummary(null);
+        setKudosSummary(null);
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [canViewRiskMonitoring, isEmployee]);
 
   const activeInitiatives = initiatives.filter((i) => i.status === "ACTIVE");
   const activeCount = activeInitiatives.length;
@@ -159,6 +173,7 @@ export default function AdminDashboard() {
     return (i.readiness || "").toLowerCase() === "low";
   }).length;
   const recentSubmissions = [...submissions]
+    .filter((s) => (!isEmployee ? true : String(s.userId) === String(currentUserId)))
     .sort((a, b) => {
       const da = a.updatedAt ?? a.createdAt ?? "";
       const db = b.updatedAt ?? b.createdAt ?? "";
@@ -315,7 +330,7 @@ export default function AdminDashboard() {
         </Grid.Col>
       </Grid>
 
-      {riskSummary && (riskSummary.open > 0 || riskSummary.high > 0 || riskSummary.critical > 0) && (
+      {canViewRiskMonitoring && riskSummary && (riskSummary.open > 0 || riskSummary.high > 0 || riskSummary.critical > 0) && (
         <Card withBorder radius="lg" p="md" mb="xl" style={{ cursor: "pointer" }} onClick={() => navigate(appRoutes.RISKS)}>
           <Group justify="space-between">
             <Group>
@@ -324,6 +339,23 @@ export default function AdminDashboard() {
                 <Text fw={700} fz="md">Risk Monitoring</Text>
                 <Text size="xs" c="dimmed">
                   {riskSummary.open} open · {riskSummary.high} high · {riskSummary.critical} critical
+                </Text>
+              </Box>
+            </Group>
+            <Text size="sm" fw={600} c="blue">View all →</Text>
+          </Group>
+        </Card>
+      )}
+
+      {isEmployee && kudosSummary && (
+        <Card withBorder radius="lg" p="md" mb="xl" style={{ cursor: "pointer" }} onClick={() => navigate(appRoutes.KUDOS)}>
+          <Group justify="space-between">
+            <Group>
+              <IconStarFilled size={24} color="#f59f00" />
+              <Box>
+                <Text fw={700} fz="md">Kudos</Text>
+                <Text size="xs" c="dimmed">
+                  {kudosSummary.totalStars} total star{kudosSummary.totalStars === 1 ? "" : "s"}
                 </Text>
               </Box>
             </Group>
@@ -393,26 +425,31 @@ export default function AdminDashboard() {
                       </Table.Td>
                     </Table.Tr>
                   ) : (
-                    displayInitiatives.map((i) => (
-                      <TableRow
-                        key={i.id}
-                        initiativeId={i.id}
-                        name={i.title}
-                        lead={i.leadName ?? "—"}
-                        progress={i.progress ?? 0}
-                        readiness={getReadinessForInitiative(i)}
-                        submissionCount={getSubmissionCountForInitiative(i)}
-                        status={i.status ?? "DRAFT"}
-                        color={
-                          i.status === "ACTIVE"
-                            ? "#40c057"
-                            : i.status === "PLANNING"
-                              ? "#fab005"
-                              : "#fa5252"
-                        }
-                        onRowClick={() => navigate(appRoutes.INITIATIVE_DETAIL(i.id))}
-                      />
-                    ))
+                    displayInitiatives.map((i) => {
+                      const st = String(i.status ?? "DRAFT").toUpperCase();
+                      const dotColor =
+                        st === "ACTIVE"
+                          ? "#40c057"
+                          : st === "PLANNING"
+                            ? "#228be6"
+                            : "#adb5bd";
+                      return (
+                        <TableRow
+                          key={i.id}
+                          initiativeId={i.id}
+                          name={i.title}
+                          lead={i.leadName ?? "—"}
+                          progress={i.progress ?? 0}
+                          readiness={getReadinessForInitiative(i)}
+                          submissionCount={getSubmissionCountForInitiative(i)}
+                          status={i.status ?? "DRAFT"}
+                          color={dotColor}
+                          onRowClick={() => {
+                            if (i.id) navigate(appRoutes.INITIATIVE_DETAIL(i.id));
+                          }}
+                        />
+                      );
+                    })
                   )}
                 </Table.Tbody>
               </Table>
@@ -420,78 +457,80 @@ export default function AdminDashboard() {
           </Card>
         </Grid.Col>
 
-        <Grid.Col span={{ base: 12, lg: 4 }}>
-          <Card withBorder radius="lg" p="xl" shadow="xs">
-            <Text fw={800} fz="lg" mb={30}>
-              Readiness Score Overview
-            </Text>
-            {loading ? (
-              <Text size="sm" c="dimmed">Loading…</Text>
-            ) : submissions.length === 0 ? (
-              <Stack gap="md">
-                <Text size="sm" c="dimmed">
-                  Staff need to submit assessments to see readiness scores.
-                </Text>
-                {initiatives.length > 0 && (
-                  <>
-                    <Text size="xs" fw={600} c="dimmed">Initiatives (no submissions yet):</Text>
-                    {initiatives.slice(0, 5).map((i) => (
-                      <Box key={i.id}>
-                        <Group justify="space-between" mb={4}>
-                          <Text fz={11} fw={700} c="dimmed">
-                            {i.title.length > 24 ? i.title.slice(0, 24) + "…" : i.title}
-                          </Text>
-                          <Text fz={11} c="dimmed">—</Text>
-                        </Group>
-                        <Progress value={0} color="gray" h={5} radius="xl" />
-                      </Box>
-                    ))}
-                  </>
-                )}
-                {assessments.length > 0 && (
-                  <Box mt="xs">
-                    <Text size="xs" c="dimmed" mb={8}>
-                      {assessments.length} assessment{assessments.length === 1 ? "" : "s"} available.
-                    </Text>
-                    <Button variant="light" size="xs" color="blue" onClick={() => navigate(appRoutes.ASSESSMENTS)}>
-                      Go to Assessments
-                    </Button>
-                  </Box>
-                )}
-              </Stack>
-            ) : (
-              <>
-                <Stack gap={28}>
-                  <ReadinessItem
-                    label="OVERALL READINESS (from staff submissions)"
-                    value={avgReadiness != null ? avgReadiness.toFixed(1) : "—"}
-                  />
-                  {initiatives
-                    .filter((i) => {
-                      const initId = toId(i.id) || toId((i as { _id?: unknown })._id);
-                      return initId && submissionsByInitiative[initId]?.count > 0;
-                    })
-                    .slice(0, 5)
-                    .map((i) => {
-                      const initId = toId(i.id) || toId((i as { _id?: unknown })._id);
-                      const agg = initId ? submissionsByInitiative[initId] : undefined;
-                      const avg = agg ? agg.avg.toFixed(1) : "—";
-                      return (
-                        <ReadinessItem
-                          key={i.id}
-                          label={i.title.length > 28 ? i.title.slice(0, 28) + "…" : i.title}
-                          value={avg}
-                        />
-                      );
-                    })}
+        {!isEmployee && (
+          <Grid.Col span={{ base: 12, lg: 4 }}>
+            <Card withBorder radius="lg" p="xl" shadow="xs">
+              <Text fw={800} fz="lg" mb={30}>
+                Readiness Score Overview
+              </Text>
+              {loading ? (
+                <Text size="sm" c="dimmed">Loading…</Text>
+              ) : submissions.length === 0 ? (
+                <Stack gap="md">
+                  <Text size="sm" c="dimmed">
+                    Staff need to submit assessments to see readiness scores.
+                  </Text>
+                  {initiatives.length > 0 && (
+                    <>
+                      <Text size="xs" fw={600} c="dimmed">Initiatives (no submissions yet):</Text>
+                      {initiatives.slice(0, 5).map((i) => (
+                        <Box key={i.id}>
+                          <Group justify="space-between" mb={4}>
+                            <Text fz={11} fw={700} c="dimmed">
+                              {i.title.length > 24 ? i.title.slice(0, 24) + "…" : i.title}
+                            </Text>
+                            <Text fz={11} c="dimmed">—</Text>
+                          </Group>
+                          <Progress value={0} color="gray" h={5} radius="xl" />
+                        </Box>
+                      ))}
+                    </>
+                  )}
+                  {assessments.length > 0 && (
+                    <Box mt="xs">
+                      <Text size="xs" c="dimmed" mb={8}>
+                        {assessments.length} assessment{assessments.length === 1 ? "" : "s"} available.
+                      </Text>
+                      <Button variant="light" size="xs" color="blue" onClick={() => navigate(appRoutes.ASSESSMENTS)}>
+                        Go to Assessments
+                      </Button>
+                    </Box>
+                  )}
                 </Stack>
-                <Text ta="center" fz={11} c="dimmed" fw={600} mt={30}>
-                  Average across {submissions.length} submission{submissions.length === 1 ? "" : "s"} from staff
-                </Text>
-              </>
-            )}
-          </Card>
-        </Grid.Col>
+              ) : (
+                <>
+                  <Stack gap={28}>
+                    <ReadinessItem
+                      label="OVERALL READINESS (from staff submissions)"
+                      value={avgReadiness != null ? avgReadiness.toFixed(1) : "—"}
+                    />
+                    {initiatives
+                      .filter((i) => {
+                        const initId = toId(i.id) || toId((i as { _id?: unknown })._id);
+                        return initId && submissionsByInitiative[initId]?.count > 0;
+                      })
+                      .slice(0, 5)
+                      .map((i) => {
+                        const initId = toId(i.id) || toId((i as { _id?: unknown })._id);
+                        const agg = initId ? submissionsByInitiative[initId] : undefined;
+                        const avg = agg ? agg.avg.toFixed(1) : "—";
+                        return (
+                          <ReadinessItem
+                            key={i.id}
+                            label={i.title.length > 28 ? i.title.slice(0, 28) + "…" : i.title}
+                            value={avg}
+                          />
+                        );
+                      })}
+                  </Stack>
+                  <Text ta="center" fz={11} c="dimmed" fw={600} mt={30}>
+                    Average across {submissions.length} submission{submissions.length === 1 ? "" : "s"} from staff
+                  </Text>
+                </>
+              )}
+            </Card>
+          </Grid.Col>
+        )}
       </Grid>
 
       <Grid gutter="xl">
@@ -560,7 +599,9 @@ export default function AdminDashboard() {
             ) : recentSubmissions.length === 0 ? (
               <Stack gap="md">
                 <Text size="sm" c="dimmed">
-                  No assessment submissions yet. Staff can complete assessments to see activity here.
+                  {isEmployee
+                    ? "No assessment submissions yet. Complete an assessment to see activity here."
+                    : "No assessment submissions yet. Staff can complete assessments to see activity here."}
                 </Text>
                 <Button
                   variant="light"

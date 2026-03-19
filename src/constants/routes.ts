@@ -15,6 +15,8 @@ export interface AppRoutes {
   COMMUNICATIONS: string;
   ADOPTION: string;
   RISKS: string;
+  KUDOS: string;
+  KNOWLEDGE_HUB: string;
 }
 
 export const ROUTES = {
@@ -48,6 +50,8 @@ export const ROUTES = {
   ADMIN_COMMUNICATIONS: "/admin/communications",
   ADMIN_ADOPTION: "/admin/adoption",
   ADMIN_RISKS: "/admin/risks",
+  ADMIN_KUDOS: "/admin/kudos",
+  ADMIN_KNOWLEDGE_HUB: "/admin/knowledge-hub",
 
   // Manager (same app, different URL prefix)
   MANAGER: "/manager",
@@ -63,6 +67,8 @@ export const ROUTES = {
   MANAGER_COMMUNICATIONS: "/manager/communications",
   MANAGER_ADOPTION: "/manager/adoption",
   MANAGER_RISKS: "/manager/risks",
+  MANAGER_KUDOS: "/manager/kudos",
+  MANAGER_KNOWLEDGE_HUB: "/manager/knowledge-hub",
 
   // Employee (same app, different URL prefix)
   EMPLOYEE_APP: "/employee",
@@ -78,6 +84,8 @@ export const ROUTES = {
   EMPLOYEE_COMMUNICATIONS: "/employee/communications",
   EMPLOYEE_ADOPTION: "/employee/adoption",
   EMPLOYEE_RISKS: "/employee/risks",
+  EMPLOYEE_KUDOS: "/employee/kudos",
+  EMPLOYEE_KNOWLEDGE_HUB: "/employee/knowledge-hub",
 } as const;
 
 const ADMIN_APP_ROUTES: AppRoutes = {
@@ -94,6 +102,8 @@ const ADMIN_APP_ROUTES: AppRoutes = {
   COMMUNICATIONS: ROUTES.ADMIN_COMMUNICATIONS,
   ADOPTION: ROUTES.ADMIN_ADOPTION,
   RISKS: ROUTES.ADMIN_RISKS,
+  KUDOS: ROUTES.ADMIN_KUDOS,
+  KNOWLEDGE_HUB: ROUTES.ADMIN_KNOWLEDGE_HUB,
 };
 
 const MANAGER_APP_ROUTES: AppRoutes = {
@@ -110,6 +120,8 @@ const MANAGER_APP_ROUTES: AppRoutes = {
   COMMUNICATIONS: ROUTES.MANAGER_COMMUNICATIONS,
   ADOPTION: ROUTES.MANAGER_ADOPTION,
   RISKS: ROUTES.MANAGER_RISKS,
+  KUDOS: ROUTES.MANAGER_KUDOS,
+  KNOWLEDGE_HUB: ROUTES.MANAGER_KNOWLEDGE_HUB,
 };
 
 const EMPLOYEE_APP_ROUTES: AppRoutes = {
@@ -126,6 +138,8 @@ const EMPLOYEE_APP_ROUTES: AppRoutes = {
   COMMUNICATIONS: ROUTES.EMPLOYEE_COMMUNICATIONS,
   ADOPTION: ROUTES.EMPLOYEE_ADOPTION,
   RISKS: ROUTES.EMPLOYEE_RISKS,
+  KUDOS: ROUTES.EMPLOYEE_KUDOS,
+  KNOWLEDGE_HUB: ROUTES.EMPLOYEE_KNOWLEDGE_HUB,
 };
 
 /** Returns the app route set for the given role (admin → /admin/*, manager → /manager/*, employee → /employee/*). */

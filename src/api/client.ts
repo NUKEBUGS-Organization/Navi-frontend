@@ -27,6 +27,42 @@ async function request<T>(
   return data as T;
 }
 
+/** POST multipart/form-data (do not set Content-Type; browser sets boundary). */
+export async function postFormData<T>(path: string, formData: FormData): Promise<T> {
+  const token = getAuthToken();
+  const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
+  const headers: HeadersInit = {};
+  if (token) {
+    (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
+  }
+  const res = await fetch(url, { method: "POST", body: formData, headers });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err: ApiError = {
+      message: (data as { message?: string }).message || res.statusText || "Request failed",
+      status: res.status,
+    };
+    throw err;
+  }
+  return data as T;
+}
+
+/** GET binary response (e.g. file download). */
+export async function getBlob(path: string): Promise<Blob> {
+  const token = getAuthToken();
+  const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
+  const headers: HeadersInit = {};
+  if (token) {
+    (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
+  }
+  const res = await fetch(url, { method: "GET", headers });
+  if (!res.ok) {
+    const err: ApiError = { message: res.statusText || "Request failed", status: res.status };
+    throw err;
+  }
+  return res.blob();
+}
+
 export const api = {
   get: <T>(path: string) => request<T>(path, { method: "GET" }),
   post: <T>(path: string, body?: unknown) =>

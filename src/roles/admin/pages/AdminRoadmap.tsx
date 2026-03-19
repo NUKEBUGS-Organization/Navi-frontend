@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import AdminLayout from "@/roles/admin/layout/AdminLayout";
 import {
@@ -37,7 +37,6 @@ import {
   IconDots,
   IconCalendar,
   IconPackage,
-  IconSearch,
   IconChevronDown,
   IconRocket,
 } from "@tabler/icons-react";
@@ -262,7 +261,7 @@ export default function AdminRoadmap() {
           >
             <Group justify="space-between" align="flex-end">
               <Tabs
-                defaultValue="kanban"
+                defaultValue={isEmployee ? "list" : "kanban"}
                 variant="pills"
                 styles={{
                   tab: {
@@ -286,79 +285,85 @@ export default function AdminRoadmap() {
                 }}
               >
                 <Tabs.List>
-                  <Tabs.Tab
-                    value="kanban"
-                    leftSection={<IconLayoutKanban size={20} />}
-                  >
-                    Kanban
-                  </Tabs.Tab>
+                  {!isEmployee && (
+                    <Tabs.Tab
+                      value="kanban"
+                      leftSection={<IconLayoutKanban size={20} />}
+                    >
+                      Kanban
+                    </Tabs.Tab>
+                  )}
                   <Tabs.Tab value="list" leftSection={<IconList size={20} />}>
                     List
                   </Tabs.Tab>
-                  <Tabs.Tab
-                    value="timeline"
-                    leftSection={<IconTimeline size={20} />}
-                  >
-                    Timeline
-                  </Tabs.Tab>
+                  {!isEmployee && (
+                    <Tabs.Tab
+                      value="timeline"
+                      leftSection={<IconTimeline size={20} />}
+                    >
+                      Timeline
+                    </Tabs.Tab>
+                  )}
                 </Tabs.List>
 
-                <Tabs.Panel value="kanban" pt="xl">
-                  {loading ? (
-                    <Text size="sm" c="dimmed">Loading tasks…</Text>
-                  ) : (
-                  <SimpleGrid
-                    cols={{ base: 1, sm: 2, lg: 3 }}
-                    spacing={40}
-                    verticalSpacing={50}
-                  >
-                    {PHASES.map((phase) => {
-                      const phaseTasks = tasksForView.filter((t) => (t.phase ?? "Discovery") === phase);
-                      const progress = phaseTasks.length
-                        ? Math.round(phaseTasks.reduce((s, t) => s + t.progress, 0) / phaseTasks.length)
-                        : 0;
-                      return (
-                        <KanbanColumn
-                          key={phase}
-                          title={phase.toUpperCase()}
-                          count={phaseTasks.length}
-                          progress={progress}
-                          color="#00a99d"
-                        >
-                          {phaseTasks.map((task) => (
-                            <TaskCard
-                              key={String(task.id)}
-                              {...task}
-                              onMenuClick={() => handleEditTask(task)}
-                            />
-                          ))}
-                          {phaseTasks.length === 0 && (
-                            <Card
-                              h={rem(200)}
-                              withBorder
-                              radius="lg"
-                              bg="#f8f9fa"
-                              style={{
-                                border: "2.5px dashed #dee2e6",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                              }}
+                {!isEmployee && (
+                  <Tabs.Panel value="kanban" pt="xl">
+                    {loading ? (
+                      <Text size="sm" c="dimmed">Loading tasks…</Text>
+                    ) : (
+                      <SimpleGrid
+                        cols={{ base: 1, sm: 2, lg: 3 }}
+                        spacing={40}
+                        verticalSpacing={50}
+                      >
+                        {PHASES.map((phase) => {
+                          const phaseTasks = tasksForView.filter((t) => (t.phase ?? "Discovery") === phase);
+                          const progress = phaseTasks.length
+                            ? Math.round(phaseTasks.reduce((s, t) => s + t.progress, 0) / phaseTasks.length)
+                            : 0;
+                          return (
+                            <KanbanColumn
+                              key={phase}
+                              title={phase.toUpperCase()}
+                              count={phaseTasks.length}
+                              progress={progress}
+                              color="#00a99d"
                             >
-                              <Stack align="center" gap={8}>
-                                <IconPackage size={44} color="#adb5bd" stroke={1.2} />
-                                <Text fz="sm" c="dimmed" fw={700}>
-                                  No tasks in this phase
-                                </Text>
-                              </Stack>
-                            </Card>
-                          )}
-                        </KanbanColumn>
-                      );
-                    })}
-                  </SimpleGrid>
-                  )}
-                </Tabs.Panel>
+                              {phaseTasks.map((task) => (
+                                <TaskCard
+                                  key={String(task.id)}
+                                  {...task}
+                                  onMenuClick={() => handleEditTask(task)}
+                                />
+                              ))}
+                              {phaseTasks.length === 0 && (
+                                <Card
+                                  h={rem(200)}
+                                  withBorder
+                                  radius="lg"
+                                  bg="#f8f9fa"
+                                  style={{
+                                    border: "2.5px dashed #dee2e6",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                >
+                                  <Stack align="center" gap={8}>
+                                    <IconPackage size={44} color="#adb5bd" stroke={1.2} />
+                                    <Text fz="sm" c="dimmed" fw={700}>
+                                      No tasks in this phase
+                                    </Text>
+                                  </Stack>
+                                </Card>
+                              )}
+                            </KanbanColumn>
+                          );
+                        })}
+                      </SimpleGrid>
+                    )}
+                  </Tabs.Panel>
+                )}
 
                 <Tabs.Panel value="list" pt="xl">
                   {loading ? (
@@ -441,73 +446,73 @@ export default function AdminRoadmap() {
                 )}
                 </Tabs.Panel>
 
-                <Tabs.Panel value="timeline" pt="xl">
-                  {loading ? (
-                    <Text size="sm" c="dimmed">Loading tasks…</Text>
-                  ) : tasksForView.length === 0 ? (
-                    <Text size="sm" c="dimmed">
-                      {isEmployee ? "No tasks assigned to you." : "No tasks yet."}
-                    </Text>
-                  ) : (
-                  <Stack gap="md">
-                    {tasksForView.map((task) => (
-                      <Group
-                        key={task.id}
-                        align="flex-start"
-                        wrap="nowrap"
-                        gap="md"
-                      >
-                        <Box
-                          w={70}
-                          style={{ textAlign: "right" }}
-                        >
-                          <Text fz="xs" c="dimmed" fw={600}>
-                            {task.date}
-                          </Text>
-                        </Box>
-                        <Box
-                          style={{
-                            flex: 1,
-                            borderLeft: "2px solid #e9ecef",
-                            paddingLeft: rem(16),
-                          }}
-                        >
-                          <Text fz="sm" fw={700}>
-                            {task.title}
-                          </Text>
-                          <Group gap="xs" mt={4}>
-                            <Badge
-                              size="xs"
-                              radius="sm"
-                              variant="light"
-                              color={
-                                task.status === "In Progress"
-                                  ? "blue"
-                                  : task.status === "Blocked"
-                                    ? "red"
-                                    : "gray"
-                              }
-                              fw={700}
+                {!isEmployee && (
+                  <Tabs.Panel value="timeline" pt="xl">
+                    {loading ? (
+                      <Text size="sm" c="dimmed">Loading tasks…</Text>
+                    ) : tasksForView.length === 0 ? (
+                      <Text size="sm" c="dimmed">No tasks yet.</Text>
+                    ) : (
+                      <Stack gap="md">
+                        {tasksForView.map((task) => (
+                          <Group
+                            key={task.id}
+                            align="flex-start"
+                            wrap="nowrap"
+                            gap="md"
+                          >
+                            <Box
+                              w={70}
+                              style={{ textAlign: "right" }}
                             >
-                              {task.status}
-                            </Badge>
-                            <Text fz="xs" c="dimmed">
-                              {task.owner}
-                            </Text>
+                              <Text fz="xs" c="dimmed" fw={600}>
+                                {task.date}
+                              </Text>
+                            </Box>
+                            <Box
+                              style={{
+                                flex: 1,
+                                borderLeft: "2px solid #e9ecef",
+                                paddingLeft: rem(16),
+                              }}
+                            >
+                              <Text fz="sm" fw={700}>
+                                {task.title}
+                              </Text>
+                              <Group gap="xs" mt={4}>
+                                <Badge
+                                  size="xs"
+                                  radius="sm"
+                                  variant="light"
+                                  color={
+                                    task.status === "In Progress"
+                                      ? "blue"
+                                      : task.status === "Blocked"
+                                        ? "red"
+                                        : "gray"
+                                  }
+                                  fw={700}
+                                >
+                                  {task.status}
+                                </Badge>
+                                <Text fz="xs" c="dimmed">
+                                  {task.owner}
+                                </Text>
+                              </Group>
+                              <Progress
+                                mt={6}
+                                value={task.progress}
+                                color={THEME_BLUE}
+                                h={4}
+                                radius="xl"
+                              />
+                            </Box>
                           </Group>
-                          <Progress
-                            mt={6}
-                            value={task.progress}
-                            color={THEME_BLUE}
-                            h={4}
-                            radius="xl"
-                          />
-                        </Box>
-                      </Group>
-                    ))}
-                  </Stack>
-                  )}
-                </Tabs.Panel>
+                        ))}
+                      </Stack>
+                    )}
+                  </Tabs.Panel>
+                )}
               </Tabs>
 
               <Group
@@ -775,14 +780,16 @@ function EditTaskModal({ opened, onClose, task, userById, adoptions, canDelete =
                   DETAILS
                 </Text>
                 <SimpleGrid cols={2} spacing="md">
-                  <Box>
-                    <Text fz="xs" c="dimmed" fw={600} mb={4}>
-                      Phase
-                    </Text>
-                    <Text fz="sm" fw={700}>
-                      {task.phase ?? "Discovery"}
-                    </Text>
-                  </Box>
+                  {canDelete && (
+                    <Box>
+                      <Text fz="xs" c="dimmed" fw={600} mb={4}>
+                        Phase
+                      </Text>
+                      <Text fz="sm" fw={700}>
+                        {task.phase ?? "Discovery"}
+                      </Text>
+                    </Box>
+                  )}
                   <Box>
                     <Text fz="xs" c="dimmed" fw={600} mb={4}>
                       Owner

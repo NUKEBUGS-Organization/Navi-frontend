@@ -9,6 +9,11 @@ export interface InitiativeGoal {
   status?: "On Track" | "In Progress" | "Planned";
 }
 
+export interface InitiativeFaq {
+  question: string;
+  answer: string;
+}
+
 export interface InitiativeSummary {
   id?: string;
   status: InitiativeStatus;
@@ -20,4 +25,5 @@ export interface InitiativeSummary {
   tags?: string[];
   progress: number;
   goals?: InitiativeGoal[];
+  faqs?: InitiativeFaq[];
 }

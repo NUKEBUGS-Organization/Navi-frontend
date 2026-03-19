@@ -25,7 +25,7 @@ import {
   Grid,
 } from "@mantine/core";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAppRoutes } from "@/hooks/useAppRoutes";
@@ -50,14 +50,78 @@ import { IconChevronDown } from "@tabler/icons-react";
 import { IconInfoCircle } from "@tabler/icons-react";
 import { IconUsers } from "@tabler/icons-react";
 import { IconTarget } from "@tabler/icons-react";
-import { IconHistory } from "@tabler/icons-react";
+import { IconHelp, IconHistory } from "@tabler/icons-react";
 import { IconTrash } from "@tabler/icons-react";
 import { IconBulb } from "@tabler/icons-react";
 import { IconRocket } from "@tabler/icons-react";
 import { IconCheck } from "@tabler/icons-react";
 import { useForm } from "@mantine/form";
 import { THEME_BLUE, TEAL_BLUE } from "@/constants";
-import type { InitiativeSummary, InitiativeStatus } from "@/types";
+import type { InitiativeFaq, InitiativeSummary, InitiativeStatus } from "@/types";
+
+function parseDateRange(range: string): { start: Date; end: Date } | null {
+  const r = (range ?? "").replace(/\s+/g, " ").trim();
+  if (!r || r.toLowerCase() === "—") return null;
+
+  const quarterMatch = r.match(/^Q([1-4])\s*(\d{4})\s*(?:-|–)\s*Q([1-4])\s*(\d{4})$/i);
+  if (quarterMatch) {
+    const q1 = Number(quarterMatch[1]);
+    const y1 = Number(quarterMatch[2]);
+    const q2 = Number(quarterMatch[3]);
+    const y2 = Number(quarterMatch[4]);
+    const startMonth = (q1 - 1) * 3;
+    const endMonth = q2 * 3 - 1;
+    return {
+      start: new Date(y1, startMonth, 1),
+      end: new Date(y2, endMonth + 1, 0),
+    };
+  }
+
+  const monthMap: Record<string, number> = {
+    jan: 0,
+    january: 0,
+    feb: 1,
+    february: 1,
+    mar: 2,
+    march: 2,
+    apr: 3,
+    april: 3,
+    may: 4,
+    jun: 5,
+    june: 5,
+    jul: 6,
+    july: 6,
+    aug: 7,
+    august: 7,
+    sep: 8,
+    sept: 8,
+    september: 8,
+    oct: 9,
+    october: 9,
+    nov: 10,
+    november: 10,
+    dec: 11,
+    december: 11,
+  };
+
+  const mMatch = r.match(
+    /^([A-Za-z]{3,9})\s+(\d{1,2})(?:,\s*(\d{4}))?\s*(?:-|–)\s*([A-Za-z]{3,9})\s+(\d{1,2}),\s*(\d{4})$/
+  );
+  if (!mMatch) return null;
+
+  const m1 = monthMap[String(mMatch[1]).toLowerCase()] ?? null;
+  const d1 = Number(mMatch[2]);
+  const yEnd = Number(mMatch[6]);
+  const m2 = monthMap[String(mMatch[4]).toLowerCase()] ?? null;
+  const d2 = Number(mMatch[5]);
+  if (m1 == null || m2 == null) return null;
+
+  const y1 = mMatch[3] ? Number(mMatch[3]) : yEnd;
+  return {
+    start: new Date(y1, m1, d1),
+    end: new Date(yEnd, m2, d2),
+  };
+}
 
 export default function AdminInitiatives() {
   const navigate = useNavigate();
@@ -74,6 +138,36 @@ export default function AdminInitiatives() {
   const [managers, setManagers] = useState<{ name: string; id: string }[]>([]);
   const [orgDepartments, setOrgDepartments] = useState<string[]>([]);
   const [tasksByInitiative, setTasksByInitiative] = useState<Record<string, { total: number; completed: number }>>({});
+  const leadEnrollmentCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const isDraftStatus = (s?: string) => {
+      const v = (s ?? "").toLowerCase();
+      return v === "draft" || v.includes("draft");
+    };
+    (initiatives ?? []).forEach((i: any) => {
+      const lead = i.leadName as string | undefined;
+      if (!lead) return;
+      if (isDraftStatus(i.status as string | undefined)) return;
+      counts[lead] = (counts[lead] ?? 0) + 1;
+    });
+    return counts;
+  }, [initiatives]);
+
+  const leadEnrollmentInitiativesByLead = useMemo(() => {
+    const out: Record<string, InitiativeListItem[]> = {};
+    const isDraftStatus = (s?: string) => {
+      const v = (s ?? "").toLowerCase();
+      return v === "draft" || v.includes("draft");
+    };
+    (initiatives ?? []).forEach((i: any) => {
+      const lead = i.leadName as string | undefined;
+      if (!lead) return;
+      if (isDraftStatus(i.status as string | undefined)) return;
+      if (!out[lead]) out[lead] = [];
+      out[lead].push(i);
+    });
+    return out;
+  }, [initiatives]);
 
   const fetchInitiatives = async () => {
     setLoading(true);
@@ -179,6 +273,7 @@ export default function AdminInitiatives() {
         departments: data.departments,
         progress: data.progress ?? 0,
         goals: data.goals,
+        faqs: data.faqs,
         readiness: data.readiness,
       });
       await fetchInitiatives();
@@ -204,6 +299,7 @@ export default function AdminInitiatives() {
         departments: data.departments ?? [],
         progress: data.progress ?? 0,
         goals: data.goals ?? [],
+        faqs: data.faqs ?? [],
         readiness: data.readiness,
       };
       await createInitiative(payload);
@@ -217,11 +313,26 @@ export default function AdminInitiatives() {
   };
 
   // Filter by search
-  const filtered = initiatives.filter(
-    (i) =>
+  const filtered = initiatives.filter((i) => {
+    // Managers should only see initiatives they are "part of":
+    // - either they are explicitly the lead (leadName)
+    // - or the initiative impacts one of their departments
+    if (user?.role === "manager") {
+      const managerName = String(user.name ?? "").toLowerCase();
+      const leadMatch = String(i.leadName ?? "").toLowerCase() === managerName;
+      const managerDepts = new Set((user.departments ?? []).map((d) => String(d).toLowerCase()));
+      // If `departments` is empty, it means the initiative impacts the whole organization.
+      const deptMatch =
+        (i.departments ?? []).length === 0 ||
+        (i.departments ?? []).some((d) => managerDepts.has(String(d).toLowerCase()));
+      if (!leadMatch && !deptMatch) return false;
+    }
+
+    return (
       i.title.toLowerCase().includes(search.toLowerCase()) ||
-      i.leadName.toLowerCase().includes(search.toLowerCase()),
-  );
+      i.leadName.toLowerCase().includes(search.toLowerCase())
+    );
+  });
 
   return (
     <AdminLayout>
@@ -458,6 +569,8 @@ export default function AdminInitiatives() {
           managers={managers}
           orgDepartments={orgDepartments}
           onAddDepartment={handleAddDepartment}
+          leadEnrollmentCounts={leadEnrollmentCounts}
+          leadEnrollmentInitiativesByLead={leadEnrollmentInitiativesByLead}
         />
       ) : (
         <InitiativeModal
@@ -471,6 +584,8 @@ export default function AdminInitiatives() {
           managers={managers}
           orgDepartments={orgDepartments}
           onAddDepartment={handleAddDepartment}
+          leadEnrollmentCounts={leadEnrollmentCounts}
+          leadEnrollmentInitiativesByLead={leadEnrollmentInitiativesByLead}
         />
       )}
     </AdminLayout>
@@ -486,6 +601,8 @@ interface InitiativeModalProps {
   managers: { name: string; id: string }[];
   orgDepartments: string[];
   onAddDepartment: (name: string) => void | Promise<void>;
+  leadEnrollmentCounts: Record<string, number>;
+  leadEnrollmentInitiativesByLead: Record<string, InitiativeListItem[]>;
 }
 
 function InitiativeModal({
@@ -496,11 +613,26 @@ function InitiativeModal({
   managers,
   orgDepartments,
   onAddDepartment,
+  leadEnrollmentCounts,
+  leadEnrollmentInitiativesByLead,
 }: InitiativeModalProps) {
   const [addDeptOpen, { open: openAddDept, close: closeAddDept }] = useDisclosure(false);
   const [newDeptName, setNewDeptName] = useState("");
   const departmentOptions = orgDepartments;
-  const leadOptions = managers.map((m) => ({ value: m.name, label: m.name }));
+  const leadOptions = managers.map((m) => ({
+    value: m.name,
+    label: `${m.name} (${leadEnrollmentCounts[m.name] ?? 0})`,
+  }));
+
+  type ImpactScope = "departments" | "organization";
+  const [impactScope, setImpactScope] = useState<ImpactScope>(
+    (initial?.departments?.length ?? 0) > 0 ? "departments" : "organization",
+  );
+  const impactScopeRef = useRef<ImpactScope>(impactScope);
+  useEffect(() => {
+    impactScopeRef.current = impactScope;
+  }, [impactScope]);
+
   const form = useForm({
     initialValues: {
       title: initial?.title || "",
@@ -512,15 +644,27 @@ function InitiativeModal({
       goals: initial?.goals?.length
         ? initial.goals
         : [{ goal: "", metric: "" }],
+      faqs:
+        initial?.faqs?.length && initial.faqs.some((f) => f.question?.trim() || f.answer?.trim())
+          ? initial.faqs.map((f) => ({
+              question: f.question ?? "",
+              answer: f.answer ?? "",
+            }))
+          : [{ question: "", answer: "" }],
     },
     validate: {
       title: (v) => (!v ? "Title required" : null),
       leadName: (v) => (!v ? "Lead required" : null),
       status: (v) => (!v ? "Status required" : null),
       departments: (v) =>
-        v.length === 0 ? "Select at least one department" : null,
+        impactScopeRef.current === "departments" && v.length === 0
+          ? "Select at least one department"
+          : null,
     },
   });
+
+  const selectedLeadInitiatives =
+    leadEnrollmentInitiativesByLead[form.values.leadName ?? ""] ?? [];
 
   return (
     <Modal
@@ -532,7 +676,10 @@ function InitiativeModal({
     >
       <form
         onSubmit={form.onSubmit((values) => {
-          onSave(values);
+          const faqsClean = (values.faqs as InitiativeFaq[])
+            .filter((f) => f.question.trim() || f.answer.trim())
+            .map((f) => ({ question: f.question.trim(), answer: f.answer.trim() }));
+          onSave({ ...values, faqs: faqsClean });
           form.reset();
         })}
       >
@@ -544,6 +691,86 @@ function InitiativeModal({
             data={leadOptions}
             {...form.getInputProps("leadName")}
           />
+          {selectedLeadInitiatives.length > 0 && (
+            <Box style={{ border: "1px solid #e9ecef", borderRadius: 8, padding: 10 }}>
+              <Text fz="xs" c="dimmed" fw={700} mb={6}>
+                Current enrollments
+              </Text>
+              {(() => {
+                const parsed = selectedLeadInitiatives
+                  .map((ini) => {
+                    const bounds = parseDateRange(ini.dateRange);
+                    if (!bounds) return null;
+                    return { initiative: ini, startMs: bounds.start.getTime(), endMs: bounds.end.getTime() };
+                  })
+                  .filter((x): x is { initiative: InitiativeListItem; startMs: number; endMs: number } => x != null);
+                if (parsed.length === 0) {
+                  return (
+                    <Stack gap={4}>
+                      {selectedLeadInitiatives.slice(0, 4).map((ini) => (
+                        <Text key={ini.id ?? ini._id ?? ini.title} fz={12} c="dimmed">
+                          {ini.title}: {ini.dateRange}
+                        </Text>
+                      ))}
+                    </Stack>
+                  );
+                }
+                const minStart = Math.min(...parsed.map((p) => p.startMs));
+                const maxEnd = Math.max(...parsed.map((p) => p.endMs));
+                if (!Number.isFinite(minStart) || !Number.isFinite(maxEnd) || maxEnd <= minStart) {
+                  return (
+                    <Stack gap={4}>
+                      {selectedLeadInitiatives.slice(0, 4).map((ini) => (
+                        <Text key={ini.id ?? ini._id ?? ini.title} fz={12} c="dimmed">
+                          {ini.title}: {ini.dateRange}
+                        </Text>
+                      ))}
+                    </Stack>
+                  );
+                }
+                return (
+                  <Stack gap={8}>
+                    {parsed
+                      .slice()
+                      .sort((a, b) => a.startMs - b.startMs)
+                      .map((p) => {
+                        const leftPct = ((p.startMs - minStart) / (maxEnd - minStart)) * 100;
+                        const widthPct = ((p.endMs - p.startMs) / (maxEnd - minStart)) * 100;
+                        return (
+                          <Box key={p.initiative.id ?? p.initiative._id ?? p.initiative.title}>
+                            <Text fz={11} fw={700} c="dimmed" style={{ marginBottom: 4 }}>
+                              {p.initiative.title}
+                            </Text>
+                            <Box
+                              style={{
+                                position: "relative",
+                                height: 10,
+                                background: "#f1f3f5",
+                                borderRadius: 999,
+                                overflow: "hidden",
+                              }}
+                            >
+                              <Box
+                                style={{
+                                  position: "absolute",
+                                  left: `${Math.max(0, leftPct)}%`,
+                                  width: `${Math.max(2, widthPct)}%`,
+                                  top: 0,
+                                  bottom: 0,
+                                  background: THEME_BLUE,
+                                  opacity: 0.9,
+                                }}
+                                title={p.initiative.dateRange}
+                              />
+                            </Box>
+                          </Box>
+                        );
+                      })}
+                  </Stack>
+                );
+              })()}
+            </Box>
+          )}
           <Select
             label="Status"
             data={["ACTIVE", "DRAFT", "PLANNING"]}
@@ -553,71 +780,104 @@ function InitiativeModal({
             label="Timeline (e.g., Mar 1 – Sep 30, 2025)"
             {...form.getInputProps("dateRange")}
           />
-          <Group align="flex-end" gap="xs">
-            <MultiSelect
-              label="Departments Impacted"
-              data={departmentOptions}
-              {...form.getInputProps("departments")}
-              style={{ flex: 1 }}
-            />
-            <Button
-              type="button"
-              variant="light"
-              leftSection={<IconPlus size={16} />}
-              onClick={openAddDept}
-              mb={4}
-            >
-              Add Dept
-            </Button>
-          </Group>
-          <Modal
-            opened={addDeptOpen}
-            onClose={() => {
-              closeAddDept();
-              setNewDeptName("");
+          <Select
+            label="Impact Scope"
+            data={[
+              { value: "organization", label: "Whole organization impacted" },
+              { value: "departments", label: "Department(s) impacted" },
+            ]}
+            value={impactScope}
+            radius="md"
+            size="md"
+            onChange={(val) => {
+              const next = (val as ImpactScope) ?? "departments";
+              setImpactScope(next);
+              if (next === "organization") {
+                closeAddDept();
+                setNewDeptName("");
+                form.setFieldValue("departments", []);
+              }
             }}
-            title="Add Department"
-            size="sm"
-          >
-            <Stack gap="md">
-              <TextInput
-                placeholder="Department name"
-                value={newDeptName}
-                onChange={(e) => setNewDeptName(e.currentTarget.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    const trimmed = newDeptName.trim();
-                    if (trimmed) {
-                      onAddDepartment(trimmed);
-                      form.setFieldValue("departments", [...form.values.departments, trimmed]);
-                      closeAddDept();
-                      setNewDeptName("");
-                    }
-                  }
-                }}
-              />
-              <Group justify="flex-end">
-                <Button variant="subtle" onClick={() => { closeAddDept(); setNewDeptName(""); }}>
-                  Cancel
-                </Button>
+          />
+          {impactScope === "organization" ? (
+            <Text c="dimmed" fw={600} fz="sm">
+              This initiative impacts the whole organization.
+            </Text>
+          ) : (
+            <>
+              <Group align="flex-end" gap="xs">
+                <MultiSelect
+                  label="Departments Impacted"
+                  data={departmentOptions}
+                  {...form.getInputProps("departments")}
+                  style={{ flex: 1 }}
+                />
                 <Button
-                  onClick={() => {
-                    const trimmed = newDeptName.trim();
-                    if (trimmed) {
-                      onAddDepartment(trimmed);
-                      form.setFieldValue("departments", [...form.values.departments, trimmed]);
-                      closeAddDept();
-                      setNewDeptName("");
-                    }
-                  }}
-                  disabled={!newDeptName.trim()}
+                  type="button"
+                  variant="light"
+                  leftSection={<IconPlus size={16} />}
+                  onClick={openAddDept}
+                  mb={4}
                 >
-                  Add
+                  Add Dept
                 </Button>
               </Group>
-            </Stack>
-          </Modal>
+              <Modal
+                opened={addDeptOpen}
+                onClose={() => {
+                  closeAddDept();
+                  setNewDeptName("");
+                }}
+                title="Add Department"
+                size="sm"
+              >
+                <Stack gap="md">
+                  <TextInput
+                    placeholder="Department name"
+                    value={newDeptName}
+                    onChange={(e) => setNewDeptName(e.currentTarget.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        const trimmed = newDeptName.trim();
+                        if (trimmed) {
+                          onAddDepartment(trimmed);
+                          form.setFieldValue("departments", [...form.values.departments, trimmed]);
+                          closeAddDept();
+                          setNewDeptName("");
+                        }
+                      }
+                    }}
+                  />
+                  <Group justify="flex-end">
+                    <Button
+                      variant="subtle"
+                      onClick={() => {
+                        closeAddDept();
+                        setNewDeptName("");
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        const trimmed = newDeptName.trim();
+                        if (trimmed) {
+                          onAddDepartment(trimmed);
+                          form.setFieldValue("departments", [...form.values.departments, trimmed]);
+                          closeAddDept();
+                          setNewDeptName("");
+                        }
+                      }}
+                      disabled={!newDeptName.trim()}
+                    >
+                      Add
+                    </Button>
+                  </Group>
+                </Stack>
+              </Modal>
+            </>
+          )}
           <TextInput
             label="Progress (%)"
             type="number"
@@ -675,6 +935,54 @@ function InitiativeModal({
               Add Goal
             </Button>
           </Stack>
+          <Divider label="FAQs (optional)" labelPosition="center" my="sm" />
+          <Stack gap="xs">
+            {(form.values.faqs as InitiativeFaq[]).map((_item: InitiativeFaq, idx: number) => (
+              <Group key={idx} align="flex-start" wrap="nowrap">
+                <TextInput
+                  placeholder="Question"
+                  {...form.getInputProps(`faqs.${idx}.question`)}
+                  style={{ flex: 1, minWidth: 120 }}
+                />
+                <Textarea
+                  placeholder="Answer"
+                  minRows={2}
+                  {...form.getInputProps(`faqs.${idx}.answer`)}
+                  style={{ flex: 2, minWidth: 160 }}
+                />
+                <ActionIcon
+                  color="red"
+                  variant="subtle"
+                  mt={4}
+                  onClick={() => {
+                    const updated = [...(form.values.faqs as InitiativeFaq[])];
+                    updated.splice(idx, 1);
+                    form.setFieldValue(
+                      "faqs",
+                      updated.length ? updated : [{ question: "", answer: "" }],
+                    );
+                  }}
+                  disabled={(form.values.faqs as InitiativeFaq[]).length === 1}
+                >
+                  <IconTrash size={18} />
+                </ActionIcon>
+              </Group>
+            ))}
+            <Button
+              leftSection={<IconPlus size={16} />}
+              variant="light"
+              color={TEAL_BLUE}
+              onClick={() =>
+                form.setFieldValue("faqs", [
+                  ...(form.values.faqs as InitiativeFaq[]),
+                  { question: "", answer: "" },
+                ])
+              }
+              mt={4}
+            >
+              Add FAQ
+            </Button>
+          </Stack>
         </Stack>
         <Group justify="flex-end" mt="lg">
           <Button variant="default" onClick={onClose} mr="sm">
@@ -704,6 +1012,8 @@ interface CreateInitiativeModalProps {
   managers: { name: string; id: string }[];
   orgDepartments: string[];
   onAddDepartment: (name: string) => void | Promise<void>;
+  leadEnrollmentCounts: Record<string, number>;
+  leadEnrollmentInitiativesByLead: Record<string, InitiativeListItem[]>;
 }
 
 function CreateInitiativeModal({
@@ -713,29 +1023,44 @@ function CreateInitiativeModal({
   managers,
   orgDepartments,
   onAddDepartment,
+  leadEnrollmentCounts,
+  leadEnrollmentInitiativesByLead,
 }: CreateInitiativeModalProps) {
   const departmentOptions = orgDepartments;
-  const leadOptions = managers.map((m) => ({ value: m.name, label: m.name }));
+  const leadOptions = managers.map((m) => ({
+    value: m.name,
+    label: `${m.name} (${leadEnrollmentCounts[m.name] ?? 0})`,
+  }));
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [lead, setLead] = useState("");
   const [startDate, setStartDate] = useState<Date | null>(new Date(2024, 9, 12));
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [selectedDepts, setSelectedDepts] = useState<string[]>([]);
+  type ImpactScope = "departments" | "organization";
+  const [impactScope, setImpactScope] = useState<ImpactScope>("departments");
   const [addDeptOpen, { open: openAddDept, close: closeAddDept }] = useDisclosure(false);
   const [newDeptName, setNewDeptName] = useState("");
   const [goals, setGoals] = useState<{ goal: string; metric: string }[]>([
     { goal: "Reduce latency", metric: "<200ms" },
     { goal: "Staff Training", metric: "90% completion" },
   ]);
+  const [faqs, setFaqs] = useState<InitiativeFaq[]>([{ question: "", answer: "" }]);
   type InitialStatus = "Drafting" | "Pending Review" | "Published";
   const [initialStatus, setInitialStatus] = useState<InitialStatus>("Drafting");
 
+  const selectedLeadInitiatives = leadEnrollmentInitiativesByLead[lead] ?? [];
+
   const toggleDept = (dept: string) => {
+    if (impactScope !== "departments") return;
     setSelectedDepts((prev) =>
       prev.includes(dept) ? prev.filter((d) => d !== dept) : [...prev, dept]
     );
   };
+
+  const faqsPayload = faqs
+    .filter((f) => f.question.trim() || f.answer.trim())
+    .map((f) => ({ question: f.question.trim(), answer: f.answer.trim() }));
 
   const breadcrumbs = [
     { title: "Initiatives", href: "#" },
@@ -837,6 +1162,96 @@ function CreateInitiativeModal({
                       value={lead}
                       onChange={(value) => setLead(value || "")}
                     />
+
+                    {selectedLeadInitiatives.length > 0 && (
+                      <Box style={{ border: "1px solid #e9ecef", borderRadius: 8, padding: 10 }}>
+                        <Text fz="xs" c="dimmed" fw={700} mb={6}>
+                          Current enrollments
+                        </Text>
+                        {(() => {
+                          const parsed = selectedLeadInitiatives
+                            .map((ini) => {
+                              const bounds = parseDateRange(ini.dateRange);
+                              if (!bounds) return null;
+                              return {
+                                initiative: ini,
+                                startMs: bounds.start.getTime(),
+                                endMs: bounds.end.getTime(),
+                              };
+                            })
+                            .filter(
+                              (x): x is { initiative: InitiativeListItem; startMs: number; endMs: number } => x != null
+                            );
+
+                          if (parsed.length === 0) {
+                            return (
+                              <Stack gap={4}>
+                                {selectedLeadInitiatives.slice(0, 4).map((ini) => (
+                                  <Text key={ini.id ?? ini._id ?? ini.title} fz={12} c="dimmed">
+                                    {ini.title}: {ini.dateRange}
+                                  </Text>
+                                ))}
+                              </Stack>
+                            );
+                          }
+
+                          const minStart = Math.min(...parsed.map((p) => p.startMs));
+                          const maxEnd = Math.max(...parsed.map((p) => p.endMs));
+                          if (!Number.isFinite(minStart) || !Number.isFinite(maxEnd) || maxEnd <= minStart) {
+                            return (
+                              <Stack gap={4}>
+                                {selectedLeadInitiatives.slice(0, 4).map((ini) => (
+                                  <Text key={ini.id ?? ini._id ?? ini.title} fz={12} c="dimmed">
+                                    {ini.title}: {ini.dateRange}
+                                  </Text>
+                                ))}
+                              </Stack>
+                            );
+                          }
+
+                          return (
+                            <Stack gap={8}>
+                              {parsed
+                                .slice()
+                                .sort((a, b) => a.startMs - b.startMs)
+                                .map((p) => {
+                                  const leftPct = ((p.startMs - minStart) / (maxEnd - minStart)) * 100;
+                                  const widthPct = ((p.endMs - p.startMs) / (maxEnd - minStart)) * 100;
+                                  return (
+                                    <Box key={p.initiative.id ?? p.initiative._id ?? p.initiative.title}>
+                                      <Text fz={11} fw={700} c="dimmed" style={{ marginBottom: 4 }}>
+                                        {p.initiative.title}
+                                      </Text>
+                                      <Box
+                                        style={{
+                                          position: "relative",
+                                          height: 10,
+                                          background: "#f1f3f5",
+                                          borderRadius: 999,
+                                          overflow: "hidden",
+                                        }}
+                                      >
+                                        <Box
+                                          style={{
+                                            position: "absolute",
+                                            left: `${Math.max(0, leftPct)}%`,
+                                            width: `${Math.max(2, widthPct)}%`,
+                                            top: 0,
+                                            bottom: 0,
+                                            background: THEME_BLUE,
+                                            opacity: 0.9,
+                                          }}
+                                          title={p.initiative.dateRange}
+                                        />
+                                      </Box>
+                                    </Box>
+                                  );
+                                })}
+                            </Stack>
+                          );
+                        })()}
+                      </Box>
+                    )}
                   </Stack>
                 </Box>
 
@@ -888,94 +1303,128 @@ function CreateInitiativeModal({
                   <Group gap="xs" mb="md">
                     <IconUsers size={22} color={THEME_BLUE} stroke={2} />
                     <Title order={4} fw={800} fz="lg">
-                      Departments Impacted
+                      Impact Scope
                     </Title>
                   </Group>
                   <Divider mb="xl" color="#e9ecef" />
-                  <Group gap="sm">
-                    {departmentOptions.map((dept) => {
-                      const selected = selectedDepts.includes(dept);
-                      return (
+                  <Select
+                    label="Impacted by this initiative"
+                    data={[
+                      { value: "organization", label: "Whole organization impacted" },
+                      { value: "departments", label: "Department(s) impacted" },
+                    ]}
+                    value={impactScope}
+                    radius="md"
+                    size="md"
+                    onChange={(val) => {
+                      const next = (val as ImpactScope) ?? "departments";
+                      setImpactScope(next);
+                      if (next === "organization") {
+                        setSelectedDepts([]);
+                        closeAddDept();
+                        setNewDeptName("");
+                      }
+                    }}
+                  />
+
+                  {impactScope === "organization" ? (
+                    <Text c="dimmed" fw={600} fz="sm">
+                      This initiative impacts the whole organization.
+                    </Text>
+                  ) : (
+                    <>
+                      <Group gap="sm">
+                        {departmentOptions.map((dept) => {
+                          const selected = selectedDepts.includes(dept);
+                          return (
+                            <Button
+                              key={dept}
+                              variant="outline"
+                              radius="xl"
+                              size="sm"
+                              fw={700}
+                              px="xl"
+                              onClick={() => toggleDept(dept)}
+                              styles={{
+                                root: {
+                                  border: selected ? `2px solid ${THEME_BLUE}` : "1px solid #dee2e6",
+                                  color: selected ? THEME_BLUE : "#495057",
+                                  backgroundColor: selected ? "#f1f3f9" : "white",
+                                },
+                              }}
+                            >
+                              {dept}
+                            </Button>
+                          );
+                        })}
                         <Button
-                          key={dept}
-                          variant="outline"
-                          radius="xl"
+                          type="button"
+                          variant="subtle"
+                          color="blue"
+                          leftSection={<IconPlus size={16} />}
                           size="sm"
                           fw={700}
-                          px="xl"
-                          onClick={() => toggleDept(dept)}
-                          styles={{
-                            root: {
-                              border: selected ? `2px solid ${THEME_BLUE}` : "1px solid #dee2e6",
-                              color: selected ? THEME_BLUE : "#495057",
-                              backgroundColor: selected ? "#f1f3f9" : "white",
-                            },
-                          }}
+                          onClick={openAddDept}
                         >
-                          {dept}
-                        </Button>
-                      );
-                    })}
-                    <Button
-                      type="button"
-                      variant="subtle"
-                      color="blue"
-                      leftSection={<IconPlus size={16} />}
-                      size="sm"
-                      fw={700}
-                      onClick={openAddDept}
-                    >
-                      + Add Dept
-                    </Button>
-                  </Group>
-                  <Modal
-                    opened={addDeptOpen}
-                    onClose={() => {
-                      closeAddDept();
-                      setNewDeptName("");
-                    }}
-                    title="Add Department"
-                    size="sm"
-                  >
-                    <Stack gap="md">
-                      <TextInput
-                        placeholder="Department name"
-                        value={newDeptName}
-                        onChange={(e) => setNewDeptName(e.currentTarget.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            const trimmed = newDeptName.trim();
-                            if (trimmed) {
-                              onAddDepartment(trimmed);
-                              setSelectedDepts((prev) => [...prev, trimmed]);
-                              closeAddDept();
-                              setNewDeptName("");
-                            }
-                          }
-                        }}
-                      />
-                      <Group justify="flex-end">
-                        <Button variant="subtle" onClick={() => { closeAddDept(); setNewDeptName(""); }}>
-                          Cancel
-                        </Button>
-                        <Button
-                          onClick={() => {
-                            const trimmed = newDeptName.trim();
-                            if (trimmed) {
-                              onAddDepartment(trimmed);
-                              setSelectedDepts((prev) => [...prev, trimmed]);
-                              closeAddDept();
-                              setNewDeptName("");
-                            }
-                          }}
-                          disabled={!newDeptName.trim()}
-                        >
-                          Add
+                          + Add Dept
                         </Button>
                       </Group>
-                    </Stack>
-                  </Modal>
+                      <Modal
+                        opened={addDeptOpen}
+                        onClose={() => {
+                          closeAddDept();
+                          setNewDeptName("");
+                        }}
+                        title="Add Department"
+                        size="sm"
+                      >
+                        <Stack gap="md">
+                          <TextInput
+                            placeholder="Department name"
+                            value={newDeptName}
+                            onChange={(e) => setNewDeptName(e.currentTarget.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                const trimmed = newDeptName.trim();
+                                if (trimmed) {
+                                  onAddDepartment(trimmed);
+                                  setSelectedDepts((prev) => [...prev, trimmed]);
+                                  closeAddDept();
+                                  setNewDeptName("");
+                                }
+                              }
+                            }}
+                          />
+                          <Group justify="flex-end">
+                            <Button
+                              variant="subtle"
+                              onClick={() => {
+                                closeAddDept();
+                                setNewDeptName("");
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                const trimmed = newDeptName.trim();
+                                if (trimmed) {
+                                  onAddDepartment(trimmed);
+                                  setSelectedDepts((prev) => [...prev, trimmed]);
+                                  closeAddDept();
+                                  setNewDeptName("");
+                                }
+                              }}
+                              disabled={!newDeptName.trim()}
+                            >
+                              Add
+                            </Button>
+                          </Group>
+                        </Stack>
+                      </Modal>
+                    </>
+                  )}
                 </Box>
 
                 <Box>
@@ -1037,6 +1486,74 @@ function CreateInitiativeModal({
                           <IconTrash size={20} />
                         </ActionIcon>
                       </Group>
+                    ))}
+                  </Stack>
+                </Box>
+
+                <Box>
+                  <Group justify="space-between" mb="md">
+                    <Group gap="xs">
+                      <IconHelp size={22} color={THEME_BLUE} stroke={2} />
+                      <Title order={4} fw={800} fz="lg">
+                        FAQs (optional)
+                      </Title>
+                    </Group>
+                    <Anchor
+                      component="button"
+                      type="button"
+                      size="sm"
+                      fw={700}
+                      c={THEME_BLUE}
+                      onClick={() => setFaqs((f) => [...f, { question: "", answer: "" }])}
+                    >
+                      Add FAQ
+                    </Anchor>
+                  </Group>
+                  <Divider mb="xl" color="#e9ecef" />
+                  <Stack gap="md">
+                    {faqs.map((item, idx) => (
+                      <Card key={idx} withBorder radius="md" p="md" bg="#fafafa">
+                        <Stack gap="sm">
+                          <TextInput
+                            label="Question"
+                            placeholder="e.g., When does training start?"
+                            radius="md"
+                            size="md"
+                            value={item.question}
+                            onChange={(e) => {
+                              const next = [...faqs];
+                              next[idx] = { ...next[idx], question: e.currentTarget.value };
+                              setFaqs(next);
+                            }}
+                          />
+                          <Textarea
+                            label="Answer"
+                            placeholder="Short answer for the Knowledge Hub FAQ tab…"
+                            minRows={2}
+                            radius="md"
+                            size="md"
+                            value={item.answer}
+                            onChange={(e) => {
+                              const next = [...faqs];
+                              next[idx] = { ...next[idx], answer: e.currentTarget.value };
+                              setFaqs(next);
+                            }}
+                          />
+                          <Group justify="flex-end">
+                            <Button
+                              variant="subtle"
+                              color="red"
+                              size="xs"
+                              disabled={faqs.length === 1}
+                              onClick={() =>
+                                setFaqs((f) => (f.length > 1 ? f.filter((_, i) => i !== idx) : f))
+                              }
+                            >
+                              Remove
+                            </Button>
+                          </Group>
+                        </Stack>
+                      </Card>
                     ))}
                   </Stack>
                 </Box>
@@ -1154,20 +1671,32 @@ function CreateInitiativeModal({
                         Impacted
                       </Text>
                       <Group gap={6}>
-                        {selectedDepts.length > 0
-                          ? selectedDepts.map((d) => (
-                              <Badge
-                                key={d}
-                                bg="#e9ecef"
-                                c="#495057"
-                                radius="xs"
-                                fz={9}
-                                fw={800}
-                              >
-                                {DEPT_ABBREV[d] || d.slice(0, 3).toUpperCase()}
-                              </Badge>
-                            ))
-                          : "—"}
+                        {impactScope === "organization" ? (
+                          <Badge
+                            bg="#e9ecef"
+                            c="#495057"
+                            radius="xs"
+                            fz={9}
+                            fw={800}
+                          >
+                            Whole org
+                          </Badge>
+                        ) : selectedDepts.length > 0 ? (
+                          selectedDepts.map((d) => (
+                            <Badge
+                              key={d}
+                              bg="#e9ecef"
+                              c="#495057"
+                              radius="xs"
+                              fz={9}
+                              fw={800}
+                            >
+                              {DEPT_ABBREV[d] || d.slice(0, 3).toUpperCase()}
+                            </Badge>
+                          ))
+                        ) : (
+                          "—"
+                        )}
                       </Group>
                     </Stack>
                   </Stack>
@@ -1266,8 +1795,9 @@ function CreateInitiativeModal({
                     description,
                     leadName: lead,
                     dateRange,
-                    departments: selectedDepts,
+                    departments: impactScope === "organization" ? [] : selectedDepts,
                     goals,
+                    faqs: faqsPayload,
                     progress: 0,
                   });
                   setTitle("");
@@ -1276,7 +1806,9 @@ function CreateInitiativeModal({
                   setStartDate(null);
                   setEndDate(null);
                   setSelectedDepts([]);
+                  setImpactScope("departments");
                   setGoals([{ goal: "", metric: "" }]);
+                  setFaqs([{ question: "", answer: "" }]);
                   setInitialStatus("Drafting");
                   onClose();
                 }}
@@ -1311,8 +1843,9 @@ function CreateInitiativeModal({
                     description,
                     leadName: lead,
                     dateRange,
-                    departments: selectedDepts,
+                    departments: impactScope === "organization" ? [] : selectedDepts,
                     goals,
+                    faqs: faqsPayload,
                     progress: 0,
                   });
                   setTitle("");
@@ -1321,7 +1854,9 @@ function CreateInitiativeModal({
                   setStartDate(null);
                   setEndDate(null);
                   setSelectedDepts([]);
+                  setImpactScope("departments");
                   setGoals([{ goal: "", metric: "" }]);
+                  setFaqs([{ question: "", answer: "" }]);
                   setInitialStatus("Drafting");
                   onClose();
                 }}

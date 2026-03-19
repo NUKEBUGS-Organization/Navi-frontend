@@ -1,5 +1,5 @@
 import { api } from "./client";
-import type { InitiativeSummary, InitiativeGoal } from "@/types";
+import type { InitiativeSummary, InitiativeGoal, InitiativeFaq } from "@/types";
 
 function mapInitiative<T extends { _id?: string; [key: string]: unknown }>(
   raw: T
@@ -27,6 +27,7 @@ export interface CreateInitiativePayload {
   progress?: number;
   readiness?: string;
   goals?: InitiativeGoal[];
+  faqs?: InitiativeFaq[];
 }
 
 export function listInitiatives(): Promise<InitiativeListItem[]> {

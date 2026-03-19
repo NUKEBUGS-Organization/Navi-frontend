@@ -31,7 +31,6 @@ import { useAppRoutes } from "@/hooks/useAppRoutes";
 import {
   IconCheck,
   IconAlertTriangle,
-  IconRefresh,
   IconRoute,
   IconStar,
   IconStarFilled,
@@ -451,16 +450,6 @@ export default function AssessmentResults() {
                   onClick={() => setCreateOpen(true)}
                 >
                   Create Assessment
-                </Button>
-              )}
-              {pendingAssessments.length > 0 && (
-                <Button
-                  variant="light"
-                  color="dark"
-                  leftSection={<IconRefresh size={18} />}
-                  onClick={() => navigate(appRoutes.ASSESSMENTS_FORM)}
-                >
-                  Retake Assessment
                 </Button>
               )}
               <Button

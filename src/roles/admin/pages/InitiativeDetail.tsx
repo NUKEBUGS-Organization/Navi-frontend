@@ -24,6 +24,8 @@ import {
   Paper,
   ThemeIcon,
   MultiSelect,
+  Accordion,
+  ActionIcon,
 } from "@mantine/core";
 
 import { useDisclosure } from "@mantine/hooks";
@@ -38,15 +40,16 @@ import {
   IconClock,
   IconCircle,
   IconUsers,
+  IconTrash,
   IconPlus,
   IconMessageCircle,
   IconTarget,
   IconRocket,
 } from "@tabler/icons-react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { THEME_BLUE, NAVY } from "@/constants";
-import { getInitiative, updateInitiative, type InitiativeListItem } from "@/api/initiatives";
+import { getInitiative, updateInitiative, listInitiatives, type InitiativeListItem } from "@/api/initiatives";
 import { listOrganizationUsers } from "@/api/auth";
 import { getMyOrganization, updateMyOrganization } from "@/api/organizations";
 import { listAssessmentsByInitiative, listSubmissions, type Assessment, type AssessmentSubmission } from "@/api/assessments";
@@ -80,6 +83,7 @@ interface Initiative {
     date: string;
     status: "completed" | "current" | "upcoming";
   }[];
+  faqs: { question: string; answer: string }[];
 }
 
 /** Map audience value to display label and which roles can take the assessment. */
@@ -174,6 +178,10 @@ function mapApiToInitiative(raw: InitiativeListItem): Initiative {
     status: "On Track" as const,
   }));
   const depts = raw.departments ?? [];
+  const faqs = (raw.faqs ?? []).map((f) => ({
+    question: f.question ?? "",
+    answer: f.answer ?? "",
+  }));
   const lead = raw.leadName ?? "";
   const initials = lead
     .split(" ")
@@ -194,7 +202,8 @@ function mapApiToInitiative(raw: InitiativeListItem): Initiative {
     lead,
     departments: depts,
     description: raw.description ?? "",
-    impactedDepts: depts.length ? depts : ["—"],
+    // Empty `departments` means the initiative impacts the whole organization.
+    impactedDepts: depts,
     goals: goals.length ? goals : [{ objective: "", kpi: "", targetDate: "", status: "Planned" as const }],
     progress: raw.progress ?? 0,
     readiness: (raw.readiness as Initiative["readiness"]) ?? "Medium",
@@ -205,6 +214,7 @@ function mapApiToInitiative(raw: InitiativeListItem): Initiative {
     milestones: [
       { label: "UPCOMING", title: "Initiative started", date: "—", status: "upcoming" as const },
     ],
+    faqs,
   };
 }
 
@@ -214,6 +224,7 @@ export default function InitiativeDetail() {
   const { user } = useAuth();
   const appRoutes = useAppRoutes();
   const canEditInitiative = user?.role === "admin" || user?.role === "manager";
+  const [accessDenied, setAccessDenied] = useState(false);
   const [editOpened, { open: openEdit, close: closeEdit }] =
     useDisclosure(false);
   const [initiative, setInitiative] = useState<Initiative | null>(null);
@@ -228,6 +239,7 @@ export default function InitiativeDetail() {
   const [roadmapLoading, setRoadmapLoading] = useState(false);
   const [activityList, setActivityList] = useState<ActivityItem[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
+  const [orgInitiatives, setOrgInitiatives] = useState<InitiativeListItem[]>([]);
 
   const handleAddDepartment = useCallback(
     async (newDept: string) => {
@@ -268,6 +280,59 @@ export default function InitiativeDetail() {
     };
   }, [user?._id, user?.role, user?.name]);
 
+  // Used for RACI-style workload visibility when selecting a "Change Lead".
+  // We count the number of active/non-draft initiatives where a manager/admin is already the lead.
+  useEffect(() => {
+    if (!canEditInitiative) {
+      setOrgInitiatives([]);
+      return;
+    }
+    let cancelled = false;
+    listInitiatives()
+      .then((list) => {
+        if (cancelled) return;
+        setOrgInitiatives(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setOrgInitiatives([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canEditInitiative]);
+
+  const leadEnrollmentCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const isDraft = (status?: string) => {
+      const s = (status ?? "").toLowerCase();
+      return s === "draft" || s.includes("draft");
+    };
+    for (const ini of orgInitiatives) {
+      const lead = ini.leadName;
+      if (!lead) continue;
+      if (isDraft(ini.status)) continue;
+      counts[lead] = (counts[lead] ?? 0) + 1;
+    }
+    return counts;
+  }, [orgInitiatives]);
+
+  const leadEnrollmentInitiativesByLead = useMemo(() => {
+    const out: Record<string, InitiativeListItem[]> = {};
+    const isDraft = (status?: string) => {
+      const s = (status ?? "").toLowerCase();
+      return s === "draft" || s.includes("draft");
+    };
+    for (const ini of orgInitiatives) {
+      const lead = ini.leadName;
+      if (!lead) continue;
+      if (isDraft(ini.status)) continue;
+      if (!out[lead]) out[lead] = [];
+      out[lead].push(ini);
+    }
+    return out;
+  }, [orgInitiatives]);
+
   useEffect(() => {
     if (!id) {
       setLoading(false);
@@ -276,10 +341,27 @@ export default function InitiativeDetail() {
     let cancelled = false;
     getInitiative(id)
       .then((data) => {
-        if (!cancelled) setInitiative(mapApiToInitiative(data));
+        if (cancelled) return;
+        const mapped = mapApiToInitiative(data);
+        if (user?.role === "manager") {
+          const myDepts = new Set((user.departments ?? []).map((d) => String(d).toLowerCase()));
+          const leadMatch = String(mapped.lead ?? "").toLowerCase() === String(user?.name ?? "").toLowerCase();
+          const deptMatch =
+            (mapped.departments ?? []).length === 0 ||
+            (mapped.departments ?? []).some((d) => myDepts.has(String(d).toLowerCase()));
+          if (!leadMatch && !deptMatch) {
+            setAccessDenied(true);
+            setInitiative(null);
+            return;
+          }
+        }
+        setAccessDenied(false);
+        setInitiative(mapped);
       })
       .catch(() => {
-        if (!cancelled) setInitiative(null);
+        if (cancelled) return;
+        setAccessDenied(false);
+        setInitiative(null);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -374,7 +456,9 @@ export default function InitiativeDetail() {
   if (!initiative) {
     return (
       <AdminLayout>
-        <Text c="dimmed" mb="md">Initiative not found.</Text>
+        <Text c="dimmed" mb="md">
+          {accessDenied ? "You do not have access to this initiative." : "Initiative not found."}
+        </Text>
         <Button variant="light" onClick={() => navigate(appRoutes.INITIATIVES)}>
           Back to Initiatives
         </Button>
@@ -507,7 +591,7 @@ export default function InitiativeDetail() {
         </Group>
         <Group gap={6}>
           <Text fz="sm" fw={500} c="dimmed">
-            🏢 {initiative.departments.join(", ")}
+            🏢 {initiative.departments.length ? initiative.departments.join(", ") : "Whole organization"}
           </Text>
         </Group>
       </Group>
@@ -544,19 +628,56 @@ export default function InitiativeDetail() {
                   Impacted Departments
                 </Title>
                 <Group gap="sm">
-                  {initiative.impactedDepts.map((d) => (
+                  {initiative.departments.length === 0 ? (
                     <Badge
-                      key={d}
                       variant="light"
                       color="gray"
                       radius="xl"
                       size="lg"
                       fw={600}
                     >
-                      {d}
+                      Whole organization
                     </Badge>
-                  ))}
+                  ) : (
+                    initiative.impactedDepts.map((d) => (
+                      <Badge
+                        key={d}
+                        variant="light"
+                        color="gray"
+                        radius="xl"
+                        size="lg"
+                        fw={600}
+                      >
+                        {d}
+                      </Badge>
+                    ))
+                  )}
                 </Group>
+              </Paper>
+              <Paper withBorder p="xl" mb="md">
+                <Title order={4} fw={800} mb="sm" c={NAVY}>
+                  FAQs
+                </Title>
+                {initiative.faqs.length === 0 ? (
+                  <Text fz="sm" c="dimmed">
+                    No FAQs yet. Add them when editing the initiative or in Change Initiatives.
+                  </Text>
+                ) : (
+                  <Accordion variant="separated" radius="md">
+                    {initiative.faqs.map((f, idx) => (
+                      <Accordion.Item key={`${idx}-${f.question}`} value={`faq-${idx}`}>
+                        <Accordion.Control>
+                          <Text fw={700}>{f.question || `Question ${idx + 1}`}</Text>
+                        </Accordion.Control>
+                        <Accordion.Panel>
+                          <Text fz="sm" style={{ whiteSpace: "pre-wrap" }}>
+                            {f.answer}
+                          </Text>
+                        </Accordion.Panel>
+                      </Accordion.Item>
+                    ))}
+                  </Accordion>
+                )}
               </Paper>
               <Paper withBorder p="xl" mb="md">
                 <Title order={4} fw={800} mb="md" c={NAVY}>
@@ -997,7 +1118,9 @@ export default function InitiativeDetail() {
               Recent activity
             </Title>
             <Text fz="sm" c="dimmed" mb="lg">
-              Tasks, comments, and adoption milestones for this initiative. Visible to everyone in your organization.
+              {user?.role === "employee"
+                ? "Your tasks, comments, and adoption milestones for this initiative."
+                : "Tasks, comments, and adoption milestones for this initiative. Visible to everyone in your organization."}
             </Text>
             {activityLoading ? (
               <Text c="dimmed" size="sm">Loading activity…</Text>
@@ -1099,6 +1222,8 @@ export default function InitiativeDetail() {
         orgDepartments={orgDepartments}
         onAddDepartment={handleAddDepartment}
         currentUserRole={user?.role}
+        leadEnrollmentCounts={leadEnrollmentCounts}
+        leadEnrollmentInitiativesByLead={leadEnrollmentInitiativesByLead}
         onSave={(updated) => {
           const statusToApi = (s: string) =>
             s === "Active" ? "ACTIVE" : s === "Draft" ? "DRAFT" : s === "Planning" ? "PLANNING" : "DRAFT";
@@ -1112,6 +1237,9 @@ export default function InitiativeDetail() {
             progress: updated.progress,
             readiness: updated.readiness,
             goals: updated.goals.map((g) => ({ goal: g.objective, metric: g.kpi })),
+            faqs: updated.faqs
+              .filter((f) => f.question.trim() || f.answer.trim())
+              .map((f) => ({ question: f.question.trim(), answer: f.answer.trim() })),
           })
             .then((data) => setInitiative(mapApiToInitiative(data)))
             .catch(() => {})
@@ -1131,6 +1259,8 @@ function EditInitiativeModal({
   orgDepartments,
   onAddDepartment,
   currentUserRole,
+  leadEnrollmentCounts,
+  leadEnrollmentInitiativesByLead,
 }: {
   opened: boolean;
   onClose: () => void;
@@ -1140,6 +1270,8 @@ function EditInitiativeModal({
   orgDepartments: string[];
   onAddDepartment: (name: string) => void | Promise<void>;
   currentUserRole?: string;
+  leadEnrollmentCounts: Record<string, number>;
+  leadEnrollmentInitiativesByLead: Record<string, InitiativeListItem[]>;
 }) {
   const statusOptions = currentUserRole === "admin"
     ? ["In Progress", "Active", "Draft", "Planning"]
@@ -1147,7 +1279,10 @@ function EditInitiativeModal({
   const [addDeptOpen, { open: openAddDept, close: closeAddDept }] = useDisclosure(false);
   const [newDeptName, setNewDeptName] = useState("");
   const departmentOptions = orgDepartments;
-  const leadOptions = managers.map((m) => ({ value: m.name, label: m.name }));
+  const leadOptions = managers.map((m) => ({
+    value: m.name,
+    label: `${m.name} (${leadEnrollmentCounts[m.name] ?? 0})`,
+  }));
   const [title, setTitle] = useState(initiative.title);
   const [description, setDescription] = useState(initiative.description);
   const [lead, setLead] = useState(initiative.lead);
@@ -1160,6 +1295,11 @@ function EditInitiativeModal({
     initiative.departments?.length ? initiative.departments : initiative.impactedDepts ?? [],
   );
   const [goals, setGoals] = useState(initiative.goals.map((g) => ({ ...g })));
+  const [faqs, setFaqs] = useState(
+    initiative.faqs?.length
+      ? initiative.faqs.map((f) => ({ ...f }))
+      : [{ question: "", answer: "" }],
+  );
 
   useEffect(() => {
     setTitle(initiative.title);
@@ -1172,6 +1312,11 @@ function EditInitiativeModal({
     setRiskLevel(initiative.riskLevel);
     setDepartments(initiative.departments?.length ? initiative.departments : initiative.impactedDepts ?? []);
     setGoals(initiative.goals.map((g) => ({ ...g })));
+    setFaqs(
+      initiative.faqs?.length
+        ? initiative.faqs.map((f) => ({ ...f }))
+        : [{ question: "", answer: "" }],
+    );
   }, [initiative]);
 
   const handleGoalChange = (
@@ -1198,8 +1343,92 @@ function EditInitiativeModal({
       departments,
       impactedDepts: departments,
       goals,
+      faqs,
     });
   };
+
+  const selectedLeadInitiatives = leadEnrollmentInitiativesByLead[lead] ?? [];
+
+  function parseDateRange(range: string): { start: Date; end: Date } | null {
+    const r = (range ?? "").replace(/\s+/g, " ").trim();
+    if (!r || r.toLowerCase() === "—") return null;
+
+    const quarterMatch = r.match(/^Q([1-4])\s*(\d{4})\s*(?:-|–)\s*Q([1-4])\s*(\d{4})$/i);
+    if (quarterMatch) {
+      const q1 = Number(quarterMatch[1]);
+      const y1 = Number(quarterMatch[2]);
+      const q2 = Number(quarterMatch[3]);
+      const y2 = Number(quarterMatch[4]);
+      const startMonth = (q1 - 1) * 3;
+      const endMonth = q2 * 3 - 1;
+      return {
+        start: new Date(y1, startMonth, 1),
+        end: new Date(y2, endMonth + 1, 0),
+      };
+    }
+
+    // Example: "Mar 1 – Sep 30, 2025"
+    const monthMap: Record<string, number> = {
+      jan: 0,
+      january: 0,
+      feb: 1,
+      february: 1,
+      mar: 2,
+      march: 2,
+      apr: 3,
+      april: 3,
+      may: 4,
+      jun: 5,
+      june: 5,
+      jul: 6,
+      july: 6,
+      aug: 7,
+      august: 7,
+      sep: 8,
+      sept: 8,
+      september: 8,
+      oct: 9,
+      october: 9,
+      nov: 10,
+      november: 10,
+      dec: 11,
+      december: 11,
+    };
+
+    const mMatch = r.match(
+      /^([A-Za-z]{3,9})\s+(\d{1,2})(?:,\s*(\d{4}))?\s*(?:-|–)\s*([A-Za-z]{3,9})\s+(\d{1,2}),\s*(\d{4})$/
+    );
+    if (!mMatch) return null;
+
+    const m1 = monthMap[String(mMatch[1]).toLowerCase()] ?? null;
+    const d1 = Number(mMatch[2]);
+    const yEnd = Number(mMatch[6]);
+    const m2 = monthMap[String(mMatch[4]).toLowerCase()] ?? null;
+    const d2 = Number(mMatch[5]);
+    if (m1 == null || m2 == null) return null;
+
+    const y1 = mMatch[3] ? Number(mMatch[3]) : yEnd;
+    return {
+      start: new Date(y1, m1, d1),
+      end: new Date(yEnd, m2, d2),
+    };
+  }
+
+  const ganttScale = (() => {
+    const parsed = selectedLeadInitiatives
+      .map((ini) => {
+        const bounds = parseDateRange(ini.dateRange);
+        if (!bounds) return null;
+        return { initiative: ini, startMs: bounds.start.getTime(), endMs: bounds.end.getTime() };
+      })
+      .filter((x): x is { initiative: InitiativeListItem; startMs: number; endMs: number } => x != null);
+
+    if (parsed.length === 0) return null;
+    const minStart = Math.min(...parsed.map((p) => p.startMs));
+    const maxEnd = Math.max(...parsed.map((p) => p.endMs));
+    if (!Number.isFinite(minStart) || !Number.isFinite(maxEnd) || maxEnd <= minStart) return null;
+    return { parsed, minStart, maxEnd };
+  })();
 
   return (
     <Modal
@@ -1258,6 +1487,69 @@ function EditInitiativeModal({
               radius="md"
               size="md"
             />
+
+            {selectedLeadInitiatives.length > 0 && (
+              <Stack gap={6} mt="xs">
+                <Text fz="xs" c="dimmed" fw={700}>
+                  Current enrollments
+                </Text>
+                {ganttScale ? (
+                  <Box style={{ border: "1px solid #e9ecef", borderRadius: 8, padding: 10 }}>
+                    <Stack gap={8}>
+                      {ganttScale.parsed
+                        .slice()
+                        .sort((a, b) => a.startMs - b.startMs)
+                        .map((p) => {
+                          const leftPct = ((p.startMs - ganttScale.minStart) / (ganttScale.maxEnd - ganttScale.minStart)) * 100;
+                          const widthPct = ((p.endMs - p.startMs) / (ganttScale.maxEnd - ganttScale.minStart)) * 100;
+                          return (
+                            <Box key={p.initiative.id ?? p.initiative._id ?? p.initiative.title}>
+                              <Text fz={11} fw={700} c="dimmed" style={{ marginBottom: 4 }}>
+                                {p.initiative.title}
+                              </Text>
+                              <Box
+                                style={{
+                                  position: "relative",
+                                  height: 10,
+                                  background: "#f1f3f5",
+                                  borderRadius: 999,
+                                  overflow: "hidden",
+                                }}
+                              >
+                                <Box
+                                  style={{
+                                    position: "absolute",
+                                    left: `${Math.max(0, leftPct)}%`,
+                                    width: `${Math.max(2, widthPct)}%`,
+                                    top: 0,
+                                    bottom: 0,
+                                    background: THEME_BLUE,
+                                    opacity: 0.9,
+                                  }}
+                                  title={p.initiative.dateRange}
+                                />
+                              </Box>
+                            </Box>
+                          );
+                        })}
+                    </Stack>
+                  </Box>
+                ) : (
+                  <Stack gap={4}>
+                    {selectedLeadInitiatives.slice(0, 4).map((ini) => (
+                      <Text key={ini.id ?? ini._id ?? ini.title} fz={12} c="dimmed">
+                        {ini.title}: {ini.dateRange}
+                      </Text>
+                    ))}
+                    {selectedLeadInitiatives.length > 4 && (
+                      <Text fz={12} c="dimmed">
+                        +{selectedLeadInitiatives.length - 4} more
+                      </Text>
+                    )}
+                  </Stack>
+                )}
+              </Stack>
+            )}
           </Grid.Col>
           <Grid.Col span={6}>
             <Select
@@ -1422,6 +1714,75 @@ function EditInitiativeModal({
             </Group>
           </Stack>
         </Modal>
+
+        <Divider label="FAQs (Knowledge Hub)" labelPosition="center" />
+        <Stack gap="sm" mb="md">
+          {faqs.map((f, idx) => (
+            <Card key={idx} withBorder radius="md" p="md" bg="#f8f9fa">
+              <Grid gutter="sm">
+                <Grid.Col span={12}>
+                  <TextInput
+                    label={
+                      <Text fw={600} fz="xs">
+                        Question
+                      </Text>
+                    }
+                    value={f.question}
+                    onChange={(e) => {
+                      const next = [...faqs];
+                      next[idx] = { ...next[idx], question: e.currentTarget.value };
+                      setFaqs(next);
+                    }}
+                    radius="md"
+                    size="sm"
+                  />
+                </Grid.Col>
+                <Grid.Col span={12}>
+                  <Textarea
+                    label={
+                      <Text fw={600} fz="xs">
+                        Answer
+                      </Text>
+                    }
+                    minRows={2}
+                    value={f.answer}
+                    onChange={(e) => {
+                      const next = [...faqs];
+                      next[idx] = { ...next[idx], answer: e.currentTarget.value };
+                      setFaqs(next);
+                    }}
+                    radius="md"
+                    size="sm"
+                  />
+                </Grid.Col>
+                <Grid.Col span={12}>
+                  <Group justify="flex-end">
+                    <ActionIcon
+                      color="red"
+                      variant="subtle"
+                      onClick={() =>
+                        setFaqs((prev) =>
+                          prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev
+                        )
+                      }
+                      disabled={faqs.length === 1}
+                    >
+                      <IconTrash size={18} />
+                    </ActionIcon>
+                  </Group>
+                </Grid.Col>
+              </Grid>
+            </Card>
+          ))}
+          <Button
+            variant="light"
+            size="xs"
+            leftSection={<IconPlus size={14} />}
+            onClick={() => setFaqs((prev) => [...prev, { question: "", answer: "" }])}
+          >
+            Add FAQ
+          </Button>
+        </Stack>
 
         <Divider label="Goals & Success Measures" labelPosition="center" />
 

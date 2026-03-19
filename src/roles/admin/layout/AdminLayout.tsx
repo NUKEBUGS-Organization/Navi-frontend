@@ -13,7 +13,7 @@ import {
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { useNavigate, useLocation } from "react-router-dom";
-import { IconLayoutDashboard, IconTarget, IconCheckbox, IconRoute, IconHierarchy, IconSettings, IconLogout, IconUsers, IconMessage, IconChartLine, IconAlertTriangle } from "@tabler/icons-react";
+import { IconLayoutDashboard, IconTarget, IconCheckbox, IconRoute, IconHierarchy, IconSettings, IconLogout, IconUsers, IconMessage, IconChartLine, IconAlertTriangle, IconStar, IconBooks } from "@tabler/icons-react";
 import type { IconProps } from "@tabler/icons-react";
 import { COLORS, ROUTES } from "@/constants";
 import naviLogo from "@/assets/navi-logo.jpeg";
@@ -47,7 +47,9 @@ export default function AdminLayout({
     { icon: IconUsers, label: "Stakeholder Mapping", path: appRoutes.STAKEHOLDERS, roles: ["admin", "manager"] },
     { icon: IconMessage, label: "Communication Planning", path: appRoutes.COMMUNICATIONS, roles: ["admin", "manager"] },
     { icon: IconChartLine, label: "Adoption Tracking", path: appRoutes.ADOPTION, roles: ["admin", "manager"] },
-    { icon: IconAlertTriangle, label: "Risk Monitoring", path: appRoutes.RISKS, roles: ["admin", "manager", "employee"] },
+    { icon: IconAlertTriangle, label: "Risk Monitoring", path: appRoutes.RISKS, roles: ["admin", "manager"] },
+    { icon: IconStar, label: "Kudos", path: appRoutes.KUDOS },
+    { icon: IconBooks, label: "Knowledge Hub", path: appRoutes.KNOWLEDGE_HUB },
     { icon: IconHierarchy, label: "Organization", path: appRoutes.ORGANIZATION, roles: ["admin"] },
     { icon: IconSettings, label: "Settings", path: appRoutes.SETTINGS },
   ];
