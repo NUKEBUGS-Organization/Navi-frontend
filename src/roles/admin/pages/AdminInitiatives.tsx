@@ -275,6 +275,11 @@ export default function AdminInitiatives() {
         goals: data.goals,
         faqs: data.faqs,
         readiness: data.readiness,
+        changeType: data.changeType,
+        raciAccountableIds: data.raciAccountableIds ?? [],
+        raciResponsibleIds: data.raciResponsibleIds ?? [],
+        raciConsultedIds: data.raciConsultedIds ?? [],
+        raciInformedIds: data.raciInformedIds ?? [],
       });
       await fetchInitiatives();
       setEditIndex(null);
@@ -301,6 +306,11 @@ export default function AdminInitiatives() {
         goals: data.goals ?? [],
         faqs: data.faqs ?? [],
         readiness: data.readiness,
+        changeType: data.changeType,
+        raciAccountableIds: data.raciAccountableIds ?? [],
+        raciResponsibleIds: data.raciResponsibleIds ?? [],
+        raciConsultedIds: data.raciConsultedIds ?? [],
+        raciInformedIds: data.raciInformedIds ?? [],
       };
       await createInitiative(payload);
       await fetchInitiatives();
@@ -651,6 +661,11 @@ function InitiativeModal({
               answer: f.answer ?? "",
             }))
           : [{ question: "", answer: "" }],
+      changeType: (initial as InitiativeSummary | null)?.changeType ?? "Other",
+      raciAccountableIds: (initial as InitiativeSummary | null)?.raciAccountableIds ?? [],
+      raciResponsibleIds: (initial as InitiativeSummary | null)?.raciResponsibleIds ?? [],
+      raciConsultedIds: (initial as InitiativeSummary | null)?.raciConsultedIds ?? [],
+      raciInformedIds: (initial as InitiativeSummary | null)?.raciInformedIds ?? [],
     },
     validate: {
       title: (v) => (!v ? "Title required" : null),
@@ -1031,9 +1046,37 @@ function CreateInitiativeModal({
     value: m.name,
     label: `${m.name} (${leadEnrollmentCounts[m.name] ?? 0})`,
   }));
+  const collaboratorOptions = managers.map((m) => ({
+    value: m.id,
+    label: m.name,
+  }));
+
+  type ChangeType =
+    | "Tech/Digital"
+    | "ERP system change"
+    | "Cultural transformation"
+    | "Department restructuring"
+    | "Full company restructuring"
+    | "Merger/acquisition"
+    | "Other";
+  const CHANGE_TYPES: ChangeType[] = [
+    "Tech/Digital",
+    "ERP system change",
+    "Cultural transformation",
+    "Department restructuring",
+    "Full company restructuring",
+    "Merger/acquisition",
+    "Other",
+  ];
+
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [lead, setLead] = useState("");
+  const [changeType, setChangeType] = useState<ChangeType>("Other");
+  const [raciAccountableId, setRaciAccountableId] = useState<string>("");
+  const [raciResponsibleIds, setRaciResponsibleIds] = useState<string[]>([]);
+  const [raciConsultedIds, setRaciConsultedIds] = useState<string[]>([]);
+  const [raciInformedIds, setRaciInformedIds] = useState<string[]>([]);
   const [startDate, setStartDate] = useState<Date | null>(new Date(2024, 9, 12));
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [selectedDepts, setSelectedDepts] = useState<string[]>([]);
@@ -1061,6 +1104,16 @@ function CreateInitiativeModal({
   const faqsPayload = faqs
     .filter((f) => f.question.trim() || f.answer.trim())
     .map((f) => ({ question: f.question.trim(), answer: f.answer.trim() }));
+
+  const nonAccountableUniqueCount = new Set(
+    [
+      ...raciResponsibleIds,
+      ...raciConsultedIds,
+      ...raciInformedIds,
+    ].filter((id) => id && id !== raciAccountableId),
+  ).size;
+  const raciOverLimit = nonAccountableUniqueCount > 10;
+  const raciAccountableMissing = !raciAccountableId;
 
   const breadcrumbs = [
     { title: "Initiatives", href: "#" },
@@ -1428,6 +1481,81 @@ function CreateInitiativeModal({
                 </Box>
 
                 <Box>
+                  <Group gap="xs" mb="md">
+                    <IconUsers size={22} color={THEME_BLUE} stroke={2} />
+                    <Title order={4} fw={800} fz="lg">
+                      Change Type & RACI
+                    </Title>
+                  </Group>
+                  <Divider mb="xl" color="#e9ecef" />
+                  <Stack gap="md">
+                    <Select
+                      label="Type of change"
+                      data={CHANGE_TYPES.map((t) => ({ value: t, label: t }))}
+                      value={changeType}
+                      onChange={(v) => setChangeType((v as ChangeType) ?? "Other")}
+                      radius="md"
+                      size="md"
+                    />
+
+                    <Select
+                      label="Accountable (1)"
+                      placeholder="Select an internal collaborator..."
+                      data={collaboratorOptions}
+                      clearable
+                      value={raciAccountableId || null}
+                      onChange={(v) => {
+                        const next = v ?? "";
+                        setRaciAccountableId(next);
+                        // Prevent the same person from appearing in non-accountable buckets.
+                        setRaciResponsibleIds((prev) => prev.filter((id) => id !== next));
+                        setRaciConsultedIds((prev) => prev.filter((id) => id !== next));
+                        setRaciInformedIds((prev) => prev.filter((id) => id !== next));
+                      }}
+                      radius="md"
+                      size="md"
+                    />
+
+                    <MultiSelect
+                      label="Responsible (max total 10)"
+                      placeholder="Select up to 10 total across Responsible/Consulted/Informed..."
+                      data={collaboratorOptions}
+                      value={raciResponsibleIds}
+                      onChange={(v) => setRaciResponsibleIds(v.filter((id) => id !== raciAccountableId))}
+                      radius="md"
+                      searchable
+                      clearable
+                    />
+
+                    <MultiSelect
+                      label="Consulted"
+                      placeholder="Select internal collaborators..."
+                      data={collaboratorOptions}
+                      value={raciConsultedIds}
+                      onChange={(v) => setRaciConsultedIds(v.filter((id) => id !== raciAccountableId))}
+                      radius="md"
+                      searchable
+                      clearable
+                    />
+
+                    <MultiSelect
+                      label="Informed"
+                      placeholder="Select internal collaborators..."
+                      data={collaboratorOptions}
+                      value={raciInformedIds}
+                      onChange={(v) => setRaciInformedIds(v.filter((id) => id !== raciAccountableId))}
+                      radius="md"
+                      searchable
+                      clearable
+                    />
+
+                    <Text size="xs" c={raciOverLimit ? "red" : "dimmed"}>
+                      Non-accountable total (Responsible + Consulted + Informed): {nonAccountableUniqueCount}/10
+                    </Text>
+                  </Stack>
+                </Box>
+
+                <Box>
                   <Group justify="space-between" mb="md">
                     <Group gap="xs">
                       <IconTarget size={22} color={THEME_BLUE} stroke={2} />
@@ -1781,6 +1909,7 @@ function CreateInitiativeModal({
                 fw={700}
                 px={30}
                 h={45}
+                disabled={!title || !lead || raciOverLimit || raciAccountableMissing}
                 onClick={() => {
                   const dateRange =
                     startDate && endDate
@@ -1794,6 +1923,11 @@ function CreateInitiativeModal({
                     title: title || "Untitled Initiative",
                     description,
                     leadName: lead,
+                    changeType,
+                    raciAccountableIds: raciAccountableId ? [raciAccountableId] : [],
+                    raciResponsibleIds: raciResponsibleIds,
+                    raciConsultedIds: raciConsultedIds,
+                    raciInformedIds: raciInformedIds,
                     dateRange,
                     departments: impactScope === "organization" ? [] : selectedDepts,
                     goals,
@@ -1809,6 +1943,11 @@ function CreateInitiativeModal({
                   setImpactScope("departments");
                   setGoals([{ goal: "", metric: "" }]);
                   setFaqs([{ question: "", answer: "" }]);
+                  setChangeType("Other");
+                  setRaciAccountableId("");
+                  setRaciResponsibleIds([]);
+                  setRaciConsultedIds([]);
+                  setRaciInformedIds([]);
                   setInitialStatus("Drafting");
                   onClose();
                 }}
@@ -1823,8 +1962,9 @@ function CreateInitiativeModal({
                 px={30}
                 h={45}
                 c="white"
+                disabled={!title || !lead || !raciAccountableId || raciOverLimit}
                 onClick={() => {
-                  if (!title || !lead) return;
+                  if (!title || !lead || !raciAccountableId || raciOverLimit) return;
                   const dateRange =
                     startDate && endDate
                       ? `${startDate.toLocaleDateString()} – ${endDate.toLocaleDateString()}`
@@ -1842,6 +1982,11 @@ function CreateInitiativeModal({
                     title,
                     description,
                     leadName: lead,
+                    changeType,
+                    raciAccountableIds: raciAccountableId ? [raciAccountableId] : [],
+                    raciResponsibleIds: raciResponsibleIds,
+                    raciConsultedIds: raciConsultedIds,
+                    raciInformedIds: raciInformedIds,
                     dateRange,
                     departments: impactScope === "organization" ? [] : selectedDepts,
                     goals,
@@ -1857,6 +2002,11 @@ function CreateInitiativeModal({
                   setImpactScope("departments");
                   setGoals([{ goal: "", metric: "" }]);
                   setFaqs([{ question: "", answer: "" }]);
+                  setChangeType("Other");
+                  setRaciAccountableId("");
+                  setRaciResponsibleIds([]);
+                  setRaciConsultedIds([]);
+                  setRaciInformedIds([]);
                   setInitialStatus("Drafting");
                   onClose();
                 }}

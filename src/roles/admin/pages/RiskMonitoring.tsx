@@ -51,9 +51,10 @@ const STATUS_OPTIONS = [
 ];
 
 function severityColor(s: string): string {
-  if (s === "Critical") return "red";
-  if (s === "High") return "orange";
-  if (s === "Medium") return "yellow";
+  // Risk Monitoring cards use red/amber/green.
+  if (s === "Critical" || s === "High") return "red";
+  if (s === "Medium") return "orange";
+  if (s === "Low") return "green";
   return "gray";
 }
 
@@ -263,27 +264,39 @@ export default function RiskMonitoring() {
 
         {summary && (
           <Grid mb="lg" gutter="md">
-            <Grid.Col span={{ base: 12, xs: 4 }}>
-              <Card withBorder radius="md" p="md">
+            <Grid.Col span={{ base: 12, xs: 3 }} style={{ display: "flex" }}>
+              <Card withBorder radius="md" p="md" style={{ flex: 1, height: "100%" }}>
                 <Group gap="xs" mb={4}>
-                  <IconAlertTriangle size={20} color="orange" />
-                  <Text fw={700} size="sm" c="dimmed">High severity</Text>
+                  <IconAlertTriangle size={20} color="red" />
+                  <Text fw={700} size="sm" c="dimmed">High</Text>
                 </Group>
                 <Text fw={800} fz={24}>{summary.high}</Text>
               </Card>
             </Grid.Col>
-            <Grid.Col span={{ base: 12, xs: 4 }}>
-              <Card withBorder radius="md" p="md">
+            <Grid.Col span={{ base: 12, xs: 3 }} style={{ display: "flex" }}>
+              <Card withBorder radius="md" p="md" style={{ flex: 1, height: "100%" }}>
                 <Group gap="xs" mb={4}>
-                  <IconAlertTriangle size={20} color="red" />
-                  <Text fw={700} size="sm" c="dimmed">Critical</Text>
+                  <IconAlertTriangle size={20} color="#f59f00" />
+                  <Text fw={700} size="sm" c="dimmed">Medium</Text>
                 </Group>
-                <Text fw={800} fz={24}>{summary.critical}</Text>
+                <Text fw={800} fz={24}>{summary.medium}</Text>
               </Card>
             </Grid.Col>
-            <Grid.Col span={{ base: 12, xs: 4 }}>
-              <Card withBorder radius="md" p="md">
-                <Text fw={700} size="sm" c="dimmed" mb={4}>Open / Mitigating</Text>
+            <Grid.Col span={{ base: 12, xs: 3 }} style={{ display: "flex" }}>
+              <Card withBorder radius="md" p="md" style={{ flex: 1, height: "100%" }}>
+                <Group gap="xs" mb={4}>
+                  <IconAlertTriangle size={20} color="green" />
+                  <Text fw={700} size="sm" c="dimmed">Low</Text>
+                </Group>
+                <Text fw={800} fz={24}>{summary.low}</Text>
+              </Card>
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, xs: 3 }} style={{ display: "flex" }}>
+              <Card withBorder radius="md" p="md" style={{ flex: 1, height: "100%" }}>
+                <Group gap="xs" mb={4}>
+                  <IconAlertTriangle size={20} color="#868e96" />
+                  <Text fw={700} size="sm" c="dimmed">Being resolved</Text>
+                </Group>
                 <Text fw={800} fz={24}>{summary.open}</Text>
               </Card>
             </Grid.Col>
