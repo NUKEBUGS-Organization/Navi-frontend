@@ -63,6 +63,49 @@ import { useAppRoutes } from "@/hooks/useAppRoutes";
 
 const PHASES: TaskPhase[] = ["Discovery", "Awareness", "Alignment", "Implementation", "Adoption", "Reinforcement"];
 
+type InitiativeRoadmapOption = {
+  id: string;
+  title: string;
+  status?: string;
+  changeType?: string;
+  raciAccountableIds?: unknown[];
+  raciResponsibleIds?: unknown[];
+  raciConsultedIds?: unknown[];
+  raciInformedIds?: unknown[];
+};
+
+function normalizeIds(raw?: unknown[]): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((x) => String(x)).filter(Boolean);
+}
+
+function getRaciRoleForUser(option: InitiativeRoadmapOption | undefined, userId: string): "Accountable" | "Responsible" | "Consulted" | "Informed" | null {
+  if (!option || !userId) return null;
+
+  const accountable = normalizeIds(option.raciAccountableIds);
+  if (accountable.includes(userId)) return "Accountable";
+
+  const responsible = normalizeIds(option.raciResponsibleIds);
+  if (responsible.includes(userId)) return "Responsible";
+
+  const consulted = normalizeIds(option.raciConsultedIds);
+  if (consulted.includes(userId)) return "Consulted";
+
+  const informed = normalizeIds(option.raciInformedIds);
+  if (informed.includes(userId)) return "Informed";
+
+  return null;
+}
+
+function hasAnyRaciConfigured(option: InitiativeRoadmapOption | undefined): boolean {
+  if (!option) return false;
+  const a = normalizeIds(option.raciAccountableIds as unknown as unknown[]);
+  const r = normalizeIds(option.raciResponsibleIds as unknown as unknown[]);
+  const c = normalizeIds(option.raciConsultedIds as unknown as unknown[]);
+  const i = normalizeIds(option.raciInformedIds as unknown as unknown[]);
+  return a.length > 0 || r.length > 0 || c.length > 0 || i.length > 0;
+}
+
 function formatTaskDate(d: string | undefined): string {
   if (!d) return "—";
   const date = new Date(d);
@@ -82,7 +125,7 @@ export default function AdminRoadmap() {
   const [opened, { open, close }] = useDisclosure(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [initiatives, setInitiatives] = useState<{ id: string; title: string; status?: string }[]>([]);
+  const [initiatives, setInitiatives] = useState<InitiativeRoadmapOption[]>([]);
   const [selectedInitiativeId, setSelectedInitiativeId] = useState<string | null>(null);
   const [tasksRaw, setTasksRaw] = useState<TaskDto[]>([]);
   const [users, setUsers] = useState<{ _id: string; name: string; departments?: string[] }[]>([]);
@@ -92,17 +135,48 @@ export default function AdminRoadmap() {
   useEffect(() => {
     listInitiatives()
       .then((list) => {
-        setInitiatives(list.map((i) => ({ id: i.id, title: i.title, status: (i as { status?: string }).status })));
+        const normalized: InitiativeRoadmapOption[] = list.map((i) => ({
+          id: i.id,
+          title: i.title,
+          status: (i as { status?: string }).status,
+          changeType: (i as { changeType?: string }).changeType,
+          raciAccountableIds: (i as { raciAccountableIds?: unknown[] }).raciAccountableIds,
+          raciResponsibleIds: (i as { raciResponsibleIds?: unknown[] }).raciResponsibleIds,
+          raciConsultedIds: (i as { raciConsultedIds?: unknown[] }).raciConsultedIds,
+          raciInformedIds: (i as { raciInformedIds?: unknown[] }).raciInformedIds,
+        }));
+
+        const uid = String(currentUserId ?? "");
+        const canSeeAll = user?.role === "admin";
+
+        const visibleIds = new Set(
+          canSeeAll
+            ? normalized.map((x) => x.id)
+            : normalized
+                .filter((opt) => {
+                  if (!uid) return false;
+                  const role = getRaciRoleForUser(opt, uid);
+                  // Backward-compatibility: if RACI isn't configured on the initiative yet,
+                  // keep it selectable in the roadmap.
+                  return role !== null || !hasAnyRaciConfigured(opt);
+                })
+                .map((x) => x.id),
+        );
+
+        const stateOk = stateInitiativeId ? visibleIds.has(stateInitiativeId) : false;
         const toSelect =
-          stateInitiativeId && list.some((i) => i.id === stateInitiativeId)
+          stateOk
             ? stateInitiativeId
-            : list.length > 0
-              ? list[0].id
-              : null;
-        setSelectedInitiativeId((prev) => prev ?? toSelect);
+            : normalized.find((i) => visibleIds.has(i.id))?.id ?? null;
+
+        setInitiatives(normalized);
+        setSelectedInitiativeId(toSelect);
       })
-      .catch(() => []);
-  }, [stateInitiativeId]);
+      .catch(() => {
+        setInitiatives([]);
+        setSelectedInitiativeId(null);
+      });
+  }, [stateInitiativeId, currentUserId, user?.role]);
 
   useEffect(() => {
     listOrganizationUsers()
@@ -213,15 +287,33 @@ export default function AdminRoadmap() {
             breadcrumbs={breadcrumbs}
             actions={
               <Group>
-                <Select
-                  placeholder="Select initiative"
-                  data={initiatives.map((i) => ({ value: i.id, label: i.title }))}
-                  value={selectedInitiativeId ?? undefined}
-                  onChange={(v) => setSelectedInitiativeId(v ?? null)}
-                  size="sm"
-                  w={220}
-                  radius="md"
-                />
+                <Stack spacing={4}>
+                  <Select
+                    placeholder="Select initiative"
+                    data={initiatives
+                      .filter((opt) => {
+                        if (user?.role === "admin") return true;
+                        const uid = String(currentUserId ?? "");
+                        const role = getRaciRoleForUser(opt, uid);
+                        return role !== null || !hasAnyRaciConfigured(opt);
+                      })
+                      .map((i) => ({ value: i.id, label: i.title }))}
+                    value={selectedInitiativeId ?? undefined}
+                    onChange={(v) => setSelectedInitiativeId(v ?? null)}
+                    size="sm"
+                    w={220}
+                    radius="md"
+                  />
+                  {(() => {
+                    const selected = initiatives.find((i) => i.id === selectedInitiativeId);
+                    const role = getRaciRoleForUser(selected, String(currentUserId ?? ""));
+                    return role ? (
+                      <Text size="xs" c="dimmed" style={{ maxWidth: 220 }}>
+                        Your RACI role: <b>{role}</b>
+                      </Text>
+                    ) : null;
+                  })()}
+                </Stack>
                 {!isEmployee && (
                   <Button
                     leftSection={<IconPlus size={20} />}

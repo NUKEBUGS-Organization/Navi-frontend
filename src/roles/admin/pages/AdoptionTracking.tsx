@@ -14,6 +14,7 @@ import {
   ActionIcon,
   Group,
   Progress,
+  Switch,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { DateInput } from "@mantine/dates";
@@ -60,8 +61,10 @@ export default function AdoptionTracking() {
   const [formPercent, setFormPercent] = useState<number>(0);
   const [formTargetPercent, setFormTargetPercent] = useState<number>(100);
   const [formNotes, setFormNotes] = useState("");
+  const [formVisibleToEmployees, setFormVisibleToEmployees] = useState<boolean>(true);
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<AdoptionDto | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   useEffect(() => {
     listInitiatives()
@@ -93,6 +96,7 @@ export default function AdoptionTracking() {
     setFormPercent(0);
     setFormTargetPercent(100);
     setFormNotes("");
+    setFormVisibleToEmployees(true);
   };
 
   const openCreate = () => {
@@ -108,6 +112,7 @@ export default function AdoptionTracking() {
     setFormPercent(row.percentAdopted ?? 0);
     setFormTargetPercent(row.targetPercent ?? 100);
     setFormNotes(row.notes ?? "");
+    setFormVisibleToEmployees(row.visibleToEmployees ?? true);
     openModal();
   };
 
@@ -124,6 +129,7 @@ export default function AdoptionTracking() {
           percentAdopted: formPercent,
           targetPercent: formTargetPercent,
           notes: formNotes.trim() || undefined,
+          visibleToEmployees: formVisibleToEmployees,
         });
       } else {
         const payload: CreateAdoptionPayload = {
@@ -134,6 +140,7 @@ export default function AdoptionTracking() {
           percentAdopted: formPercent,
           targetPercent: formTargetPercent,
           notes: formNotes.trim() || undefined,
+          visibleToEmployees: formVisibleToEmployees,
         };
         await createAdoption(payload);
       }
@@ -152,6 +159,18 @@ export default function AdoptionTracking() {
       if (selectedInitiativeId) listAdoption(selectedInitiativeId).then((d) => setList(Array.isArray(d) ? d : []));
     } catch {
       setDeleteConfirm(null);
+    }
+  };
+
+  const handleToggleVisibility = async (row: AdoptionDto, checked: boolean) => {
+    if (!selectedInitiativeId) return;
+    setTogglingId(row._id);
+    try {
+      await updateAdoption(row._id, { visibleToEmployees: checked });
+      const d = await listAdoption(selectedInitiativeId);
+      setList(Array.isArray(d) ? d : []);
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -209,6 +228,7 @@ export default function AdoptionTracking() {
                   <Table.Th>Status</Table.Th>
                   <Table.Th>% Adopted</Table.Th>
                   <Table.Th>Notes</Table.Th>
+                  <Table.Th>Visible to employees</Table.Th>
                   {canEdit && <Table.Th w={80}></Table.Th>}
                 </Table.Tr>
               </Table.Thead>
@@ -225,6 +245,14 @@ export default function AdoptionTracking() {
                       </Group>
                     </Table.Td>
                     <Table.Td style={{ maxWidth: 180 }}>{row.notes ? `${row.notes.slice(0, 40)}${row.notes.length > 40 ? "…" : ""}` : "—"}</Table.Td>
+                  <Table.Td>
+                    <Switch
+                      checked={row.visibleToEmployees ?? true}
+                      size="sm"
+                      disabled={togglingId === row._id || !canEdit}
+                      onChange={(e) => handleToggleVisibility(row, e.currentTarget.checked)}
+                    />
+                  </Table.Td>
                     {canEdit && (
                       <Table.Td>
                         <Group gap="xs">
@@ -256,6 +284,11 @@ export default function AdoptionTracking() {
               clearable
             />
             <Select label="Status" data={STATUS_OPTIONS} value={formStatus} onChange={setFormStatus} />
+            <Switch
+              checked={formVisibleToEmployees}
+              onChange={(e) => setFormVisibleToEmployees(e.currentTarget.checked)}
+              label="Visible to employees"
+            />
             <TextInput type="number" label="Target % (goal for this milestone)" min={0} max={100} value={String(formTargetPercent)} onChange={(e) => setFormTargetPercent(Math.min(100, Math.max(0, Number(e.currentTarget.value) || 100)))} description="Progress is auto-calculated from linked roadmap tasks when you assign them to this milestone." />
             <TextInput type="number" label="% Adopted (current)" min={0} max={100} value={String(formPercent)} onChange={(e) => setFormPercent(Math.min(100, Math.max(0, Number(e.currentTarget.value) || 0)))} />
             <Textarea label="Notes" value={formNotes} onChange={(e) => setFormNotes(e.currentTarget.value)} placeholder="Notes" minRows={2} />

@@ -330,7 +330,7 @@ export default function AdminDashboard() {
         </Grid.Col>
       </Grid>
 
-      {canViewRiskMonitoring && riskSummary && (riskSummary.open > 0 || riskSummary.high > 0 || riskSummary.critical > 0) && (
+      {canViewRiskMonitoring && riskSummary && (riskSummary.open > 0 || riskSummary.low > 0 || riskSummary.medium > 0 || riskSummary.high > 0) && (
         <Card withBorder radius="lg" p="md" mb="xl" style={{ cursor: "pointer" }} onClick={() => navigate(appRoutes.RISKS)}>
           <Group justify="space-between">
             <Group>
@@ -338,7 +338,7 @@ export default function AdminDashboard() {
               <Box>
                 <Text fw={700} fz="md">Risk Monitoring</Text>
                 <Text size="xs" c="dimmed">
-                  {riskSummary.open} open · {riskSummary.high} high · {riskSummary.critical} critical
+                  {riskSummary.open} being resolved · {riskSummary.high} high · {riskSummary.medium} medium · {riskSummary.low} low
                 </Text>
               </Box>
             </Group>

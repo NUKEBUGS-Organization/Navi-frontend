@@ -28,6 +28,11 @@ export interface CreateInitiativePayload {
   readiness?: string;
   goals?: InitiativeGoal[];
   faqs?: InitiativeFaq[];
+  changeType?: string;
+  raciAccountableIds?: string[];
+  raciResponsibleIds?: string[];
+  raciConsultedIds?: string[];
+  raciInformedIds?: string[];
 }
 
 export function listInitiatives(): Promise<InitiativeListItem[]> {

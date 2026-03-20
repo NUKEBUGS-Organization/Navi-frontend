@@ -12,6 +12,9 @@ export interface KnowledgeEntry {
   textBody?: string;
   originalFileName?: string;
   mimeType?: string;
+  solutionUpvotes?: number;
+  solutionDownvotes?: number;
+  mySolutionVote?: "up" | "down";
   createdAt?: string;
 }
 
@@ -41,6 +44,21 @@ export function uploadKnowledgeFile(initiativeId: string, file: File): Promise<K
   return postFormData<unknown>(`/knowledge/initiatives/${encodeURIComponent(initiativeId)}/upload`, fd).then(
     (raw) => toId(raw as { _id: string }),
   );
+}
+
+export function voteKnowledgeSolution(
+  entryId: string,
+  direction: "up" | "down",
+): Promise<KnowledgeEntry> {
+  return api
+    .post<unknown>(`/knowledge/entries/${encodeURIComponent(entryId)}/vote-solution`, {
+      direction,
+    })
+    .then((raw) => toId(raw as { _id: string }));
+}
+
+export function deleteKnowledgeEntry(entryId: string): Promise<{ message: string }> {
+  return api.delete<{ message: string }>(`/knowledge/entries/${encodeURIComponent(entryId)}`);
 }
 
 export async function downloadKnowledgeFile(entryId: string, fallbackName: string): Promise<void> {

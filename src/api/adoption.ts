@@ -10,6 +10,7 @@ export interface AdoptionDto {
   percentAdopted?: number;
   targetPercent?: number;
   notes?: string;
+  visibleToEmployees?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -22,6 +23,7 @@ export interface CreateAdoptionPayload {
   percentAdopted?: number;
   targetPercent?: number;
   notes?: string;
+  visibleToEmployees?: boolean;
 }
 
 export interface UpdateAdoptionPayload {
@@ -32,6 +34,7 @@ export interface UpdateAdoptionPayload {
   targetPercent?: number;
   notes?: string;
   initiativeId?: string;
+  visibleToEmployees?: boolean;
 }
 
 export function listAdoption(initiativeId?: string): Promise<AdoptionDto[]> {

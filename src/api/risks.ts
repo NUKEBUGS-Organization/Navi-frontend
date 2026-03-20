@@ -33,7 +33,8 @@ export interface UpdateRiskPayload {
 
 export interface RiskSummary {
   high: number;
-  critical: number;
+  medium: number;
+  low: number;
   open: number;
 }
 

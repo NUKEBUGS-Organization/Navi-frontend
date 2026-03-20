@@ -26,4 +26,9 @@ export interface InitiativeSummary {
   progress: number;
   goals?: InitiativeGoal[];
   faqs?: InitiativeFaq[];
+  changeType?: string;
+  raciAccountableIds?: string[];
+  raciResponsibleIds?: string[];
+  raciConsultedIds?: string[];
+  raciInformedIds?: string[];
 }
