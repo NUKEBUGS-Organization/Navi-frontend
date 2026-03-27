@@ -107,8 +107,6 @@ function hasAnyRaciConfigured(option: InitiativeRoadmapOption | undefined): bool
   return a.length > 0 || r.length > 0 || c.length > 0 || i.length > 0;
 }
 
-type RaciTab = "accountable" | "responsible" | "consulted" | "informed";
-
 function formatTaskDate(d: string | undefined): string {
   if (!d) return "—";
   const date = new Date(d);
@@ -316,22 +314,33 @@ export default function AdminRoadmap() {
             breadcrumbs={breadcrumbs}
             actions={
               <Group>
-                <Select
-                  placeholder="Select initiative"
-                  data={initiatives
-                    .filter((opt) => {
-                      if (user?.role === "admin") return true;
-                      const uid = String(currentUserId ?? "");
-                      const role = getRaciRoleForUser(opt, uid);
-                      return role !== null || !hasAnyRaciConfigured(opt);
-                    })
-                    .map((i) => ({ value: i.id, label: i.title }))}
-                  value={selectedInitiativeId ?? undefined}
-                  onChange={(v) => setSelectedInitiativeId(v ?? null)}
-                  size="sm"
-                  w={220}
-                  radius="md"
-                />
+                <Stack spacing={4}>
+                  <Select
+                    placeholder="Select initiative"
+                    data={initiatives
+                      .filter((opt) => {
+                        if (user?.role === "admin") return true;
+                        const uid = String(currentUserId ?? "");
+                        const role = getRaciRoleForUser(opt, uid);
+                        return role !== null || !hasAnyRaciConfigured(opt);
+                      })
+                      .map((i) => ({ value: i.id, label: i.title }))}
+                    value={selectedInitiativeId ?? undefined}
+                    onChange={(v) => setSelectedInitiativeId(v ?? null)}
+                    size="sm"
+                    w={220}
+                    radius="md"
+                  />
+                  {(() => {
+                    const selected = initiatives.find((i) => i.id === selectedInitiativeId);
+                    const role = getRaciRoleForUser(selected, String(currentUserId ?? ""));
+                    return role ? (
+                      <Text size="xs" c="dimmed" style={{ maxWidth: 220 }}>
+                        Your RACI role: <b>{role}</b>
+                      </Text>
+                    ) : null;
+                  })()}
+                </Stack>
                 {!isEmployee && (
                   <Button
                     leftSection={<IconPlus size={20} />}

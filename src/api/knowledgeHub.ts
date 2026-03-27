@@ -61,12 +61,26 @@ export function deleteKnowledgeEntry(entryId: string): Promise<{ message: string
   return api.delete<{ message: string }>(`/knowledge/entries/${encodeURIComponent(entryId)}`);
 }
 
+export function voteKnowledgeSolution(
+  entryId: string,
+  direction: "up" | "down",
+): Promise<KnowledgeEntry> {
+  return api
+    .post<unknown>(`/knowledge/entries/${encodeURIComponent(entryId)}/vote-solution`, {
+      direction,
+    })
+    .then((raw) => toId(raw as { _id: string }));
+}
+
+export function deleteKnowledgeEntry(entryId: string): Promise<{ message: string }> {
+  return api.delete<{ message: string }>(`/knowledge/entries/${encodeURIComponent(entryId)}`);
+}
+
 export function updateKnowledgeEntryText(entryId: string, text: string): Promise<KnowledgeEntry> {
   return api
     .patch<unknown>(`/knowledge/entries/${encodeURIComponent(entryId)}/text`, { text })
     .then((raw) => toId(raw as { _id: string }));
 }
-
 export async function downloadKnowledgeFile(entryId: string, fallbackName: string): Promise<void> {
   const blob = await getBlob(`/knowledge/entries/${encodeURIComponent(entryId)}/file`);
   const url = URL.createObjectURL(blob);
