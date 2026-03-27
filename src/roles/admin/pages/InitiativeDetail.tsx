@@ -74,7 +74,6 @@ interface Initiative {
   progress: number;
   readiness: "High" | "Medium" | "Low";
   riskLevel: "Low" | "Med" | "High";
-  pendingTasks: { done: number; total: number };
   team: { name: string; role: string; initials: string; color: string }[];
   teamAvatars: { initials: string; color: string }[];
   milestones: {
@@ -208,7 +207,6 @@ function mapApiToInitiative(raw: InitiativeListItem): Initiative {
     progress: raw.progress ?? 0,
     readiness: (raw.readiness as Initiative["readiness"]) ?? "Medium",
     riskLevel: "Low",
-    pendingTasks: { done: 0, total: 0 },
     team: [{ name: lead, role: "Change Lead", initials, color: THEME_BLUE }],
     teamAvatars: [],
     milestones: [
@@ -444,6 +442,24 @@ export default function InitiativeDetail() {
     };
   }, [initiative?.id]);
 
+  const quickStatsTasks = useMemo(() => {
+    const all = roadmapTasks;
+    if (!all.length) return { done: 0, total: 0 };
+    const scoped =
+      user?.role === "admin" || user?.role === "super_admin"
+        ? all
+        : filterTasksByRoleAndDept(
+            all,
+            orgUsers,
+            user?._id ?? "",
+            user?.role,
+            user?.departments ?? [],
+          );
+    const total = scoped.length;
+    const done = scoped.filter((t) => (t.progress ?? 0) >= 100).length;
+    return { done, total };
+  }, [roadmapTasks, orgUsers, user?._id, user?.role, user?.departments]);
+
   if (loading) {
     return (
       <AdminLayout>
@@ -474,6 +490,7 @@ export default function InitiativeDetail() {
       ON_HOLD: { bg: "#fff4e6", c: "#e8590c" },
       DRAFT: { bg: "#f1f3f5", c: "#868e96" },
       PLANNING: { bg: "#e7f5ff", c: "#1971c2" },
+      WAITING_FOR_APPROVAL: { bg: "#e7f5ff", c: "#1971c2" },
       "In Progress": { bg: "#e6fcf5", c: "#099268" },
       Active: { bg: "#e6fcf5", c: "#099268" },
       Draft: { bg: "#f1f3f5", c: "#868e96" },
@@ -482,7 +499,12 @@ export default function InitiativeDetail() {
     return map[status] || map["ACTIVE"];
   };
   const statusColors = getStatusBadge(initiative.status);
-  const isDraft = initiative.status === "Draft";
+  const isDraft =
+    initiative.status === "Draft" ||
+    initiative.status === "DRAFT" ||
+    initiative.status === "WAITING_FOR_APPROVAL" ||
+    initiative.status === "PLANNING" ||
+    initiative.status === "Planning";
   const activeMilestoneIndex = initiative.milestones.findIndex(
     (m) => m.status === "current",
   );
@@ -792,10 +814,10 @@ export default function InitiativeDetail() {
                     </Box>
                     <Box>
                       <Text fz="xs" fw={700} c="dimmed" mb={4}>
-                        Pending Tasks
+                        Tasks completed
                       </Text>
                       <Text fw={700} fz="md">
-                        {initiative.pendingTasks.done} / {initiative.pendingTasks.total}
+                        {quickStatsTasks.done} / {quickStatsTasks.total}
                       </Text>
                     </Box>
                   </Stack>

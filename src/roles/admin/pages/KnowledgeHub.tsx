@@ -15,7 +15,7 @@ import {
   Textarea,
   Title,
 } from "@mantine/core";
-import { IconDownload, IconHelp, IconMessagePlus, IconTrash, IconUpload } from "@tabler/icons-react";
+import { IconDownload, IconEdit, IconHelp, IconMessagePlus, IconTrash, IconUpload } from "@tabler/icons-react";
 import AdminLayout from "@/roles/admin/layout/AdminLayout";
 import { PageHeader } from "@/components";
 import { THEME_BLUE } from "@/constants";
@@ -27,6 +27,7 @@ import {
   deleteKnowledgeEntry,
   downloadKnowledgeFile,
   listKnowledgeEntries,
+  updateKnowledgeEntryText,
   uploadKnowledgeFile,
   voteKnowledgeSolution,
   type KnowledgeEntry,
@@ -74,6 +75,16 @@ function parseKnowledgeText(text?: string): ParsedKnowledgeText {
   return { kind: "unknown", raw };
 }
 
+function toComparableId(raw: unknown): string {
+  if (!raw) return "";
+  if (typeof raw === "string") return raw;
+  if (typeof raw === "object" && raw && "toString" in (raw as Record<string, unknown>)) {
+    const toString = (raw as { toString?: () => string }).toString;
+    if (typeof toString === "function") return toString.call(raw);
+  }
+  return String(raw);
+}
+
 export default function KnowledgeHub() {
   const { user } = useAuth();
   const canUploadFiles = user?.role === "admin" || user?.role === "manager";
@@ -99,6 +110,9 @@ export default function KnowledgeHub() {
   const [error, setError] = useState<string | null>(null);
   const [votingEntryId, setVotingEntryId] = useState<string | null>(null);
   const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [editingTextBody, setEditingTextBody] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const initiativeOptions = useMemo(
     () =>
@@ -270,6 +284,40 @@ export default function KnowledgeHub() {
       setError((e as { message?: string }).message ?? "Vote failed");
     } finally {
       setVotingEntryId(null);
+    }
+  };
+
+  const canEditEntry = (entry: KnowledgeEntry) => {
+    if (entry.kind !== "text") return false;
+    const currentUserId = toComparableId(user?._id);
+    const authorId = toComparableId(entry.authorId);
+    const isAuthor = Boolean(currentUserId && authorId && currentUserId === authorId);
+    return isAuthor || canDelete;
+  };
+
+  const startEditEntry = (entry: KnowledgeEntry) => {
+    if (!canEditEntry(entry)) return;
+    setEditingEntryId(entry._id);
+    setEditingTextBody(entry.textBody ?? "");
+  };
+
+  const cancelEditEntry = () => {
+    setEditingEntryId(null);
+    setEditingTextBody("");
+  };
+
+  const saveEditEntry = async () => {
+    if (!editingEntryId || !editingTextBody.trim()) return;
+    setSavingEdit(true);
+    setError(null);
+    try {
+      const updated = await updateKnowledgeEntryText(editingEntryId, editingTextBody.trim());
+      setEntries((prev) => prev.map((e) => (e._id === editingEntryId ? updated : e)));
+      cancelEditEntry();
+    } catch (e: unknown) {
+      setError((e as { message?: string }).message ?? "Could not update contribution");
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -493,7 +541,31 @@ export default function KnowledgeHub() {
                                 {formatWhen(e.createdAt)}
                               </Text>
                             </Group>
-                            {e.kind === "text" ? (
+                            {editingEntryId === e._id ? (
+                              <Stack gap="sm">
+                                <Textarea
+                                  label="Edit contribution text"
+                                  minRows={5}
+                                  value={editingTextBody}
+                                  onChange={(ev) => setEditingTextBody(ev.currentTarget.value)}
+                                />
+                                <Group gap="xs" justify="flex-end">
+                                  <Button variant="default" size="xs" onClick={cancelEditEntry} disabled={savingEdit}>
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    size="xs"
+                                    bg={THEME_BLUE}
+                                    c="white"
+                                    onClick={saveEditEntry}
+                                    loading={savingEdit}
+                                    disabled={!editingTextBody.trim()}
+                                  >
+                                    Save
+                                  </Button>
+                                </Group>
+                              </Stack>
+                            ) : e.kind === "text" ? (
                               (() => {
                                 const parsed = parseKnowledgeText(e.textBody);
                                 const up = e.solutionUpvotes ?? 0;
@@ -532,6 +604,11 @@ export default function KnowledgeHub() {
                                 }
 
                                 if (parsed.kind === "problem_solution") {
+                                  const currentUserId = toComparableId(user?._id);
+                                  const authorId = toComparableId(e.authorId);
+                                  const canVoteThisEntry =
+                                    Boolean(currentUserId) &&
+                                    (!authorId || currentUserId !== authorId);
                                   return (
                                     <Stack gap={10}>
                                       <Box
@@ -569,7 +646,7 @@ export default function KnowledgeHub() {
                                           <ActionIcon
                                             variant="light"
                                             color="green"
-                                            disabled={votingEntryId === e._id}
+                                            disabled={votingEntryId === e._id || !canVoteThisEntry}
                                             onClick={() => onVote(e._id, "up")}
                                           >
                                             ↑
@@ -580,7 +657,7 @@ export default function KnowledgeHub() {
                                           <ActionIcon
                                             variant="light"
                                             color="red"
-                                            disabled={votingEntryId === e._id}
+                                            disabled={votingEntryId === e._id || !canVoteThisEntry}
                                             onClick={() => onVote(e._id, "down")}
                                           >
                                             ↓
@@ -589,6 +666,11 @@ export default function KnowledgeHub() {
                                             {down}
                                           </Text>
                                         </Group>
+                                        {!canVoteThisEntry && (
+                                          <Text size="xs" c="dimmed" mt={2}>
+                                            You cannot vote on your own contribution.
+                                          </Text>
+                                        )}
                                       </Box>
                                     </Stack>
                                   );
@@ -614,16 +696,31 @@ export default function KnowledgeHub() {
                               </Group>
                             )}
                           </Stack>
-                          {canDelete && (
-                            <ActionIcon
-                              variant="light"
-                              color="red"
-                              onClick={() => onDeleteEntry(e._id)}
-                              loading={deletingEntryId === e._id}
-                              title="Delete contribution"
-                            >
-                              <IconTrash size={16} />
-                            </ActionIcon>
+                          {(canEditEntry(e) || canDelete) && (
+                            <Group gap={6}>
+                              {canEditEntry(e) && (
+                                <ActionIcon
+                                  variant="light"
+                                  color="blue"
+                                  onClick={() => startEditEntry(e)}
+                                  title="Edit contribution"
+                                  disabled={editingEntryId !== null && editingEntryId !== e._id}
+                                >
+                                  <IconEdit size={16} />
+                                </ActionIcon>
+                              )}
+                              {canDelete && (
+                                <ActionIcon
+                                  variant="light"
+                                  color="red"
+                                  onClick={() => onDeleteEntry(e._id)}
+                                  loading={deletingEntryId === e._id}
+                                  title="Delete contribution"
+                                >
+                                  <IconTrash size={16} />
+                                </ActionIcon>
+                              )}
+                            </Group>
                           )}
                         </Group>
                       </Card>

@@ -20,7 +20,7 @@ export interface InitiativeListItem extends InitiativeSummary {
 export interface CreateInitiativePayload {
   title: string;
   description?: string;
-  status?: "ACTIVE" | "DRAFT" | "PLANNING";
+  status?: "ACTIVE" | "DRAFT" | "WAITING_FOR_APPROVAL" | "COMPLETED" | "PLANNING";
   leadName: string;
   dateRange?: string;
   departments?: string[];

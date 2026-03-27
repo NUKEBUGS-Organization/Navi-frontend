@@ -1,4 +1,15 @@
-export type InitiativeStatus = "ACTIVE" | "DRAFT" | "PLANNING" | "In Progress" | "Active" | "Draft" | "Planning";
+export type InitiativeStatus =
+  | "ACTIVE"
+  | "DRAFT"
+  | "WAITING_FOR_APPROVAL"
+  | "COMPLETED"
+  // legacy
+  | "PLANNING"
+  // UI labels
+  | "In Progress"
+  | "Active"
+  | "Draft"
+  | "Planning";
 
 export interface InitiativeGoal {
   goal?: string;

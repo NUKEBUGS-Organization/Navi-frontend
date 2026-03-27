@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import AdminLayout from "@/roles/admin/layout/AdminLayout";
 import {
@@ -23,6 +23,7 @@ import {
   SimpleGrid,
   Menu,
   Paper,
+  Grid,
 } from "@mantine/core";
 import type { ReactNode } from "react";
 import { DateInput } from "@mantine/dates";
@@ -106,6 +107,8 @@ function hasAnyRaciConfigured(option: InitiativeRoadmapOption | undefined): bool
   return a.length > 0 || r.length > 0 || c.length > 0 || i.length > 0;
 }
 
+type RaciTab = "accountable" | "responsible" | "consulted" | "informed";
+
 function formatTaskDate(d: string | undefined): string {
   if (!d) return "—";
   const date = new Date(d);
@@ -127,6 +130,7 @@ export default function AdminRoadmap() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [initiatives, setInitiatives] = useState<InitiativeRoadmapOption[]>([]);
   const [selectedInitiativeId, setSelectedInitiativeId] = useState<string | null>(null);
+  const [raciTab, setRaciTab] = useState<RaciTab>("accountable");
   const [tasksRaw, setTasksRaw] = useState<TaskDto[]>([]);
   const [users, setUsers] = useState<{ _id: string; name: string; departments?: string[] }[]>([]);
   const [adoptions, setAdoptions] = useState<AdoptionDto[]>([]);
@@ -227,7 +231,11 @@ export default function AdminRoadmap() {
   }));
 
   const selectedInitiative = initiatives.find((i) => i.id === selectedInitiativeId);
-  const isDraftInitiative = selectedInitiative?.status === "DRAFT" || selectedInitiative?.status === "Draft";
+  const isDraftInitiative =
+    selectedInitiative?.status === "DRAFT" ||
+    selectedInitiative?.status === "Draft" ||
+    selectedInitiative?.status === "WAITING_FOR_APPROVAL" ||
+    selectedInitiative?.status === "PLANNING";
 
   const myDepts = new Set((user?.departments ?? []).map((d) => String(d).toLowerCase()));
   const assigneeIdsInMyDept = new Set(
@@ -249,6 +257,27 @@ export default function AdminRoadmap() {
               assigneeIdsInMyDept.has(String(t.assigneeId ?? ""))
           )
         : tasks;
+
+  const raciByTab = useMemo(() => {
+    const uid = String(currentUserId ?? "");
+    const buckets: Record<RaciTab, InitiativeRoadmapOption[]> = {
+      accountable: [],
+      responsible: [],
+      consulted: [],
+      informed: [],
+    };
+    if (!uid) return buckets;
+
+    initiatives.forEach((ini) => {
+      const role = getRaciRoleForUser(ini, uid);
+      if (role === "Accountable") buckets.accountable.push(ini);
+      if (role === "Responsible") buckets.responsible.push(ini);
+      if (role === "Consulted") buckets.consulted.push(ini);
+      if (role === "Informed") buckets.informed.push(ini);
+    });
+    return buckets;
+  }, [initiatives, currentUserId]);
+
   const breadcrumbs = [
     { title: "Initiatives", href: appRoutes.INITIATIVES },
     { title: selectedInitiative?.title ?? "Roadmap", href: "#" },
@@ -287,33 +316,22 @@ export default function AdminRoadmap() {
             breadcrumbs={breadcrumbs}
             actions={
               <Group>
-                <Stack spacing={4}>
-                  <Select
-                    placeholder="Select initiative"
-                    data={initiatives
-                      .filter((opt) => {
-                        if (user?.role === "admin") return true;
-                        const uid = String(currentUserId ?? "");
-                        const role = getRaciRoleForUser(opt, uid);
-                        return role !== null || !hasAnyRaciConfigured(opt);
-                      })
-                      .map((i) => ({ value: i.id, label: i.title }))}
-                    value={selectedInitiativeId ?? undefined}
-                    onChange={(v) => setSelectedInitiativeId(v ?? null)}
-                    size="sm"
-                    w={220}
-                    radius="md"
-                  />
-                  {(() => {
-                    const selected = initiatives.find((i) => i.id === selectedInitiativeId);
-                    const role = getRaciRoleForUser(selected, String(currentUserId ?? ""));
-                    return role ? (
-                      <Text size="xs" c="dimmed" style={{ maxWidth: 220 }}>
-                        Your RACI role: <b>{role}</b>
-                      </Text>
-                    ) : null;
-                  })()}
-                </Stack>
+                <Select
+                  placeholder="Select initiative"
+                  data={initiatives
+                    .filter((opt) => {
+                      if (user?.role === "admin") return true;
+                      const uid = String(currentUserId ?? "");
+                      const role = getRaciRoleForUser(opt, uid);
+                      return role !== null || !hasAnyRaciConfigured(opt);
+                    })
+                    .map((i) => ({ value: i.id, label: i.title }))}
+                  value={selectedInitiativeId ?? undefined}
+                  onChange={(v) => setSelectedInitiativeId(v ?? null)}
+                  size="sm"
+                  w={220}
+                  radius="md"
+                />
                 {!isEmployee && (
                   <Button
                     leftSection={<IconPlus size={20} />}
@@ -331,6 +349,8 @@ export default function AdminRoadmap() {
               </Group>
             }
           />
+          <Grid gutter="lg" align="flex-start">
+            <Grid.Col span={{ base: 12, lg: 8 }}>
           {isDraftInitiative && (
             <Paper withBorder p="md" mb="md" bg="orange.0" radius="md">
               <Text size="sm" fw={600} c="orange.8">
@@ -618,6 +638,137 @@ export default function AdminRoadmap() {
               </Group>
             </Group>
           </Box>
+            </Grid.Col>
+            <Grid.Col span={{ base: 12, lg: 4 }}>
+              <Card
+                withBorder
+                radius="md"
+                p="md"
+                style={{ position: "sticky", top: 16, zIndex: 2, backgroundColor: "white" }}
+              >
+                <Text fw={800} mb="xs">
+                  RACI initiatives
+                </Text>
+                <Text size="xs" c="dimmed" mb="sm">
+                  Select a tab to view initiatives by your RACI role.
+                </Text>
+                <Tabs
+                  value={raciTab}
+                  onChange={(v) => setRaciTab((v as RaciTab) ?? "accountable")}
+                  styles={{
+                    list: { marginBottom: 8 },
+                    tab: {
+                      fontSize: 13,
+                      fontWeight: 700,
+                      minHeight: 38,
+                      whiteSpace: "nowrap",
+                      paddingLeft: 10,
+                      paddingRight: 10,
+                    },
+                  }}
+                >
+                  <Tabs.List grow>
+                    <Tabs.Tab value="responsible">Responsible</Tabs.Tab>
+                    <Tabs.Tab value="accountable">Accountable</Tabs.Tab>
+                    <Tabs.Tab value="consulted">Consulted</Tabs.Tab>
+                    <Tabs.Tab value="informed">Informed</Tabs.Tab>
+                  </Tabs.List>
+
+                  <Tabs.Panel value="accountable" pt="sm">
+                    <Stack gap="xs">
+                      {raciByTab.accountable.length === 0 ? (
+                        <Text size="xs" c="dimmed">No accountable initiatives.</Text>
+                      ) : (
+                        raciByTab.accountable.map((ini) => (
+                          <Card
+                            key={`acc-${ini.id}`}
+                            withBorder
+                            radius="sm"
+                            p="xs"
+                            style={{ cursor: "pointer" }}
+                            bg={selectedInitiativeId === ini.id ? "blue.0" : undefined}
+                            onClick={() => setSelectedInitiativeId(ini.id)}
+                          >
+                            <Text size="sm" fw={700} lineClamp={2}>{ini.title}</Text>
+                            <Badge size="xs" variant="light" color="blue" mt={6}>Accountable</Badge>
+                          </Card>
+                        ))
+                      )}
+                    </Stack>
+                  </Tabs.Panel>
+
+                  <Tabs.Panel value="responsible" pt="sm">
+                    <Stack gap="xs">
+                      {raciByTab.responsible.length === 0 ? (
+                        <Text size="xs" c="dimmed">No responsible initiatives.</Text>
+                      ) : (
+                        raciByTab.responsible.map((ini) => (
+                          <Card
+                            key={`res-${ini.id}`}
+                            withBorder
+                            radius="sm"
+                            p="xs"
+                            style={{ cursor: "pointer" }}
+                            bg={selectedInitiativeId === ini.id ? "blue.0" : undefined}
+                            onClick={() => setSelectedInitiativeId(ini.id)}
+                          >
+                            <Text size="sm" fw={700} lineClamp={2}>{ini.title}</Text>
+                            <Badge size="xs" variant="light" color="teal" mt={6}>Responsible</Badge>
+                          </Card>
+                        ))
+                      )}
+                    </Stack>
+                  </Tabs.Panel>
+
+                  <Tabs.Panel value="consulted" pt="sm">
+                    <Stack gap="xs">
+                      {raciByTab.consulted.length === 0 ? (
+                        <Text size="xs" c="dimmed">No consulted initiatives.</Text>
+                      ) : (
+                        raciByTab.consulted.map((ini) => (
+                          <Card
+                            key={`con-${ini.id}`}
+                            withBorder
+                            radius="sm"
+                            p="xs"
+                            style={{ cursor: "pointer" }}
+                            bg={selectedInitiativeId === ini.id ? "blue.0" : undefined}
+                            onClick={() => setSelectedInitiativeId(ini.id)}
+                          >
+                            <Text size="sm" fw={700} lineClamp={2}>{ini.title}</Text>
+                            <Badge size="xs" variant="light" color="yellow" mt={6}>Consulted</Badge>
+                          </Card>
+                        ))
+                      )}
+                    </Stack>
+                  </Tabs.Panel>
+
+                  <Tabs.Panel value="informed" pt="sm">
+                    <Stack gap="xs">
+                      {raciByTab.informed.length === 0 ? (
+                        <Text size="xs" c="dimmed">No informed initiatives.</Text>
+                      ) : (
+                        raciByTab.informed.map((ini) => (
+                          <Card
+                            key={`inf-${ini.id}`}
+                            withBorder
+                            radius="sm"
+                            p="xs"
+                            style={{ cursor: "pointer" }}
+                            bg={selectedInitiativeId === ini.id ? "blue.0" : undefined}
+                            onClick={() => setSelectedInitiativeId(ini.id)}
+                          >
+                            <Text size="sm" fw={700} lineClamp={2}>{ini.title}</Text>
+                            <Badge size="xs" variant="light" color="gray" mt={6}>Informed</Badge>
+                          </Card>
+                        ))
+                      )}
+                    </Stack>
+                  </Tabs.Panel>
+                </Tabs>
+              </Card>
+            </Grid.Col>
+          </Grid>
         </Box>
         <CreateTaskModal
           opened={opened}

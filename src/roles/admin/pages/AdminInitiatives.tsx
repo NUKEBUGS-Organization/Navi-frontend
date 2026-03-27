@@ -299,7 +299,7 @@ export default function AdminInitiatives() {
         title: data.title,
         description: data.description,
         leadName: data.leadName,
-        status: user?.role === "manager" ? "DRAFT" : data.status,
+        status: user?.role === "manager" ? "WAITING_FOR_APPROVAL" : data.status,
         dateRange: data.dateRange,
         departments: data.departments ?? [],
         progress: data.progress ?? 0,
@@ -504,7 +504,7 @@ export default function AdminInitiatives() {
                   </Group>
                 ) : null;
               })()}
-              {i.status === "DRAFT" && user?.role === "admin" && (
+              {(i.status === "WAITING_FOR_APPROVAL" || i.status === "PLANNING") && user?.role === "admin" && (
                 <Button
                   fullWidth
                   variant="filled"
@@ -788,7 +788,7 @@ function InitiativeModal({
           )}
           <Select
             label="Status"
-            data={["ACTIVE", "DRAFT", "PLANNING"]}
+            data={["ACTIVE", "WAITING_FOR_APPROVAL", "DRAFT", "COMPLETED"]}
             {...form.getInputProps("status")}
           />
           <TextInput
@@ -1973,7 +1973,7 @@ function CreateInitiativeModal({
                         : "—";
                   const statusMap: Record<InitialStatus, InitiativeStatus> = {
                     Drafting: "DRAFT",
-                    "Pending Review": "PLANNING",
+                    "Pending Review": "WAITING_FOR_APPROVAL",
                     Published: "ACTIVE",
                   };
                   onAdd({
