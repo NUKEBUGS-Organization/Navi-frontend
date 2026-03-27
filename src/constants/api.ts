@@ -1,6 +1,6 @@
 export const API_BASE =
   (typeof import.meta !== "undefined" && (import.meta as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL) ||
-  "https://navi-backend-bmr3.onrender.com";
+  "https://navi-backend-bmr3.onrender.com/api";
 
 export function getAuthToken(): string | null {
   return localStorage.getItem("navi_token");
