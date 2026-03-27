@@ -74,6 +74,7 @@ type InitiativeRoadmapOption = {
   raciConsultedIds?: unknown[];
   raciInformedIds?: unknown[];
 };
+type RaciTab = "accountable" | "responsible" | "consulted" | "informed";
 
 function normalizeIds(raw?: unknown[]): string[] {
   if (!Array.isArray(raw)) return [];
@@ -166,8 +167,8 @@ export default function AdminRoadmap() {
         );
 
         const stateOk = stateInitiativeId ? visibleIds.has(stateInitiativeId) : false;
-        const toSelect =
-          stateOk
+        const toSelect: string | null =
+          stateOk && stateInitiativeId
             ? stateInitiativeId
             : normalized.find((i) => visibleIds.has(i.id))?.id ?? null;
 
@@ -314,7 +315,7 @@ export default function AdminRoadmap() {
             breadcrumbs={breadcrumbs}
             actions={
               <Group>
-                <Stack spacing={4}>
+                <Stack gap={4}>
                   <Select
                     placeholder="Select initiative"
                     data={initiatives

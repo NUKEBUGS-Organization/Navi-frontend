@@ -293,7 +293,12 @@ export default function AssessmentResults() {
                         createForm.setFieldValue("dueDate", "");
                         return;
                       }
-                      const dateStr = typeof d === "string" ? d.slice(0, 10) : (d instanceof Date ? d.toISOString().slice(0, 10) : "");
+                      const dateStr =
+                        d && typeof d === "object" && "toISOString" in d
+                          ? (d as Date).toISOString().slice(0, 10)
+                          : typeof d === "string"
+                            ? d.slice(0, 10)
+                            : "";
                       createForm.setFieldValue("dueDate", dateStr);
                     }}
                     valueFormat="YYYY-MM-DD"
@@ -342,7 +347,7 @@ export default function AssessmentResults() {
                 Add steps (e.g. sections) and questions for each step. Each step can have multiple questions.
               </Text>
 
-              {createForm.values.steps.map((step, stepIdx) => (
+              {createForm.values.steps.map((_, stepIdx) => (
                 <Paper key={stepIdx} withBorder p="md" radius="md" bg="#f8f9fa">
                   <Group justify="space-between" mb="sm">
                     <TextInput

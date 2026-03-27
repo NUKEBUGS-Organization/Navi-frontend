@@ -32,7 +32,6 @@ import {
   IconDotsVertical,
   IconPlus,
   IconUserPlus,
-  IconChevronDown,
   IconMail,
   IconBuilding,
   IconCircle,
@@ -524,11 +523,10 @@ export default function AdminOrganization() {
                       role={m.role.charAt(0).toUpperCase() + m.role.slice(1)}
                       dept={m.departments?.length ? m.departments.join(", ") : "—"}
                       status={m.isActive !== false ? "Active" : "Pending"}
-                      date={
-                        (m as AuthUser & { createdAt?: string }).createdAt
-                          ? new Date((m as AuthUser & { createdAt?: string }).createdAt).toLocaleDateString()
-                          : "—"
-                      }
+                      date={(() => {
+                        const createdAt = (m as AuthUser & { createdAt?: string }).createdAt;
+                        return createdAt ? new Date(createdAt).toLocaleDateString() : "—";
+                      })()}
                       member={m}
                       onEdit={handleEditClick}
                       onDelete={handleDeleteClick}

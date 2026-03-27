@@ -1,13 +1,13 @@
 import { api } from "./client";
 import type { InitiativeSummary, InitiativeGoal, InitiativeFaq } from "@/types";
 
-function mapInitiative<T extends { _id?: string; [key: string]: unknown }>(
+function mapInitiative<T extends { _id?: unknown; [key: string]: unknown }>(
   raw: T
 ): T & { id: string } {
   const id =
     typeof raw._id === "string"
       ? raw._id
-      : (raw._id as { toString?: () => string })?.toString?.() ?? "";
+      : (raw._id as unknown as { toString?: () => string })?.toString?.() ?? "";
   const { _id, ...rest } = raw;
   return { ...rest, id } as T & { id: string };
 }

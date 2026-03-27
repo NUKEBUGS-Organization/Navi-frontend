@@ -30,6 +30,7 @@ export interface InitiativeSummary {
   status: InitiativeStatus;
   readiness?: string;
   title: string;
+  description?: string;
   leadName: string;
   dateRange: string;
   departments?: string[];

@@ -59,7 +59,7 @@ import { getInitiativeActivity, type ActivityItem } from "@/api/activity";
 interface Initiative {
   id: string;
   title: string;
-  status: "In Progress" | "Active" | "Draft" | "Planning";
+  status: "In Progress" | "Active" | "Draft" | "Planning" | "DRAFT" | "WAITING_FOR_APPROVAL" | "PLANNING";
   dateRange: string;
   lead: string;
   departments: string[];
@@ -169,7 +169,7 @@ function filterTasksByRoleAndDept<T extends { assigneeId?: string; id?: string; 
   return tasks;
 }
 
-function mapApiToInitiative(raw: InitiativeListItem): Initiative {
+function mapApiToInitiative(raw: InitiativeListItem & { description?: string }): Initiative {
   const goals = (raw.goals ?? []).map((g) => ({
     objective: g.goal ?? "",
     kpi: g.metric ?? "",

@@ -27,7 +27,6 @@ import {
   deleteKnowledgeEntry,
   downloadKnowledgeFile,
   listKnowledgeEntries,
-  updateKnowledgeEntryText,
   uploadKnowledgeFile,
   voteKnowledgeSolution,
   type KnowledgeEntry,
@@ -388,7 +387,7 @@ export default function KnowledgeHub() {
                         }}
                       />
                       {attachedDoc && (
-                        <Group justify="space-between" spacing="xs">
+                        <Group justify="space-between" gap="xs">
                           <Text size="xs" c="dimmed" style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
                             Attached: {attachedDoc.name}
                           </Text>
@@ -438,7 +437,7 @@ export default function KnowledgeHub() {
                         rightSectionWidth={44}
                       />
                       {attachedDoc && (
-                        <Group justify="space-between" spacing="xs">
+                        <Group justify="space-between" gap="xs">
                           <Text size="xs" c="dimmed" style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
                             Attached: {attachedDoc.name}
                           </Text>

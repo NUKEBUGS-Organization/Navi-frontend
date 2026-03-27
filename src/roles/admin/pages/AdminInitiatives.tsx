@@ -59,6 +59,13 @@ import { useForm } from "@mantine/form";
 import { THEME_BLUE, TEAL_BLUE } from "@/constants";
 import type { InitiativeFaq, InitiativeSummary, InitiativeStatus } from "@/types";
 
+function toBackendStatus(status: InitiativeStatus): CreateInitiativePayload["status"] {
+  if (status === "In Progress" || status === "Active") return "ACTIVE";
+  if (status === "Draft") return "DRAFT";
+  if (status === "Planning") return "PLANNING";
+  return status as CreateInitiativePayload["status"];
+}
+
 function parseDateRange(range: string): { start: Date; end: Date } | null {
   const r = (range ?? "").replace(/\s+/g, " ").trim();
   if (!r || r.toLowerCase() === "—") return null;
@@ -133,7 +140,6 @@ export default function AdminInitiatives() {
   const [search, setSearch] = useState("");
   const [initiatives, setInitiatives] = useState<InitiativeListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saveLoading, setSaveLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [managers, setManagers] = useState<{ name: string; id: string }[]>([]);
   const [orgDepartments, setOrgDepartments] = useState<string[]>([]);
@@ -262,13 +268,12 @@ export default function AdminInitiatives() {
     const initiative = initiatives[editIndex];
     const id = initiative?.id ?? (initiative as InitiativeListItem).id;
     if (!id) return;
-    setSaveLoading(true);
     setError(null);
     try {
       await updateInitiative(id, {
         title: data.title,
         leadName: data.leadName,
-        status: data.status,
+        status: toBackendStatus(data.status),
         dateRange: data.dateRange,
         departments: data.departments,
         progress: data.progress ?? 0,
@@ -286,20 +291,17 @@ export default function AdminInitiatives() {
       close();
     } catch (err) {
       setError((err as ApiError).message ?? "Failed to update initiative");
-    } finally {
-      setSaveLoading(false);
     }
   };
 
   const handleAdd = async (data: InitiativeSummary & { description?: string }) => {
-    setSaveLoading(true);
     setError(null);
     try {
       const payload: CreateInitiativePayload = {
         title: data.title,
         description: data.description,
         leadName: data.leadName,
-        status: user?.role === "manager" ? "WAITING_FOR_APPROVAL" : data.status,
+        status: user?.role === "manager" ? "WAITING_FOR_APPROVAL" : toBackendStatus(data.status),
         dateRange: data.dateRange,
         departments: data.departments ?? [],
         progress: data.progress ?? 0,
@@ -317,8 +319,6 @@ export default function AdminInitiatives() {
       close();
     } catch (err) {
       setError((err as ApiError).message ?? "Failed to create initiative");
-    } finally {
-      setSaveLoading(false);
     }
   };
 
@@ -396,7 +396,7 @@ export default function AdminInitiatives() {
           </Grid.Col>
         ) : (
           <>
-            {filtered.map((i, idx) => (
+            {filtered.map((i) => (
           <Grid.Col span={{ base: 12, sm: 6, md: 4 }} key={i.id}>
             <Card
               withBorder
