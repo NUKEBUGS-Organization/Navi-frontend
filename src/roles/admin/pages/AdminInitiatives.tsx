@@ -39,6 +39,7 @@ import {
 import { listOrganizationUsers } from "@/api/auth";
 import { getMyOrganization, updateMyOrganization } from "@/api/organizations";
 import { listTasks } from "@/api/tasks";
+import { listSubmissions, type AssessmentSubmission } from "@/api/assessments";
 import type { ApiError } from "@/api/client";
 import { DateInput } from "@mantine/dates";
 import { useDisclosure } from "@mantine/hooks";
@@ -130,6 +131,33 @@ function parseDateRange(range: string): { start: Date; end: Date } | null {
   };
 }
 
+function toId(x: unknown): string {
+  if (x == null) return "";
+  if (typeof x === "string") return x;
+  if (typeof x === "object" && x !== null && "toString" in x) {
+    return (x as { toString(): string }).toString();
+  }
+  return String(x);
+}
+
+/** Old create flow saved a fake "3.0/5" for every initiative; treat as no data without submissions. */
+function isPlaceholderNumericReadiness(s: string | undefined): boolean {
+  return /^\d+(\.\d+)?\s*\/\s*5$/i.test((s ?? "").trim());
+}
+
+function readinessLabelForCard(
+  initiative: InitiativeListItem,
+  avgFromSubmissions: number | undefined,
+  submissionCount: number,
+): string {
+  if (submissionCount > 0 && avgFromSubmissions != null) {
+    return `${avgFromSubmissions.toFixed(1)}/5`;
+  }
+  const stored = (initiative.readiness ?? "").trim();
+  if (!stored || isPlaceholderNumericReadiness(stored)) return "—";
+  return stored;
+}
+
 export default function AdminInitiatives() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -144,6 +172,7 @@ export default function AdminInitiatives() {
   const [managers, setManagers] = useState<{ name: string; id: string }[]>([]);
   const [orgDepartments, setOrgDepartments] = useState<string[]>([]);
   const [tasksByInitiative, setTasksByInitiative] = useState<Record<string, { total: number; completed: number }>>({});
+  const [submissions, setSubmissions] = useState<AssessmentSubmission[]>([]);
   const leadEnrollmentCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     const isDraftStatus = (s?: string) => {
@@ -175,12 +204,31 @@ export default function AdminInitiatives() {
     return out;
   }, [initiatives]);
 
+  const readinessStatsByInitiative = useMemo(() => {
+    const acc: Record<string, { sum: number; count: number; avg: number }> = {};
+    (submissions ?? []).forEach((s) => {
+      const id = toId(s.initiativeId);
+      if (!id) return;
+      if (!acc[id]) acc[id] = { sum: 0, count: 0, avg: 0 };
+      acc[id].sum += s.overallScore;
+      acc[id].count += 1;
+      acc[id].avg = acc[id].sum / acc[id].count;
+    });
+    return acc;
+  }, [submissions]);
+
   const fetchInitiatives = async () => {
     setLoading(true);
     setError(null);
     try {
       const data = await listInitiatives();
       setInitiatives(data);
+      try {
+        const subs = await listSubmissions();
+        setSubmissions(Array.isArray(subs) ? subs : []);
+      } catch {
+        setSubmissions([]);
+      }
     } catch (err) {
       setError((err as ApiError).message ?? "Failed to load initiatives");
     } finally {
@@ -396,7 +444,11 @@ export default function AdminInitiatives() {
           </Grid.Col>
         ) : (
           <>
-            {filtered.map((i) => (
+            {filtered.map((i) => {
+              const initId = String(i.id ?? "");
+              const rs = readinessStatsByInitiative[initId];
+              const readinessText = readinessLabelForCard(i, rs?.avg, rs?.count ?? 0);
+              return (
           <Grid.Col span={{ base: 12, sm: 6, md: 4 }} key={i.id}>
             <Card
               withBorder
@@ -440,7 +492,7 @@ export default function AdminInitiatives() {
                     style={{ borderRadius: "50%" }}
                   />
                   <Text fz={12} fw={700} c="dimmed">
-                    Readiness: {i.readiness}
+                    Readiness: {readinessText}
                   </Text>
                 </Group>
               </Group>
@@ -556,7 +608,8 @@ export default function AdminInitiatives() {
               </Group>
             </Card>
           </Grid.Col>
-        ))}
+              );
+            })}
         {!loading && filtered.length === 0 && (
           <Grid.Col span={12}>
             <Text c="dimmed" size="md" py="xl" ta="center">
@@ -1919,7 +1972,6 @@ function CreateInitiativeModal({
                         : "—";
                   onAdd({
                     status: "DRAFT",
-                    readiness: "3.0/5",
                     title: title || "Untitled Initiative",
                     description,
                     leadName: lead,
@@ -1978,7 +2030,6 @@ function CreateInitiativeModal({
                   };
                   onAdd({
                     status: statusMap[initialStatus],
-                    readiness: "3.0/5",
                     title,
                     description,
                     leadName: lead,

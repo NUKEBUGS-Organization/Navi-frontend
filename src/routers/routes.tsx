@@ -4,6 +4,7 @@ import { ProtectedRoute } from "@/components/auth";
 import { useAuth } from "@/contexts/AuthContext";
 import Login from "@/roles/employee/pages/Employee_login";
 import SignupLead from "@/roles/employee/pages/Signup";
+import ForgotPassword from "@/roles/employee/pages/ForgotPassword";
 import AdminDashboard from "@/roles/admin/pages/AdminDashboard";
 import AdminInitiatives from "@/roles/admin/pages/AdminInitiatives";
 import AssessmentResults from "@/roles/admin/pages/AssessmentResults";
@@ -38,6 +39,7 @@ export default function AppRoutes() {
         {/* Auth (public) */}
         <Route path={ROUTES.AUTH_LOGIN} element={<Login />} />
         <Route path={ROUTES.AUTH_SIGNUP} element={<SignupLead />} />
+        <Route path={ROUTES.AUTH_FORGOT_PASSWORD} element={<ForgotPassword />} />
         <Route path={ROUTES.EMPLOYEE_LOGIN} element={<Navigate to={ROUTES.AUTH_LOGIN} replace />} />
         <Route path={ROUTES.EMPLOYEE_SIGNUP} element={<Navigate to={ROUTES.AUTH_SIGNUP} replace />} />
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import AdminLayout from "@/roles/admin/layout/AdminLayout";
 import {
   Box,
@@ -12,20 +13,32 @@ import {
   Avatar,
   Stack,
   TextInput,
+  PasswordInput,
   Grid,
   Divider,
   ActionIcon,
   Center,
+  Progress,
+  Loader,
+  Paper,
+  ScrollArea,
 } from "@mantine/core";
 import {
   IconCamera,
   IconUser,
   IconLock,
+  IconStar,
 } from "@tabler/icons-react";
 import { THEME_BLUE, TEAL_BLUE } from "@/constants";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAppRoutes } from "@/hooks/useAppRoutes";
 import { getMyOrganization } from "@/api/organizations";
 import type { MyOrganization } from "@/api/organizations";
+import { getKudosSummary, type KudosSummary } from "@/api/kudos";
+import {
+  listMyInitiativeParticipations,
+  type MyInitiativeParticipation,
+} from "@/api/initiatives";
 
 function getInitials(name: string | undefined): string {
   if (!name?.trim()) return "?";
@@ -39,14 +52,51 @@ function formatRole(role: string | undefined): string {
   return role.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function roleLabel(r: MyInitiativeParticipation["roles"][number]): string {
+  if (r === "lead") return "Change lead";
+  if (r === "raci") return "RACI";
+  return "Assigned tasks";
+}
+
+function roleBadgeColor(r: MyInitiativeParticipation["roles"][number]): string {
+  if (r === "lead") return "teal";
+  if (r === "raci") return "blue";
+  return "gray";
+}
+
 export default function AdminSettings() {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const appRoutes = useAppRoutes();
   const [org, setOrg] = useState<MyOrganization | null>(null);
+  const [kudos, setKudos] = useState<KudosSummary | null>(null);
+  const [participations, setParticipations] = useState<MyInitiativeParticipation[]>([]);
+  const [profileExtrasLoading, setProfileExtrasLoading] = useState(true);
 
   useEffect(() => {
     getMyOrganization()
       .then(setOrg)
       .catch(() => setOrg(null));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setProfileExtrasLoading(true);
+    Promise.all([
+      getKudosSummary().catch(() => null),
+      listMyInitiativeParticipations().catch(() => []),
+    ])
+      .then(([k, parts]) => {
+        if (cancelled) return;
+        setKudos(k);
+        setParticipations(Array.isArray(parts) ? parts : []);
+      })
+      .finally(() => {
+        if (!cancelled) setProfileExtrasLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const nameParts = user?.name?.trim()?.split(/\s+/) ?? [];
@@ -138,6 +188,33 @@ export default function AdminSettings() {
                     {departmentsDisplay}
                   </Text>
                 </Box>
+
+                <Divider color="#f1f3f5" />
+
+                <Box ta="left" style={{ width: "100%" }}>
+                  <Group gap={8} mb={8}>
+                    <IconStar size={18} color={TEAL_BLUE} fill={TEAL_BLUE} />
+                    <Text fz={10} fw={800} c="dimmed" lts={1}>
+                      KUDOS STARS
+                    </Text>
+                  </Group>
+                  {profileExtrasLoading ? (
+                    <Loader size="sm" />
+                  ) : (
+                    <>
+                      <Text fz={rem(32)} fw={800} c={THEME_BLUE} lh={1.1}>
+                        {kudos?.totalStars ?? 0}
+                      </Text>
+                      <Text fz="xs" c="dimmed" mt={6}>
+                        System {kudos?.systemStars ?? 0} · Manager {kudos?.managerStars ?? 0}
+                      </Text>
+                      <Text fz="xs" c="dimmed" mt={8} style={{ lineHeight: 1.45 }}>
+                        Stars are earned when you complete roadmap tasks, add comments, or submit
+                        assessments on initiatives.
+                      </Text>
+                    </>
+                  )}
+                </Box>
               </Stack>
 
               <Button
@@ -188,6 +265,71 @@ export default function AdminSettings() {
               <Card withBorder radius="lg" p={0} shadow="xs">
                 <Box p="xl">
                   <Group gap="sm" mb="xl">
+                    <IconStar size={22} color={TEAL_BLUE} stroke={2.5} />
+                    <Title order={4} fw={800}>
+                      Your initiatives
+                    </Title>
+                  </Group>
+                  <Divider mb="xl" color="#f1f3f5" />
+                  {profileExtrasLoading ? (
+                    <Center py="xl">
+                      <Loader />
+                    </Center>
+                  ) : participations.length === 0 ? (
+                    <Text fz="sm" c="dimmed">
+                      You are not linked to any initiatives yet. You will appear here when you are
+                      the change lead, listed on RACI, or assigned to roadmap tasks.
+                    </Text>
+                  ) : (
+                    <ScrollArea.Autosize mah={380} offsetScrollbars>
+                      <Stack gap="md">
+                        {participations.map((p) => (
+                          <Paper
+                            key={p.id}
+                            withBorder
+                            p="md"
+                            radius="md"
+                            style={{ cursor: "pointer" }}
+                            onClick={() => navigate(appRoutes.INITIATIVE_DETAIL(p.id))}
+                          >
+                            <Group justify="space-between" align="flex-start" wrap="nowrap" gap="md">
+                              <Box style={{ minWidth: 0, flex: 1 }}>
+                                <Text fw={700} size="sm" lineClamp={2}>
+                                  {p.title}
+                                </Text>
+                                <Group gap={6} mt={8} wrap="wrap">
+                                  {p.roles.map((r) => (
+                                    <Badge
+                                      key={r}
+                                      size="xs"
+                                      variant="light"
+                                      color={roleBadgeColor(r)}
+                                      tt="none"
+                                    >
+                                      {roleLabel(r)}
+                                    </Badge>
+                                  ))}
+                                  <Badge size="xs" variant="outline" color="gray" tt="none">
+                                    {p.status}
+                                  </Badge>
+                                </Group>
+                              </Box>
+                              <Text fz="sm" fw={800} c="dimmed" style={{ flexShrink: 0 }}>
+                                {p.progress}%
+                              </Text>
+                            </Group>
+                            <Progress value={p.progress} size={4} mt={10} color={THEME_BLUE} radius="xl" />
+                          </Paper>
+                        ))}
+                      </Stack>
+                    </ScrollArea.Autosize>
+                  )}
+                </Box>
+              </Card>
+
+              <Card withBorder radius="lg" p={0} shadow="xs">
+                <Box p="xl">
+                  <Group gap="sm" mb="xl">
                     <IconLock size={22} color={TEAL_BLUE} stroke={2.5} />
                     <Title order={4} fw={800}>
                       Security & Password
@@ -196,15 +338,17 @@ export default function AdminSettings() {
                   <Divider mb="xl" color="#f1f3f5" />
                   <Grid gutter="xl">
                     <Grid.Col span={6}>
-                      <SettingInput
+                      <SettingPasswordInput
                         label="CURRENT PASSWORD"
-                        defaultValue="********"
+                        placeholder="Enter current password"
+                        ariaLabelToggle="Show or hide current password"
                       />
                     </Grid.Col>
                     <Grid.Col span={6}>
-                      <SettingInput
+                      <SettingPasswordInput
                         label="NEW PASSWORD"
                         placeholder="Enter new password"
+                        ariaLabelToggle="Show or hide new password"
                       />
                     </Grid.Col>
                   </Grid>
@@ -264,6 +408,33 @@ function SettingInput({
       placeholder={placeholder}
       radius="md"
       size="md"
+      styles={{
+        input: { backgroundColor: "#f8f9fa" },
+      }}
+    />
+  );
+}
+
+function SettingPasswordInput({
+  label,
+  placeholder,
+  ariaLabelToggle,
+}: {
+  label: string;
+  placeholder?: string;
+  ariaLabelToggle: string;
+}) {
+  return (
+    <PasswordInput
+      label={
+        <Text fw={800} fz={10} c="dimmed" lts={1} mb={8}>
+          {label}
+        </Text>
+      }
+      placeholder={placeholder}
+      radius="md"
+      size="md"
+      visibilityToggleButtonProps={{ "aria-label": ariaLabelToggle }}
       styles={{
         input: { backgroundColor: "#f8f9fa" },
       }}

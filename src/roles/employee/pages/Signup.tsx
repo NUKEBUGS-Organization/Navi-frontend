@@ -9,15 +9,63 @@ import {
   SimpleGrid,
   Image,
   Divider,
-  Input,
   ScrollArea,
+  TextInput,
 } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
+import { useState } from "react";
 import { ROUTES, THEME_BLUE } from "@/constants";
-import logo from "@/assets/vite.svg";
+import logo from "@/assets/navi-logo.jpeg";
+import { submitOrganizationSignupRequest } from "@/api/organizations";
 
 const Signup = () => {
   const isMobile = useMediaQuery("(max-width: 768px)");
+  const [organizationName, setOrganizationName] = useState("");
+  const [organizationContact, setOrganizationContact] = useState("");
+  const [email, setEmail] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [city, setCity] = useState("");
+  const [country, setCountry] = useState("");
+  const [industry, setIndustry] = useState("");
+  const [employeeCount, setEmployeeCount] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async () => {
+    setError(null);
+    setMessage(null);
+    if (!organizationName.trim() || !organizationContact.trim() || !email.trim()) {
+      setError("Organization name, contact name, and email are required.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await submitOrganizationSignupRequest({
+        organizationName: organizationName.trim(),
+        organizationContact: organizationContact.trim(),
+        email: email.trim(),
+        phoneNumber: phoneNumber.trim() || undefined,
+        city: city.trim() || undefined,
+        country: country.trim() || undefined,
+        industry: industry.trim() || undefined,
+        employeeCount: employeeCount.trim() || undefined,
+      });
+      setMessage(res.message ?? "Thanks — our team will review your request.");
+      setOrganizationName("");
+      setOrganizationContact("");
+      setEmail("");
+      setPhoneNumber("");
+      setCity("");
+      setCountry("");
+      setIndustry("");
+      setEmployeeCount("");
+    } catch (e) {
+      setError((e as { message?: string }).message ?? "Something went wrong. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <Box w="100vw" h="100vh" style={{ overflow: "hidden" }}>
@@ -43,13 +91,13 @@ const Signup = () => {
               h={isMobile ? "72px" : "100px"}
               w={isMobile ? "72px" : "100px"}
               radius="50%"
-            ></Image>
+            />
 
             <Text
               c="white"
               mr={"10px"}
               size={isMobile ? "16px" : "20px"}
-              ff="Inter"
+              ff="'Montserrat', sans-serif"
               lh="28px"
             >
               Your Change Navigator.
@@ -70,70 +118,96 @@ const Signup = () => {
               Tell us about your organization
             </Title>
             <Text c="#64748B" size={isMobile ? "xs" : "sm"} ta="center">
-              Submit your details and our team will review and set up your
-              workspace.
+              Submit your details and our team will review and set up your workspace.
             </Text>
             <Divider
               w={isMobile ? "100%" : "440px"}
               mt={"30px"}
               c={"#E2E8F0"}
               size={"sm"}
-            ></Divider>
+            />
+            {message && (
+              <Text c="teal.7" size="sm" mt="md" maw={440} ta="center">
+                {message}
+              </Text>
+            )}
+            {error && (
+              <Text c="red.7" size="sm" mt="md" maw={440} ta="center">
+                {error}
+              </Text>
+            )}
             <Stack mt={"25px"} gap={0} w={isMobile ? "100%" : "440px"}>
               <Text c={"#0F2B5C"}>Organization Name</Text>
-              <Input
+              <TextInput
                 placeholder="Enter organization name"
+                value={organizationName}
+                onChange={(e) => setOrganizationName(e.currentTarget.value)}
                 styles={{ input: { height: "49px" } }}
-              ></Input>
+              />
             </Stack>
             <Stack mt={"25px"} gap={0} w={isMobile ? "100%" : "440px"}>
               <Text c={"#0F2B5C"}>Organization Contact</Text>
-              <Input
+              <TextInput
                 placeholder="Enter primary contact name"
+                value={organizationContact}
+                onChange={(e) => setOrganizationContact(e.currentTarget.value)}
                 styles={{ input: { height: "49px" } }}
-              ></Input>
+              />
             </Stack>
             <Stack mt={"25px"} gap={0} w={isMobile ? "100%" : "440px"}>
               <Text c={"#0F2B5C"}>Email</Text>
-              <Input
-                placeholder="Please Enter your Email"
+              <TextInput
+                type="email"
+                placeholder="Please enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.currentTarget.value)}
                 styles={{ input: { height: "49px" } }}
-              ></Input>
+              />
             </Stack>
             <Stack mt={"25px"} gap={0} w={isMobile ? "100%" : "440px"}>
               <Text c={"#0F2B5C"}>Phone Number</Text>
-              <Input
+              <TextInput
                 placeholder="Enter phone number"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.currentTarget.value)}
                 styles={{ input: { height: "49px" } }}
-              ></Input>
+              />
             </Stack>
             <Stack mt={"25px"} gap={0} w={isMobile ? "100%" : "440px"}>
               <Text c={"#0F2B5C"}>City</Text>
-              <Input
+              <TextInput
                 placeholder="Enter city"
+                value={city}
+                onChange={(e) => setCity(e.currentTarget.value)}
                 styles={{ input: { height: "49px" } }}
-              ></Input>
+              />
             </Stack>
             <Stack mt={"25px"} gap={0} w={isMobile ? "100%" : "440px"}>
               <Text c={"#0F2B5C"}>Country</Text>
-              <Input
+              <TextInput
                 placeholder="Enter country"
+                value={country}
+                onChange={(e) => setCountry(e.currentTarget.value)}
                 styles={{ input: { height: "49px" } }}
-              ></Input>
+              />
             </Stack>
             <Stack mt={"25px"} gap={0} w={isMobile ? "100%" : "440px"}>
               <Text c={"#0F2B5C"}>Industry</Text>
-              <Input
+              <TextInput
                 placeholder="Enter industry"
+                value={industry}
+                onChange={(e) => setIndustry(e.currentTarget.value)}
                 styles={{ input: { height: "49px" } }}
-              ></Input>
+              />
             </Stack>
             <Stack mt={"25px"} gap={0} w={isMobile ? "100%" : "440px"}>
               <Text c={"#0F2B5C"}>Number of Employees</Text>
-              <Input
+              <TextInput
                 placeholder="Enter number of employees"
+                value={employeeCount}
+                onChange={(e) => setEmployeeCount(e.currentTarget.value)}
                 styles={{ input: { height: "49px" } }}
-              ></Input>
+              />
             </Stack>
 
             <Button
@@ -142,6 +216,8 @@ const Signup = () => {
               bg="#00A99D"
               c="white"
               h={"50px"}
+              loading={submitting}
+              onClick={handleSubmit}
             >
               Sign Up
             </Button>

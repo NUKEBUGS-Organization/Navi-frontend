@@ -204,17 +204,15 @@ export default function KnowledgeHub() {
     }
 
     const link = linkUrl.trim();
-    if (!link) {
+    const desc = linkDescription.trim();
+    if (!link || !desc) {
       setSubmittingText(false);
       return;
     }
-    const desc = linkDescription.trim();
     setSubmittingText(true);
     setError(null);
     try {
-      const payload = desc
-        ? `Link:\n${link}\n\nDescription:\n${desc}`
-        : `Link:\n${link}`;
+      const payload = `Link:\n${link}\n\nDescription:\n${desc}`;
       await contributeKnowledgeText(selectedId, payload);
       if (attachedDoc) {
         setUploading(true);
@@ -413,11 +411,13 @@ export default function KnowledgeHub() {
                         required
                       />
                       <Textarea
-                        label="Description (optional)"
+                        label="Description"
+                        description="Required — explain why this link is useful for the initiative."
                         placeholder="Add context for why this link is relevant…"
                         minRows={3}
                         value={linkDescription}
                         onChange={(e) => setLinkDescription(e.currentTarget.value)}
+                        required
                         rightSection={
                           canUploadFiles ? (
                             <ActionIcon
@@ -461,7 +461,7 @@ export default function KnowledgeHub() {
                       disabled={
                         contributionMode === "text"
                           ? !problemText.trim() || !solutionText.trim() || uploading
-                          : !linkUrl.trim() || uploading
+                          : !linkUrl.trim() || !linkDescription.trim() || uploading
                       }
                       bg={THEME_BLUE}
                       c="white"

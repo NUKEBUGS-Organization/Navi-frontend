@@ -81,3 +81,20 @@ export function createOrganization(
 ): Promise<CreateOrganizationResponse> {
   return api.post<CreateOrganizationResponse>("/organizations", payload);
 }
+
+export interface OrganizationSignupRequestPayload {
+  organizationName: string;
+  organizationContact: string;
+  email: string;
+  phoneNumber?: string;
+  city?: string;
+  country?: string;
+  industry?: string;
+  employeeCount?: string;
+}
+
+export function submitOrganizationSignupRequest(
+  payload: OrganizationSignupRequestPayload
+): Promise<{ notified: boolean; message: string }> {
+  return api.post("/organizations/signup-request", payload);
+}

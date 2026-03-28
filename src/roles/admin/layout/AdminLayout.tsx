@@ -76,7 +76,7 @@ export default function AdminLayout({
               alt="Navi"
               style={{ height: 28, borderRadius: 6 }}
             />
-            <Text fw={700} c="white">
+            <Text fw={700} c="white" ff="'Montserrat', sans-serif" lts={0.6}>
               NAVI
             </Text>
           </Group>
@@ -106,7 +106,8 @@ export default function AdminLayout({
               fw={700}
               size="xl"
               c="white"
-              lts={0.5}
+              ff="'Montserrat', sans-serif"
+              lts={0.6}
               style={{ lineHeight: 1 }}
             >
               NAVI

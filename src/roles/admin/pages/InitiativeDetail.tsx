@@ -26,6 +26,7 @@ import {
   MultiSelect,
   Accordion,
   ActionIcon,
+  Switch,
 } from "@mantine/core";
 
 import { useDisclosure } from "@mantine/hooks";
@@ -55,6 +56,7 @@ import { getMyOrganization, updateMyOrganization } from "@/api/organizations";
 import { listAssessmentsByInitiative, listSubmissions, type Assessment, type AssessmentSubmission } from "@/api/assessments";
 import { listTasks, type TaskDto } from "@/api/tasks";
 import { getInitiativeActivity, type ActivityItem } from "@/api/activity";
+import { listAdoption, type AdoptionDto } from "@/api/adoption";
 
 interface Initiative {
   id: string;
@@ -83,6 +85,8 @@ interface Initiative {
     status: "completed" | "current" | "upcoming";
   }[];
   faqs: { question: string; answer: string }[];
+  /** False when adoption tracking is discontinued for this initiative (milestones remain stored). */
+  adoptionTrackingEnabled: boolean;
 }
 
 /** Map audience value to display label and which roles can take the assessment. */
@@ -213,6 +217,8 @@ function mapApiToInitiative(raw: InitiativeListItem & { description?: string }):
       { label: "UPCOMING", title: "Initiative started", date: "—", status: "upcoming" as const },
     ],
     faqs,
+    adoptionTrackingEnabled:
+      (raw as { adoptionTrackingEnabled?: boolean }).adoptionTrackingEnabled !== false,
   };
 }
 
@@ -238,6 +244,10 @@ export default function InitiativeDetail() {
   const [activityList, setActivityList] = useState<ActivityItem[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
   const [orgInitiatives, setOrgInitiatives] = useState<InitiativeListItem[]>([]);
+  const [employeeAdoptions, setEmployeeAdoptions] = useState<AdoptionDto[]>([]);
+  const [employeeAdoptionsLoading, setEmployeeAdoptionsLoading] = useState(false);
+  const [adoptStopping, setAdoptStopping] = useState(false);
+  const [adoptStopOpened, { open: openAdoptStop, close: closeAdoptStop }] = useDisclosure(false);
 
   const handleAddDepartment = useCallback(
     async (newDept: string) => {
@@ -330,6 +340,24 @@ export default function InitiativeDetail() {
     }
     return out;
   }, [orgInitiatives]);
+
+  const canToggleAdoptionTracking = useMemo(() => {
+    if (user?.role === "admin") return true;
+    if (user?.role !== "manager" || !initiative) return false;
+    return (
+      String(user.name ?? "").trim().toLowerCase() ===
+      String(initiative.lead ?? "").trim().toLowerCase()
+    );
+  }, [user?.role, user?.name, initiative?.lead]);
+
+  const refreshActivity = useCallback(async (initiativeId: string) => {
+    try {
+      const list = await getInitiativeActivity(initiativeId);
+      setActivityList(Array.isArray(list) ? list : []);
+    } catch {
+      setActivityList([]);
+    }
+  }, []);
 
   useEffect(() => {
     if (!id) {
@@ -441,6 +469,29 @@ export default function InitiativeDetail() {
       cancelled = true;
     };
   }, [initiative?.id]);
+
+  useEffect(() => {
+    if (!initiative?.id || user?.role !== "employee" || !initiative.adoptionTrackingEnabled) {
+      setEmployeeAdoptions([]);
+      setEmployeeAdoptionsLoading(false);
+      return;
+    }
+    setEmployeeAdoptionsLoading(true);
+    let cancelled = false;
+    listAdoption(initiative.id)
+      .then((list) => {
+        if (!cancelled) setEmployeeAdoptions(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {
+        if (!cancelled) setEmployeeAdoptions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setEmployeeAdoptionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [initiative?.id, initiative?.adoptionTrackingEnabled, user?.role]);
 
   const quickStatsTasks = useMemo(() => {
     const all = roadmapTasks;
@@ -629,6 +680,11 @@ export default function InitiativeDetail() {
           <Tabs.Tab value="assessment" fw={700}>
             Assessment
           </Tabs.Tab>
+          {user?.role === "employee" && initiative.adoptionTrackingEnabled ? (
+            <Tabs.Tab value="adoption" fw={700}>
+              Adoption
+            </Tabs.Tab>
+          ) : null}
           <Tabs.Tab value="activity" fw={700}>
             Activity
           </Tabs.Tab>
@@ -820,6 +876,34 @@ export default function InitiativeDetail() {
                         {quickStatsTasks.done} / {quickStatsTasks.total}
                       </Text>
                     </Box>
+                    {canToggleAdoptionTracking ? (
+                      <Box pt={4}>
+                        <Text fz="xs" fw={700} c="dimmed" mb={6}>
+                          Adoption tracking
+                        </Text>
+                        <Switch
+                          checked={initiative.adoptionTrackingEnabled}
+                          onChange={(e) => {
+                            const on = e.currentTarget.checked;
+                            if (on) {
+                              updateInitiative(initiative.id, { adoptionTrackingEnabled: true })
+                                .then((data) => {
+                                  setInitiative(mapApiToInitiative(data));
+                                  return refreshActivity(initiative.id);
+                                })
+                                .catch(() => {});
+                            } else {
+                              openAdoptStop();
+                            }
+                          }}
+                          label="Milestones affect initiative progress"
+                          size="sm"
+                        />
+                        <Text fz="xs" c="dimmed" mt={6}>
+                          Turn off to keep saved milestones but revert progress to tasks only.
+                        </Text>
+                      </Box>
+                    ) : null}
                   </Stack>
                 </Paper>
 
@@ -1134,6 +1218,57 @@ export default function InitiativeDetail() {
             )}
           </Card>
         </Tabs.Panel>
+        {user?.role === "employee" && initiative.adoptionTrackingEnabled ? (
+          <Tabs.Panel value="adoption" pt="xl">
+            <Card withBorder radius="lg" p="xl" shadow="xs">
+              <Title order={4} fw={800} mb="md" c={NAVY}>
+                Adoption tracking
+              </Title>
+              <Text fz="sm" c="dimmed" mb="lg">
+                Milestones your organization shares with employees for this initiative.
+              </Text>
+              {employeeAdoptionsLoading ? (
+                <Text size="sm" c="dimmed">
+                  Loading…
+                </Text>
+              ) : employeeAdoptions.length === 0 ? (
+                <Text size="sm" c="dimmed">
+                  No adoption milestones are visible to employees yet.
+                </Text>
+              ) : (
+                <Table withTableBorder withColumnBorders striped>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th fw={700} fz="xs" c="dimmed">
+                        Milestone
+                      </Table.Th>
+                      <Table.Th fw={700} fz="xs" c="dimmed">
+                        Progress
+                      </Table.Th>
+                      <Table.Th fw={700} fz="xs" c="dimmed">
+                        Status
+                      </Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {employeeAdoptions.map((row) => (
+                      <Table.Tr key={row._id}>
+                        <Table.Td fw={600}>{row.milestone}</Table.Td>
+                        <Table.Td>
+                          <Group gap="xs">
+                            <Progress value={row.percentAdopted ?? 0} size="sm" w={100} radius="xl" />
+                            <Text size="sm">{row.percentAdopted ?? 0}%</Text>
+                          </Group>
+                        </Table.Td>
+                        <Table.Td>{row.status ?? "—"}</Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              )}
+            </Card>
+          </Tabs.Panel>
+        ) : null}
         <Tabs.Panel value="activity" pt="xl">
           <Card withBorder radius="lg" p="xl" shadow="xs">
             <Title order={4} fw={800} mb="md" c={NAVY}>
@@ -1141,7 +1276,9 @@ export default function InitiativeDetail() {
             </Title>
             <Text fz="sm" c="dimmed" mb="lg">
               {user?.role === "employee"
-                ? "Your tasks, comments, and adoption milestones for this initiative."
+                ? initiative.adoptionTrackingEnabled
+                  ? "Your tasks, comments, and adoption milestones shared with employees for this initiative."
+                  : "Your tasks and comments for this initiative."
                 : "Tasks, comments, and adoption milestones for this initiative. Visible to everyone in your organization."}
             </Text>
             {activityLoading ? (
@@ -1235,6 +1372,41 @@ export default function InitiativeDetail() {
           </Card>
         </Tabs.Panel>
       </Tabs>
+
+      <Modal
+        opened={adoptStopOpened}
+        onClose={closeAdoptStop}
+        title="Discontinue adoption tracking?"
+        centered
+        radius="lg"
+      >
+        <Text size="sm" c="dimmed" mb="md">
+          Milestones stay in the system, but they no longer count toward this initiative’s overall progress until you turn tracking back on. Employees will not see adoption milestones for this initiative while it is off.
+        </Text>
+        <Group justify="flex-end" gap="sm">
+          <Button variant="default" onClick={closeAdoptStop}>
+            Cancel
+          </Button>
+          <Button
+            color="orange"
+            loading={adoptStopping}
+            onClick={() => {
+              if (!initiative) return;
+              setAdoptStopping(true);
+              updateInitiative(initiative.id, { adoptionTrackingEnabled: false })
+                .then((data) => {
+                  setInitiative(mapApiToInitiative(data));
+                  closeAdoptStop();
+                  return refreshActivity(initiative.id);
+                })
+                .catch(() => {})
+                .finally(() => setAdoptStopping(false));
+            }}
+          >
+            Discontinue
+          </Button>
+        </Group>
+      </Modal>
 
       <EditInitiativeModal
         opened={editOpened}

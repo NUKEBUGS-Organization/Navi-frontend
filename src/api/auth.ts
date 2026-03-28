@@ -69,6 +69,65 @@ export function login(email: string, password: string): Promise<LoginResponse> {
     });
 }
 
+function parseAuthErrorMessage(data: unknown, fallback: string): string {
+  const d = data as { message?: string | string[] };
+  if (Array.isArray(d.message)) return d.message.join(", ");
+  if (typeof d.message === "string") return d.message;
+  return fallback;
+}
+
+export function requestPasswordReset(email: string): Promise<{ message: string }> {
+  const url = `${API_BASE}/auth/forgot-password`;
+  return fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: email.trim().toLowerCase() }),
+    credentials: "omit",
+  }).then(async (res) => {
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(parseAuthErrorMessage(data, res.statusText || "Request failed."));
+    }
+    return data as { message: string };
+  })
+    .catch((err) => {
+      if (err instanceof TypeError && err.message === "Failed to fetch") {
+        throw new Error("Cannot reach server. Is the backend running at " + API_BASE + "?");
+      }
+      throw err;
+    });
+}
+
+export function resetPasswordWithOtp(
+  email: string,
+  otp: string,
+  newPassword: string
+): Promise<{ message: string }> {
+  const url = `${API_BASE}/auth/reset-password`;
+  return fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email: email.trim().toLowerCase(),
+      otp: otp.trim(),
+      newPassword,
+    }),
+    credentials: "omit",
+  }).then(async (res) => {
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(parseAuthErrorMessage(data, res.statusText || "Request failed."));
+    }
+    return data as { message: string };
+  })
+    .catch((err) => {
+      if (err instanceof TypeError && err.message === "Failed to fetch") {
+        throw new Error("Cannot reach server. Is the backend running at " + API_BASE + "?");
+      }
+      throw err;
+    });
+}
+
 export function getMe(): Promise<AuthUser> {
   return api.get<AuthUser>("/auth/me");
 }

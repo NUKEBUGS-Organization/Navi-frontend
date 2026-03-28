@@ -33,6 +33,8 @@ export interface CreateInitiativePayload {
   raciResponsibleIds?: string[];
   raciConsultedIds?: string[];
   raciInformedIds?: string[];
+  /** When false, milestones stay in the system but no longer affect initiative progress. */
+  adoptionTrackingEnabled?: boolean;
 }
 
 export function listInitiatives(): Promise<InitiativeListItem[]> {
@@ -62,4 +64,20 @@ export function updateInitiative(
   return api
     .patch<unknown>(`/initiatives/${id}`, payload)
     .then((raw) => mapInitiative(raw as { _id: string }) as InitiativeListItem);
+}
+
+export type InitiativeParticipationRole = "lead" | "raci" | "assignee";
+
+export interface MyInitiativeParticipation {
+  id: string;
+  title: string;
+  status: string;
+  progress: number;
+  leadName: string;
+  roles: InitiativeParticipationRole[];
+}
+
+/** Initiatives where the current user is lead, on RACI, or has assigned tasks. */
+export function listMyInitiativeParticipations(): Promise<MyInitiativeParticipation[]> {
+  return api.get<MyInitiativeParticipation[]>("/initiatives/me/participations");
 }

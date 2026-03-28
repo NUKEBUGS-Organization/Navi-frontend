@@ -55,7 +55,7 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
               alt="Navi"
               style={{ height: 28, borderRadius: 6 }}
             />
-            <Text fw={700} c="white">
+            <Text fw={700} c="white" ff="'Montserrat', sans-serif" lts={0.5}>
               NAVI Super Admin
             </Text>
           </Group>

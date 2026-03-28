@@ -17,7 +17,7 @@ import {
 import { useMediaQuery } from "@mantine/hooks";
 import { ROUTES, THEME_BLUE, getAppDashboardRoute } from "@/constants";
 import logo from "@/assets/navi-logo.jpeg";
-import { useNavigate, Navigate } from "react-router-dom";
+import { useNavigate, Navigate, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { login as apiLogin } from "@/api/auth";
 import type { ApiError } from "@/api/client";
@@ -97,7 +97,7 @@ const EmployeeLogin = () => {
               c="white"
               mr={"10px"}
               size={isMobile ? "16px" : "20px"}
-              ff="Inter"
+              ff="'Montserrat', sans-serif"
               lh="28px"
             >
               Your Change Navigator.
@@ -161,7 +161,9 @@ const EmployeeLogin = () => {
                   checked={remember}
                   onChange={(e) => setRemember(e.currentTarget.checked)}
                 />
-                <Anchor>Forgot Password?</Anchor>
+                <Anchor component={Link} to={ROUTES.AUTH_FORGOT_PASSWORD} fw={600}>
+                  Forgot Password?
+                </Anchor>
               </Group>
               <Button
                 type="submit"

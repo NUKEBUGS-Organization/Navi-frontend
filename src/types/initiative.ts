@@ -43,4 +43,5 @@ export interface InitiativeSummary {
   raciResponsibleIds?: string[];
   raciConsultedIds?: string[];
   raciInformedIds?: string[];
+  adoptionTrackingEnabled?: boolean;
 }

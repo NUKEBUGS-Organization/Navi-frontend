@@ -785,7 +785,7 @@ function InviteUserModal({
         </Box>
       </form>
       <Center pb="md">
-        <Text fz={9} fw={800} c="gray.4" lts={1.5}>
+        <Text fz={9} fw={800} c="gray.4" lts={1.5} ff="'Montserrat', sans-serif">
           POWERED BY NAVI
         </Text>
       </Center>

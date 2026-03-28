@@ -25,6 +25,7 @@ export const ROUTES = {
   // Auth
   AUTH_LOGIN: "/login",
   AUTH_SIGNUP: "/signup",
+  AUTH_FORGOT_PASSWORD: "/forgot-password",
 
   // Legacy employee paths (optional aliases)
   EMPLOYEE_LOGIN: "/employee/login",

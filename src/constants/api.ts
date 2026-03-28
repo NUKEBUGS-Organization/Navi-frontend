@@ -1,6 +1,13 @@
-export const API_BASE =
-  (typeof import.meta !== "undefined" && (import.meta as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL) ||
-  "https://navi-backend-bmr3.onrender.com";
+function normalizeApiBase(raw: string | undefined): string {
+  const s = (raw ?? "").trim().replace(/\/+$/, "");
+  return s || "http://localhost:3000";
+}
+
+export const API_BASE = normalizeApiBase(
+  typeof import.meta !== "undefined"
+    ? (import.meta as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL
+    : undefined,
+);
 
 export function getAuthToken(): string | null {
   return localStorage.getItem("navi_token");
