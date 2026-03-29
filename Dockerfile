@@ -1,11 +1,11 @@
-# NAVI web app — CapRover: set build argument VITE_API_URL to your public API base (no trailing slash).
+# NAVI web app — API URL comes from .env.production in the repo (or override: docker build --build-arg VITE_API_URL=...).
 FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
+# Optional CapRover build arg; if unset, Vite uses `.env.production` from the repo.
 ARG VITE_API_URL
-ENV VITE_API_URL=${VITE_API_URL}
 RUN npm run build
 
 FROM nginx:1.27-alpine
