@@ -21,7 +21,7 @@ function resolveApiBase(): string {
 
   if (typeof window !== "undefined") {
     const host = window.location.hostname;
-    if (host === "navi-frontend.changewithnavi.com") {
+    if (host === "app.changewithnavi.com") {
       return DEFAULT_PROD_API;
     }
   }
