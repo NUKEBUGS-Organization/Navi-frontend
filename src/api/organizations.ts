@@ -27,6 +27,8 @@ export interface CreateOrganizationPayload {
   industry?: string;
   employeeCount?: number;
   departments?: string[];
+  /** Marks a public signup lead as converted after org is created. */
+  sourceLeadId?: string;
 }
 
 export interface CreateOrganizationResponse {
@@ -97,4 +99,26 @@ export function submitOrganizationSignupRequest(
   payload: OrganizationSignupRequestPayload
 ): Promise<{ notified: boolean; message: string }> {
   return api.post("/organizations/signup-request", payload);
+}
+
+export interface OrganizationSignupLead {
+  id: string;
+  organizationName: string;
+  organizationContact: string;
+  email: string;
+  phoneNumber?: string;
+  city?: string;
+  country?: string;
+  industry?: string;
+  employeeCount?: string;
+  status: string;
+  createdAt: string;
+}
+
+export function listSignupLeads(): Promise<OrganizationSignupLead[]> {
+  return api.get<OrganizationSignupLead[]>("/organizations/signup-leads");
+}
+
+export function getSignupLead(leadId: string): Promise<OrganizationSignupLead> {
+  return api.get<OrganizationSignupLead>(`/organizations/signup-leads/${leadId}`);
 }

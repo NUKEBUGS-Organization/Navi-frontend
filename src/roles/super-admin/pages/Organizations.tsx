@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import SuperAdminLayout from "@/roles/super-admin/layout/SuperAdminLayout";
 import { PageHeader } from "@/components";
 import {
@@ -17,22 +18,26 @@ import {
 } from "@mantine/core";
 import { IconPlus, IconSearch, IconTrash } from "@tabler/icons-react";
 import { useForm } from "@mantine/form";
-import { THEME_BLUE } from "@/constants";
+import { ROUTES, THEME_BLUE } from "@/constants";
 import {
   listOrganizations,
   createOrganization,
+  getSignupLead,
   type OrganizationListItem,
   type CreateOrganizationPayload,
 } from "@/api/organizations";
 import type { ApiError } from "@/api/client";
 
 export default function Organizations() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [orgs, setOrgs] = useState<OrganizationListItem[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [createLoading, setCreateLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sourceLeadId, setSourceLeadId] = useState<string | null>(null);
 
   const createForm = useForm<CreateOrganizationPayload>({
     initialValues: {
@@ -51,8 +56,7 @@ export default function Organizations() {
     validate: {
       organizationName: (v) => (!v ? "Organization name is required" : null),
       organizationOwner: (v) => (!v ? "Owner is required" : null),
-      organizationEmail: (v) => (!v ? "Email is required" : null),
-      adminEmail: (v) => (!v ? "Admin email is required" : null),
+      organizationEmail: (v) => (!v ? "Organization & admin email is required" : null),
       adminPassword: (v) => (!v ? "Admin password is required" : null),
     },
   });
@@ -74,6 +78,43 @@ export default function Organizations() {
     fetchOrgs();
   }, []);
 
+  const leadIdParam = searchParams.get("leadId");
+  useEffect(() => {
+    if (!leadIdParam) return;
+    let cancelled = false;
+    getSignupLead(leadIdParam)
+      .then((lead) => {
+        if (cancelled) return;
+        const ec = parseInt(lead.employeeCount ?? "", 10);
+        createForm.setValues({
+          organizationName: lead.organizationName,
+          organizationOwner: lead.organizationContact,
+          organizationEmail: lead.email,
+          adminEmail: lead.email,
+          phoneNumber: lead.phoneNumber ?? "",
+          adminPassword: "",
+          city: lead.city ?? "",
+          country: lead.country ?? "",
+          industry: lead.industry ?? "",
+          employeeCount: Number.isNaN(ec) ? 0 : ec,
+          departments: [""],
+        });
+        setSourceLeadId(lead.id);
+        setCreateOpen(true);
+        const next = new URLSearchParams(searchParams);
+        next.delete("leadId");
+        setSearchParams(next, { replace: true });
+      })
+      .catch(() => {
+        setError("Could not load signup lead.");
+        navigate(ROUTES.SUPER_ADMIN_ORGS, { replace: true });
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open-once from query
+  }, [leadIdParam]);
+
   const filtered = orgs.filter((o) =>
     o.name.toLowerCase().includes(search.toLowerCase()),
   );
@@ -82,7 +123,7 @@ export default function Organizations() {
     <SuperAdminLayout>
       <PageHeader
         title="Organizations"
-        subtitle="Review signup leads and manage live organizations"
+        subtitle="Provision workspaces from signup leads or create organizations manually"
         actions={
           <Button
             onClick={() => setCreateOpen(true)}
@@ -118,7 +159,11 @@ export default function Organizations() {
 
       <Modal
         opened={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={() => {
+          setCreateOpen(false);
+          setSourceLeadId(null);
+          createForm.reset();
+        }}
         title="Create Organization"
         centered
         size="lg"
@@ -136,20 +181,22 @@ export default function Organizations() {
                 organizationOwner: values.organizationOwner,
                 organizationEmail: values.organizationEmail,
                 phoneNumber: values.phoneNumber || undefined,
-                adminEmail: values.adminEmail,
+                adminEmail: values.organizationEmail,
                 adminPassword: values.adminPassword,
                 city: values.city || undefined,
                 country: values.country || undefined,
                 industry: values.industry || undefined,
                 employeeCount: values.employeeCount,
                 departments: departments.length ? departments : undefined,
+                sourceLeadId: sourceLeadId ?? undefined,
               });
               setCreateOpen(false);
+              setSourceLeadId(null);
               createForm.reset();
               await fetchOrgs();
             } catch (err) {
               createForm.setFieldError(
-                "adminEmail",
+                "organizationEmail",
                 (err as ApiError).message ?? "Failed to create organization"
               );
             } finally {
@@ -178,10 +225,14 @@ export default function Organizations() {
             </Stack>
             <Stack gap={4}>
               <Text fw={600} size="sm">
-                Organization Email
+                Organization & admin email
+              </Text>
+              <Text size="xs" c="dimmed">
+                Used for organization contact and the new admin&apos;s login.
               </Text>
               <TextInput
-                placeholder="owner@company.com"
+                placeholder="contact@company.com"
+                type="email"
                 {...createForm.getInputProps("organizationEmail")}
               />
             </Stack>
@@ -199,16 +250,7 @@ export default function Organizations() {
 
             <Stack gap={4}>
               <Text fw={600} size="sm">
-                Admin Email
-              </Text>
-              <TextInput
-                placeholder="admin@company.com"
-                {...createForm.getInputProps("adminEmail")}
-              />
-            </Stack>
-            <Stack gap={4}>
-              <Text fw={600} size="sm">
-                Admin Password
+                Temporary admin password
               </Text>
               <TextInput
                 placeholder="Temporary password"

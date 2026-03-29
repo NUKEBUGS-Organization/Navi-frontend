@@ -33,6 +33,7 @@ export const ROUTES = {
 
   // Super admin
   SUPER_ADMIN_DASHBOARD: "/super-admin/dashboard",
+  SUPER_ADMIN_LEADS: "/super-admin/leads",
   SUPER_ADMIN_ORGS: "/super-admin/organizations",
   SUPER_ADMIN_ORG_DETAIL: (id: string) => `/super-admin/organizations/${id}`,
   SUPER_ADMIN_SETTINGS: "/super-admin/settings",

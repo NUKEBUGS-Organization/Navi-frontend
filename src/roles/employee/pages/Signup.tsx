@@ -36,7 +36,7 @@ const Signup = () => {
     setError(null);
     setMessage(null);
     if (!organizationName.trim() || !organizationContact.trim() || !email.trim()) {
-      setError("Organization name, contact name, and email are required.");
+      setError("Organization name, contact name, and work email are required.");
       return;
     }
     setSubmitting(true);
@@ -155,10 +155,13 @@ const Signup = () => {
               />
             </Stack>
             <Stack mt={"25px"} gap={0} w={isMobile ? "100%" : "440px"}>
-              <Text c={"#0F2B5C"}>Email</Text>
+              <Text c={"#0F2B5C"}>Organization & admin email</Text>
+              <Text c="#64748B" size="xs" mb={4}>
+                One address for your organization and the admin account we&apos;ll create for you.
+              </Text>
               <TextInput
                 type="email"
-                placeholder="Please enter your email"
+                placeholder="you@company.com"
                 value={email}
                 onChange={(e) => setEmail(e.currentTarget.value)}
                 styles={{ input: { height: "49px" } }}

@@ -13,7 +13,13 @@ import {
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { useNavigate, useLocation } from "react-router-dom";
-import { IconLayoutDashboard, IconBuilding, IconSettings, IconLogout } from "@tabler/icons-react";
+import {
+  IconLayoutDashboard,
+  IconBuilding,
+  IconInbox,
+  IconSettings,
+  IconLogout,
+} from "@tabler/icons-react";
 import type { IconProps } from "@tabler/icons-react";
 import { COLORS, ROUTES } from "@/constants";
 import logo from "@/assets/navi-logo.jpeg";
@@ -27,6 +33,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { icon: IconLayoutDashboard, label: "Dashboard", path: ROUTES.SUPER_ADMIN_DASHBOARD },
+  { icon: IconInbox, label: "Signup leads", path: ROUTES.SUPER_ADMIN_LEADS },
   { icon: IconBuilding, label: "Organizations", path: ROUTES.SUPER_ADMIN_ORGS },
   { icon: IconSettings, label: "Settings", path: ROUTES.SUPER_ADMIN_SETTINGS },
 ];

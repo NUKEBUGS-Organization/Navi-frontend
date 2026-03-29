@@ -21,6 +21,7 @@ import Kudos from "@/roles/admin/pages/Kudos";
 import KnowledgeHub from "@/roles/admin/pages/KnowledgeHub";
 import SuperAdminDashboard from "@/roles/super-admin/pages/SuperAdminDashboard";
 import Organizations from "@/roles/super-admin/pages/Organizations";
+import SignupLeads from "@/roles/super-admin/pages/SignupLeads";
 import SuperAdminSettings from "@/roles/super-admin/pages/SuperAdminSettings";
 
 function DashboardRedirect() {
@@ -49,6 +50,14 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={["super_admin"]}>
               <SuperAdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path={ROUTES.SUPER_ADMIN_LEADS}
+          element={
+            <ProtectedRoute allowedRoles={["super_admin"]}>
+              <SignupLeads />
             </ProtectedRoute>
           }
         />
