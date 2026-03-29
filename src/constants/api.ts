@@ -1,13 +1,36 @@
-function normalizeApiBase(raw: string | undefined): string {
-  const s = (raw ?? "").trim().replace(/\/+$/, "");
-  return s || "http://localhost:3000";
+const DEFAULT_DEV_API = "http://localhost:3000";
+const DEFAULT_PROD_API = "https://navi-backend.changewithnavi.com";
+
+function stripTrailingSlashes(s: string): string {
+  return s.replace(/\/+$/, "");
 }
 
-export const API_BASE = normalizeApiBase(
-  typeof import.meta !== "undefined"
-    ? (import.meta as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL
-    : undefined,
-);
+/**
+ * API host is normally set at build time via VITE_API_URL / .env.production.
+ * If the live site is opened on our CapRover hostname but the bundle still has no prod URL
+ * (old deploy, bad Docker ignore, empty env), use the real backend so login still works.
+ */
+function resolveApiBase(): string {
+  const env =
+    typeof import.meta !== "undefined"
+      ? (import.meta as { env?: { VITE_API_URL?: string; PROD?: boolean; MODE?: string } })
+          .env
+      : undefined;
+  const raw = (env?.VITE_API_URL ?? "").trim();
+  if (raw) return stripTrailingSlashes(raw);
+
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (host === "navi-frontend.changewithnavi.com") {
+      return DEFAULT_PROD_API;
+    }
+  }
+
+  const isProd = Boolean(env?.PROD || env?.MODE === "production");
+  return isProd ? DEFAULT_PROD_API : DEFAULT_DEV_API;
+}
+
+export const API_BASE = resolveApiBase();
 
 export function getAuthToken(): string | null {
   return localStorage.getItem("navi_token");
