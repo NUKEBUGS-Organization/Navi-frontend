@@ -1,5 +1,6 @@
 const DEFAULT_DEV_API = "http://localhost:3000";
-const DEFAULT_PROD_API = "https://navi-backend.changewithnavi.com";
+// Backend base URL for deployed environments (CapRover/captain hostname).
+const DEFAULT_PROD_API = "https://navi-backend.captain.changewithnavi.com";
 
 function stripTrailingSlashes(s: string): string {
   return s.replace(/\/+$/, "");
@@ -21,7 +22,10 @@ function resolveApiBase(): string {
 
   if (typeof window !== "undefined") {
     const host = window.location.hostname;
-    if (host === "app.changewithnavi.com") {
+    if (
+      host === "app.changewithnavi.com" ||
+      host === "navi-frontend.captain.changewithnavi.com"
+    ) {
       return DEFAULT_PROD_API;
     }
   }
