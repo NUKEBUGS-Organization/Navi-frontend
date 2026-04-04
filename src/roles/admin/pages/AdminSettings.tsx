@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AdminLayout from "@/roles/admin/layout/AdminLayout";
 import {
@@ -29,7 +29,7 @@ import {
   IconLock,
   IconStar,
 } from "@tabler/icons-react";
-import { THEME_BLUE, TEAL_BLUE } from "@/constants";
+import { THEME_BLUE, TEAL_BLUE, setStoredUser } from "@/constants";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAppRoutes } from "@/hooks/useAppRoutes";
 import { getMyOrganization } from "@/api/organizations";
@@ -39,6 +39,7 @@ import {
   listMyInitiativeParticipations,
   type MyInitiativeParticipation,
 } from "@/api/initiatives";
+import { updateMyProfile } from "@/api/auth";
 
 function getInitials(name: string | undefined): string {
   if (!name?.trim()) return "?";
@@ -64,14 +65,46 @@ function roleBadgeColor(r: MyInitiativeParticipation["roles"][number]): string {
   return "gray";
 }
 
+/** Downscale and JPEG-compress so the data URL fits API limits and avoids default ~100kb JSON issues on small servers. */
+async function imageFileToProfileDataUrl(file: File): Promise<string> {
+  const bmp = await createImageBitmap(file);
+  const maxEdge = 512;
+  const scale = Math.min(1, maxEdge / Math.max(bmp.width, bmp.height));
+  const w = Math.max(1, Math.round(bmp.width * scale));
+  const h = Math.max(1, Math.round(bmp.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    bmp.close();
+    throw new Error("Could not process this image in the browser.");
+  }
+  ctx.drawImage(bmp, 0, 0, w, h);
+  bmp.close();
+  let quality = 0.88;
+  let dataUrl = canvas.toDataURL("image/jpeg", quality);
+  while (dataUrl.length > 420_000 && quality > 0.5) {
+    quality -= 0.08;
+    dataUrl = canvas.toDataURL("image/jpeg", quality);
+  }
+  if (dataUrl.length > 450_000) {
+    throw new Error("Image is still too large after compression. Try a smaller file.");
+  }
+  return dataUrl;
+}
+
 export default function AdminSettings() {
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   const navigate = useNavigate();
   const appRoutes = useAppRoutes();
   const [org, setOrg] = useState<MyOrganization | null>(null);
   const [kudos, setKudos] = useState<KudosSummary | null>(null);
   const [participations, setParticipations] = useState<MyInitiativeParticipation[]>([]);
   const [profileExtrasLoading, setProfileExtrasLoading] = useState(true);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     getMyOrganization()
@@ -104,6 +137,32 @@ export default function AdminSettings() {
   const lastName = nameParts.slice(1).join(" ") ?? "";
   const departmentsDisplay = user?.departments?.length ? user.departments.join(", ") : "—";
 
+  const handlePhotoPick = async (file: File | null) => {
+    if (!file || !user) return;
+    const maxFile = 8 * 1024 * 1024;
+    if (file.size > maxFile) {
+      setPhotoError("File is too large (max 8MB).");
+      return;
+    }
+    setPhotoBusy(true);
+    setPhotoError(null);
+    try {
+      const photoDataUrl = await imageFileToProfileDataUrl(file);
+      const updated = await updateMyProfile({ photoDataUrl });
+      const merged = { ...user, ...updated };
+      setUser(merged);
+      setStoredUser(merged as unknown as Record<string, unknown>);
+    } catch (e) {
+      const msg =
+        e && typeof e === "object" && "message" in e && typeof (e as { message: unknown }).message === "string"
+          ? (e as { message: string }).message
+          : "Could not update profile photo. Check your connection and try again.";
+      setPhotoError(msg);
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
   return (
     <AdminLayout>
       <Box style={{ width: "100%" }}>
@@ -119,13 +178,26 @@ export default function AdminSettings() {
             >
               <Center mb="lg">
                 <Box style={{ position: "relative" }}>
+                  <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    style={{ display: "none" }}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] ?? null;
+                      e.target.value = "";
+                      void handlePhotoPick(f);
+                    }}
+                  />
                   <Avatar
+                    key={user?.photoDataUrl ? `p-${user.photoDataUrl.length}` : "no-photo"}
                     size={rem(120)}
                     radius={rem(60)}
                     bg={THEME_BLUE}
                     c="white"
                     fz={rem(40)}
                     fw={700}
+                    src={user?.photoDataUrl || undefined}
                   >
                     {getInitials(user?.name)}
                   </Avatar>
@@ -140,11 +212,19 @@ export default function AdminSettings() {
                       right: 5,
                       border: "3px solid white",
                     }}
+                    loading={photoBusy}
+                    onClick={() => photoInputRef.current?.click()}
                   >
                     <IconCamera size={18} />
                   </ActionIcon>
                 </Box>
               </Center>
+
+              {photoError && (
+                <Text size="sm" c="red" mb="sm" px="md">
+                  {photoError}
+                </Text>
+              )}
 
               <Title order={2} fw={800} fz={rem(24)} mb={5}>
                 {user?.name ?? "—"}
@@ -226,8 +306,10 @@ export default function AdminSettings() {
                 h={50}
                 fw={700}
                 fullWidth
+                loading={photoBusy}
+                onClick={() => photoInputRef.current?.click()}
               >
-                Upload New Photo
+                Upload new photo
               </Button>
             </Card>
           </Grid.Col>

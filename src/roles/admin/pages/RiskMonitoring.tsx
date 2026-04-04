@@ -183,6 +183,11 @@ export default function RiskMonitoring() {
     }
   };
 
+  const sortedAssessmentRisks = [...assessmentRisks].sort((a, b) => {
+    const rank = (x: string) => (x === "High" ? 0 : x === "Medium" ? 1 : 2);
+    return rank(a.riskLevel) - rank(b.riskLevel);
+  });
+
   const breadcrumbs = [
     { title: "Dashboard", href: appRoutes.DASHBOARD },
     { title: "Risk Monitoring", href: appRoutes.RISKS },
@@ -221,28 +226,34 @@ export default function RiskMonitoring() {
           }
         />
 
-        {assessmentRisks.length > 0 && (
+        {sortedAssessmentRisks.length > 0 && (
           <Paper withBorder radius="md" p="md" mb="lg">
             <Text fw={700} size="sm" c="dimmed" mb="md" tt="uppercase" lts={0.5}>
-              Assessment Risks (from initiative assessments)
+              Assessment risks (readiness hotspots)
             </Text>
             <Text size="sm" c="dimmed" mb="md">
-              Initiatives with medium or high risk based on assessment scores (avg &lt; 4.0/5).
+              Medium and high rows first. Area of risk reflects the weakest assessment dimension for that initiative.
             </Text>
-            <Table striped highlightOnHover>
+            <Table striped highlightOnHover withTableBorder>
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th>Initiative</Table.Th>
-                  <Table.Th>Risk Level</Table.Th>
-                  <Table.Th>Avg Score</Table.Th>
+                  <Table.Th>Area of risk</Table.Th>
+                  <Table.Th>Risk level</Table.Th>
+                  <Table.Th>Avg score</Table.Th>
                   <Table.Th>Submissions</Table.Th>
-                  <Table.Th>Last Submitted</Table.Th>
+                  <Table.Th>Last submitted</Table.Th>
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {assessmentRisks.map((r) => (
+                {sortedAssessmentRisks.map((r) => (
                   <Table.Tr key={r.initiativeId}>
                     <Table.Td fw={600}>{r.initiativeTitle}</Table.Td>
+                    <Table.Td maw={220}>
+                      <Text size="sm" lineClamp={2}>
+                        {r.areaOfRisk || "—"}
+                      </Text>
+                    </Table.Td>
                     <Table.Td>
                       <Badge color={severityColor(r.riskLevel)} variant="light" size="sm">
                         {r.riskLevel}

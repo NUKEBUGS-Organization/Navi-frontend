@@ -87,6 +87,8 @@ interface Initiative {
   faqs: { question: string; answer: string }[];
   /** False when adoption tracking is discontinued for this initiative (milestones remain stored). */
   adoptionTrackingEnabled: boolean;
+  /** Executive / change sponsor display name */
+  sponsorName?: string;
 }
 
 /** Map audience value to display label and which roles can take the assessment. */
@@ -219,6 +221,7 @@ function mapApiToInitiative(raw: InitiativeListItem & { description?: string }):
     faqs,
     adoptionTrackingEnabled:
       (raw as { adoptionTrackingEnabled?: boolean }).adoptionTrackingEnabled !== false,
+    sponsorName: (raw as { sponsorName?: string }).sponsorName?.trim() || undefined,
   };
 }
 
@@ -248,6 +251,7 @@ export default function InitiativeDetail() {
   const [employeeAdoptionsLoading, setEmployeeAdoptionsLoading] = useState(false);
   const [adoptStopping, setAdoptStopping] = useState(false);
   const [adoptStopOpened, { open: openAdoptStop, close: closeAdoptStop }] = useDisclosure(false);
+  const [shareFeedback, setShareFeedback] = useState<string | null>(null);
 
   const handleAddDepartment = useCallback(
     async (newDept: string) => {
@@ -579,35 +583,63 @@ export default function InitiativeDetail() {
       </Group>
 
       <Group justify="space-between" align="flex-start" mb="xs">
-        <Group align="center" gap="md">
-          <Title order={1} fw={800} fz={30} c={THEME_BLUE}>
-            {initiative.title}
-          </Title>
-          <Badge
-            bg={statusColors.bg}
-            c={statusColors.c}
-            radius="sm"
-            px={10}
-            py={4}
-            fw={700}
-            fz={11}
-            styles={{ root: { textTransform: "none" } }}
-          >
-            ● {initiative.status}
-          </Badge>
-        </Group>
-        <Group gap="sm">
-          <Button
-            variant="outline"
-            radius="md"
-            h={40}
-            px="lg"
-            fw={600}
-            color="gray"
-            leftSection={<IconShare size={16} />}
-          >
-            Share
-          </Button>
+        <Stack gap={6}>
+          <Group align="center" gap="md">
+            <Title order={1} fw={800} fz={30} c={THEME_BLUE}>
+              {initiative.title}
+            </Title>
+            <Badge
+              bg={statusColors.bg}
+              c={statusColors.c}
+              radius="sm"
+              px={10}
+              py={4}
+              fw={700}
+              fz={11}
+              styles={{ root: { textTransform: "none" } }}
+            >
+              ● {initiative.status}
+            </Badge>
+          </Group>
+          {initiative.sponsorName ? (
+            <Text size="sm" c="dimmed" fw={600}>
+              Sponsor: <Text span c={NAVY} fw={700}>{initiative.sponsorName}</Text>
+            </Text>
+          ) : null}
+        </Stack>
+        <Group gap="sm" align="flex-start">
+          <Stack gap={4}>
+            <Button
+              variant="outline"
+              radius="md"
+              h={40}
+              px="lg"
+              fw={600}
+              color="gray"
+              leftSection={<IconShare size={16} />}
+              onClick={() => {
+                const url = window.location.href;
+                setShareFeedback(null);
+                void navigator.clipboard
+                  .writeText(url)
+                  .then(() => {
+                    setShareFeedback("Link copied to clipboard.");
+                    window.setTimeout(() => setShareFeedback(null), 2500);
+                  })
+                  .catch(() => {
+                    setShareFeedback("Could not copy automatically — copy the page address from your browser.");
+                    window.setTimeout(() => setShareFeedback(null), 5000);
+                  });
+              }}
+            >
+              Share
+            </Button>
+            {shareFeedback && (
+              <Text size="xs" c="dimmed" maw={220}>
+                {shareFeedback}
+              </Text>
+            )}
+          </Stack>
           {isDraft && user?.role === "admin" && (
             <Button
               variant="filled"
@@ -1426,6 +1458,7 @@ export default function InitiativeDetail() {
             description: updated.description,
             status: statusToApi(updated.status),
             leadName: updated.lead,
+            sponsorName: updated.sponsorName?.trim() || undefined,
             dateRange: updated.dateRange,
             departments: updated.departments ?? updated.impactedDepts ?? [],
             progress: updated.progress,
@@ -1480,6 +1513,7 @@ function EditInitiativeModal({
   const [title, setTitle] = useState(initiative.title);
   const [description, setDescription] = useState(initiative.description);
   const [lead, setLead] = useState(initiative.lead);
+  const [sponsorName, setSponsorName] = useState(initiative.sponsorName ?? "");
   const [status, setStatus] = useState(initiative.status);
   const [dateRange, setDateRange] = useState(initiative.dateRange);
   const [progress, setProgress] = useState(initiative.progress);
@@ -1499,6 +1533,7 @@ function EditInitiativeModal({
     setTitle(initiative.title);
     setDescription(initiative.description);
     setLead(initiative.lead);
+    setSponsorName(initiative.sponsorName ?? "");
     setStatus(initiative.status);
     setDateRange(initiative.dateRange);
     setProgress(initiative.progress);
@@ -1529,6 +1564,7 @@ function EditInitiativeModal({
       title,
       description,
       lead,
+      sponsorName: sponsorName.trim() || undefined,
       status,
       dateRange,
       progress,
@@ -1661,6 +1697,19 @@ function EditInitiativeModal({
           value={description}
           onChange={(e) => setDescription(e.currentTarget.value)}
           minRows={4}
+          radius="md"
+          size="md"
+        />
+
+        <TextInput
+          label={
+            <Text fw={700} fz="sm" mb={4}>
+              Executive sponsor
+            </Text>
+          }
+          value={sponsorName}
+          onChange={(e) => setSponsorName(e.currentTarget.value)}
+          placeholder="Name of executive sponsor"
           radius="md"
           size="md"
         />

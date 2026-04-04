@@ -33,6 +33,8 @@ interface QuestionDef {
   question: string;
   lowLabel: string;
   highLabel: string;
+  /** NAVI pillar when assessment was created from a tagged template */
+  pillar?: string;
 }
 
 interface CategoryDef {
@@ -151,16 +153,17 @@ function getInitialResponses(cats: CategoryDef[]): Record<string, (number | "")[
 
 /** Map API assessment steps to CategoryDef for the form */
 function mapStepsToCategories(
-  steps: { title: string; questions: string[] }[]
+  steps: { title: string; questions: string[]; pillars?: string[] }[]
 ): CategoryDef[] {
   return steps.map((step, i) => ({
     key: `step_${i}`,
     name: step.title || `Step ${i + 1}`,
     description: "",
-    questions: (step.questions || []).map((q) => ({
+    questions: (step.questions || []).map((q, qi) => ({
       question: q,
       lowLabel: "Low",
       highLabel: "High",
+      pillar: step.pillars?.[qi] ?? "",
     })),
   }));
 }
@@ -259,11 +262,31 @@ export default function AssessmentForm() {
     const overall =
       categoryScores.length ? categoryScores.reduce((sum, x) => sum + x.score, 0) / categoryScores.length : 0;
     if (assessmentId) {
+      const flatAnswers: number[] = [];
+      let allAnswered = true;
+      for (const c of categories) {
+        const vals = res[c.key] ?? [];
+        for (let qi = 0; qi < c.questions.length; qi++) {
+          const v = vals[qi];
+          if (v === "" || v === undefined) {
+            allAnswered = false;
+            break;
+          }
+          flatAnswers.push(Number(v));
+        }
+        if (!allAnswered) break;
+      }
+      const expected = categories.reduce((n, c) => n + c.questions.length, 0);
+      const hasTagged = categories.some((c) =>
+        c.questions.some((q) => ["N", "A", "V", "I"].includes(String((q as QuestionDef).pillar ?? "").toUpperCase())),
+      );
       try {
         await createSubmission({
           assessmentId,
           overallScore: overall,
           riskLevel: getRiskLevelLabel(overall),
+          answers:
+            hasTagged && allAnswered && flatAnswers.length === expected ? flatAnswers : undefined,
         });
       } catch {
         // still navigate to results

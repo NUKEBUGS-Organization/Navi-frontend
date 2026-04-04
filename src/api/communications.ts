@@ -10,6 +10,8 @@ export interface CommunicationDto {
   scheduledDate?: string;
   status?: "Planned" | "Scheduled" | "Sent" | "Completed" | "Cancelled";
   message?: string;
+  emailSentAt?: string;
+  lastRecipientEmails?: string[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -49,4 +51,8 @@ export function updateCommunication(id: string, payload: UpdateCommunicationPayl
 
 export function deleteCommunication(id: string): Promise<{ message: string }> {
   return api.delete<{ message: string }>(`/communications/${id}`);
+}
+
+export function sendCommunicationEmail(id: string): Promise<CommunicationDto> {
+  return api.post<CommunicationDto>(`/communications/${id}/send`, {});
 }

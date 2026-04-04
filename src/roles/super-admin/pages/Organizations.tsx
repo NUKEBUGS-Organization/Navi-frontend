@@ -14,19 +14,23 @@ import {
   Stack,
   Divider,
   NumberInput,
-  ActionIcon,
+  UnstyledButton,
+  Badge,
 } from "@mantine/core";
-import { IconPlus, IconSearch, IconTrash } from "@tabler/icons-react";
+import { IconSearch } from "@tabler/icons-react";
 import { useForm } from "@mantine/form";
 import { ROUTES, THEME_BLUE } from "@/constants";
 import {
   listOrganizations,
   createOrganization,
   getSignupLead,
+  approveOrganizationEmployeeCount,
   type OrganizationListItem,
   type CreateOrganizationPayload,
 } from "@/api/organizations";
 import type { ApiError } from "@/api/client";
+
+type CreateOrgFormValues = Omit<CreateOrganizationPayload, "departments" | "sourceLeadId">;
 
 export default function Organizations() {
   const navigate = useNavigate();
@@ -38,8 +42,10 @@ export default function Organizations() {
   const [createLoading, setCreateLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sourceLeadId, setSourceLeadId] = useState<string | null>(null);
+  const [detailOrg, setDetailOrg] = useState<OrganizationListItem | null>(null);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
 
-  const createForm = useForm<CreateOrganizationPayload>({
+  const createForm = useForm<CreateOrgFormValues>({
     initialValues: {
       organizationName: "",
       organizationOwner: "",
@@ -51,12 +57,11 @@ export default function Organizations() {
       country: "",
       industry: "",
       employeeCount: 0,
-      departments: [""],
     },
     validate: {
       organizationName: (v) => (!v ? "Organization name is required" : null),
       organizationOwner: (v) => (!v ? "Owner is required" : null),
-      organizationEmail: (v) => (!v ? "Organization & admin email is required" : null),
+      organizationEmail: (v) => (!v ? "Organization admin email is required" : null),
       adminPassword: (v) => (!v ? "Admin password is required" : null),
     },
   });
@@ -97,7 +102,6 @@ export default function Organizations() {
           country: lead.country ?? "",
           industry: lead.industry ?? "",
           employeeCount: Number.isNaN(ec) ? 0 : ec,
-          departments: [""],
         });
         setSourceLeadId(lead.id);
         setCreateOpen(true);
@@ -173,9 +177,6 @@ export default function Organizations() {
             setCreateLoading(true);
             setError(null);
             try {
-              const departments = (values.departments ?? [])
-                .map((d) => d.trim())
-                .filter(Boolean);
               await createOrganization({
                 organizationName: values.organizationName,
                 organizationOwner: values.organizationOwner,
@@ -187,7 +188,6 @@ export default function Organizations() {
                 country: values.country || undefined,
                 industry: values.industry || undefined,
                 employeeCount: values.employeeCount,
-                departments: departments.length ? departments : undefined,
                 sourceLeadId: sourceLeadId ?? undefined,
               });
               setCreateOpen(false);
@@ -225,7 +225,7 @@ export default function Organizations() {
             </Stack>
             <Stack gap={4}>
               <Text fw={600} size="sm">
-                Organization & admin email
+                Organization admin email
               </Text>
               <Text size="xs" c="dimmed">
                 Used for organization contact and the new admin&apos;s login.
@@ -292,42 +292,10 @@ export default function Organizations() {
               />
             </Stack>
 
-            <Stack gap={4}>
-              <Text fw={600} size="sm">
-                Departments
-              </Text>
-              {(createForm.values.departments ?? [""]).map((_, index) => (
-                <Group key={index} gap="xs" align="flex-end">
-                  <TextInput
-                    placeholder="e.g. Engineering, HR, Sales"
-                    style={{ flex: 1 }}
-                    {...createForm.getInputProps(`departments.${index}`)}
-                  />
-                  <ActionIcon
-                    color="red"
-                    variant="subtle"
-                    onClick={() =>
-                      createForm.removeListItem("departments", index)
-                    }
-                    disabled={(createForm.values.departments?.length ?? 0) <= 1}
-                    title="Remove department"
-                  >
-                    <IconTrash size={18} />
-                  </ActionIcon>
-                </Group>
-              ))}
-              <Button
-                type="button"
-                variant="light"
-                size="xs"
-                leftSection={<IconPlus size={14} />}
-                onClick={() =>
-                  createForm.insertListItem("departments", "")
-                }
-              >
-                Add department
-              </Button>
-            </Stack>
+            <Text size="sm" c="dimmed">
+              Departments are configured by the organization admin after activation (Organization → profile /
+              settings), not at provisioning time.
+            </Text>
 
             <Stack gap={4}>
               <Text fw={600} size="sm">
@@ -348,6 +316,73 @@ export default function Organizations() {
             </Group>
           </Stack>
         </form>
+      </Modal>
+
+      <Modal
+        opened={detailOrg != null}
+        onClose={() => setDetailOrg(null)}
+        title="Organization details"
+        centered
+        size="md"
+      >
+        {detailOrg && (
+          <Stack gap="sm">
+            <Group justify="space-between">
+              <Text fw={600} c="dimmed" size="sm">
+                Name
+              </Text>
+              <Text fw={700}>{detailOrg.name}</Text>
+            </Group>
+            <Group justify="space-between">
+              <Text fw={600} c="dimmed" size="sm">
+                Organization admin
+              </Text>
+              <Text>{detailOrg.adminName}</Text>
+            </Group>
+            <Group justify="space-between">
+              <Text fw={600} c="dimmed" size="sm">
+                Contact email
+              </Text>
+              <Text size="sm">{detailOrg.email ?? "—"}</Text>
+            </Group>
+            <Group justify="space-between">
+              <Text fw={600} c="dimmed" size="sm">
+                Country
+              </Text>
+              <Text size="sm">{detailOrg.country ?? "—"}</Text>
+            </Group>
+            <Group justify="space-between" align="flex-start">
+              <Text fw={600} c="dimmed" size="sm">
+                Departments
+              </Text>
+              <Text size="sm" maw={280} ta="right">
+                {detailOrg.departmentCount > 0 ? detailOrg.departments.join(", ") : "—"}
+              </Text>
+            </Group>
+            <Group justify="space-between">
+              <Text fw={600} c="dimmed" size="sm">
+                Employees (reported)
+              </Text>
+              <Text>{detailOrg.employeeCount ?? 0}</Text>
+            </Group>
+            <Group justify="space-between">
+              <Text fw={600} c="dimmed" size="sm">
+                Status
+              </Text>
+              <Text fw={600}>{detailOrg.status}</Text>
+            </Group>
+            <Group justify="space-between">
+              <Text fw={600} c="dimmed" size="sm">
+                Created
+              </Text>
+              <Text size="sm">
+                {typeof detailOrg.createdAt === "string"
+                  ? new Date(detailOrg.createdAt).toLocaleString()
+                  : new Date(detailOrg.createdAt).toLocaleString()}
+              </Text>
+            </Group>
+          </Stack>
+        )}
       </Modal>
 
       {error && (
@@ -379,12 +414,15 @@ export default function Organizations() {
                 <Table.Th c="dimmed" fw={800} fz={10} lts={1}>
                   CREATED
                 </Table.Th>
+                <Table.Th c="dimmed" fw={800} fz={10} lts={1}>
+                  ACTIONS
+                </Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
               {loading ? (
                 <Table.Tr>
-                  <Table.Td colSpan={6}>
+                  <Table.Td colSpan={7}>
                     <Text c="dimmed" size="sm" ta="center" py="lg">
                       Loading...
                     </Text>
@@ -393,7 +431,13 @@ export default function Organizations() {
               ) : (
                 filtered.map((org) => (
                   <Table.Tr key={org.id}>
-                    <Table.Td fw={600}>{org.name}</Table.Td>
+                    <Table.Td>
+                      <UnstyledButton onClick={() => setDetailOrg(org)} py={4}>
+                        <Text fw={600} c={THEME_BLUE} style={{ textDecoration: "underline" }}>
+                          {org.name}
+                        </Text>
+                      </UnstyledButton>
+                    </Table.Td>
                     <Table.Td>{org.adminName}</Table.Td>
                     <Table.Td>
                       <Text size="sm">
@@ -403,7 +447,14 @@ export default function Organizations() {
                       </Text>
                     </Table.Td>
                     <Table.Td>
-                      <Text size="sm">{org.employeeCount ?? 0}</Text>
+                      <Group gap={6} wrap="wrap">
+                        <Text size="sm">{org.employeeCount ?? 0}</Text>
+                        {org.pendingEmployeeCount != null && org.pendingEmployeeCount !== org.employeeCount && (
+                          <Badge size="sm" color="orange" variant="light">
+                            Pending: {org.pendingEmployeeCount}
+                          </Badge>
+                        )}
+                      </Group>
                     </Table.Td>
                     <Table.Td>
                       <Text
@@ -424,6 +475,30 @@ export default function Organizations() {
                       {typeof org.createdAt === "string"
                         ? org.createdAt
                         : new Date(org.createdAt).toLocaleDateString()}
+                    </Table.Td>
+                    <Table.Td>
+                      {org.pendingEmployeeCount != null &&
+                      org.pendingEmployeeCount !== (org.employeeCount ?? 0) ? (
+                        <Button
+                          size="xs"
+                          variant="light"
+                          color="teal"
+                          loading={approvingId === org.id}
+                          onClick={async () => {
+                            setApprovingId(org.id);
+                            try {
+                              await approveOrganizationEmployeeCount(org.id);
+                              await fetchOrgs();
+                            } finally {
+                              setApprovingId(null);
+                            }
+                          }}
+                        >
+                          Approve headcount
+                        </Button>
+                      ) : (
+                        "—"
+                      )}
                     </Table.Td>
                   </Table.Tr>
                 ))

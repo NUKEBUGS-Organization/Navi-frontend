@@ -11,6 +11,7 @@ export interface AuthUser {
   organizationId?: string;
   departments?: string[];
   isActive?: boolean;
+  photoDataUrl?: string;
 }
 
 export interface LoginResponse {
@@ -33,6 +34,17 @@ export interface UpdateUserPayload {
   role?: UserRole;
   departments?: string[];
   isActive?: boolean;
+  photoDataUrl?: string;
+}
+
+export function updateMyProfile(payload: { name?: string; photoDataUrl?: string }): Promise<AuthUser> {
+  return api.patch<AuthUser>("/auth/me/profile", payload);
+}
+
+export function bulkImportUsers(csvText: string): Promise<{ created: number; skipped: number; errors: string[] }> {
+  return api.post<{ created: number; skipped: number; errors: string[] }>("/auth/users/bulk-import", {
+    csvText,
+  });
 }
 
 /**

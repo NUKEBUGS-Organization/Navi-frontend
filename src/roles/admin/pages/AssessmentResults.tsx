@@ -44,9 +44,11 @@ import { getMyOrganization } from "@/api/organizations";
 import {
   createAssessment,
   listAssessments,
+  listAssessmentTemplates,
   listSubmissions,
   type Assessment,
   type AssessmentSubmission,
+  type AssessmentTemplate,
 } from "@/api/assessments";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -63,6 +65,7 @@ const DIMENSION_LABELS = [
 interface AssessmentStep {
   title: string;
   questions: string[];
+  pillars?: string[];
 }
 
 interface AssessmentCreateValues {
@@ -125,6 +128,7 @@ export default function AssessmentResults() {
   const [mySubmissions, setMySubmissions] = useState<AssessmentSubmission[]>([]);
   const [assessmentsLoading, setAssessmentsLoading] = useState(true);
   const [initiativeTitleMap, setInitiativeTitleMap] = useState<Record<string, string>>({});
+  const [assessmentTemplates, setAssessmentTemplates] = useState<AssessmentTemplate[]>([]);
 
   useEffect(() => {
     if (!createOpen) return;
@@ -144,6 +148,9 @@ export default function AssessmentResults() {
     getMyOrganization()
       .then((org) => setOrgDepartments(org.departments ?? []))
       .catch(() => setOrgDepartments([]));
+    listAssessmentTemplates()
+      .then((t) => setAssessmentTemplates(Array.isArray(t) ? t : []))
+      .catch(() => setAssessmentTemplates([]));
   }, [createOpen]);
 
   useEffect(() => {
@@ -186,7 +193,7 @@ export default function AssessmentResults() {
       audienceDepartments: [],
       dueDate: "",
       description: "",
-      steps: [{ title: "", questions: [""] }],
+      steps: [{ title: "", questions: [""], pillars: undefined }],
     },
     validate: {
       name: (v) => (!v?.trim() ? "Assessment name is required" : null),
@@ -253,10 +260,20 @@ export default function AssessmentResults() {
                   audience: values.audience || undefined,
                   audienceDepartments: values.audience === "department" ? (values.audienceDepartments ?? []) : undefined,
                   description: values.description || undefined,
-                  steps: (values.steps ?? []).map((s) => ({
-                    title: s.title ?? "",
-                    questions: s.questions ?? [],
-                  })),
+                  steps: (values.steps ?? []).map((s) => {
+                    const questions = s.questions ?? [];
+                    const pillars = s.pillars;
+                    const naviLetters = new Set(["N", "A", "V", "I"]);
+                    const pillarsOk =
+                      Array.isArray(pillars) &&
+                      pillars.length === questions.length &&
+                      pillars.every((p) => naviLetters.has(String(p || "").trim().toUpperCase()));
+                    return {
+                      title: s.title ?? "",
+                      questions,
+                      ...(pillarsOk ? { pillars: pillars!.map((p) => String(p || "").trim().toUpperCase()) } : {}),
+                    };
+                  }),
                 });
                 setCreateOpen(false);
                 createForm.reset();
@@ -343,6 +360,29 @@ export default function AssessmentResults() {
 
               <Divider label="Questions" labelPosition="center" />
 
+              <Select
+                label="Start from NAVI template (optional)"
+                placeholder="Blank form — build your own"
+                clearable
+                data={assessmentTemplates.map((t) => ({ value: t.id, label: t.name }))}
+                onChange={(id) => {
+                  if (!id) return;
+                  const t = assessmentTemplates.find((x) => x.id === id);
+                  if (!t?.steps?.length) return;
+                  createForm.setFieldValue(
+                    "steps",
+                    t.steps.map((s) => ({
+                      title: s.title ?? "",
+                      questions: [...(s.questions ?? [])],
+                      pillars: s.pillars ? [...s.pillars] : undefined,
+                    })),
+                  );
+                }}
+              />
+              <Text size="xs" c="dimmed">
+                Templates include NAVI pillar tags (N, A, V, I) so submissions can compute organization NAVI scores.
+              </Text>
+
               <Text size="sm" c="dimmed">
                 Add steps (e.g. sections) and questions for each step. Each step can have multiple questions.
               </Text>
@@ -378,7 +418,13 @@ export default function AssessmentResults() {
                           color="red"
                           variant="subtle"
                           size="sm"
-                          onClick={() => createForm.removeListItem(`steps.${stepIdx}.questions`, qIdx)}
+                          onClick={() => {
+                            createForm.removeListItem(`steps.${stepIdx}.questions`, qIdx);
+                            const plen = createForm.values.steps[stepIdx]?.pillars?.length ?? 0;
+                            if (plen > qIdx) {
+                              createForm.removeListItem(`steps.${stepIdx}.pillars`, qIdx);
+                            }
+                          }}
                           disabled={(createForm.values.steps[stepIdx]?.questions?.length ?? 0) <= 1}
                         >
                           <IconTrash size={14} />
@@ -389,7 +435,12 @@ export default function AssessmentResults() {
                       variant="light"
                       size="xs"
                       leftSection={<IconPlus size={14} />}
-                      onClick={() => createForm.insertListItem(`steps.${stepIdx}.questions`, "")}
+                      onClick={() => {
+                        createForm.insertListItem(`steps.${stepIdx}.questions`, "");
+                        if (createForm.values.steps[stepIdx]?.pillars != null) {
+                          createForm.insertListItem(`steps.${stepIdx}.pillars`, "");
+                        }
+                      }}
                     >
                       Add question
                     </Button>
@@ -401,7 +452,7 @@ export default function AssessmentResults() {
                 variant="default"
                 leftSection={<IconPlus size={16} />}
                 onClick={() =>
-                  createForm.insertListItem("steps", { title: "", questions: [""] })
+                  createForm.insertListItem("steps", { title: "", questions: [""], pillars: undefined })
                 }
               >
                 Add step
@@ -507,6 +558,7 @@ export default function AssessmentResults() {
                       <Table.Th>Assessment</Table.Th>
                       <Table.Th>Initiative</Table.Th>
                       <Table.Th>Score</Table.Th>
+                      <Table.Th>NAVI</Table.Th>
                       <Table.Th>Risk</Table.Th>
                       <Table.Th>Submitted</Table.Th>
                     </Table.Tr>
@@ -524,6 +576,22 @@ export default function AssessmentResults() {
                           <Badge color={NAVY} variant="light" size="lg">
                             {Math.round(Number(s.overallScore))}
                           </Badge>
+                        </Table.Td>
+                        <Table.Td>
+                          {s.naviIndex != null && Number.isFinite(Number(s.naviIndex)) ? (
+                            <Stack gap={2}>
+                              <Text size="sm" fw={600}>
+                                {Number(s.naviIndex).toFixed(2)}
+                              </Text>
+                              {s.naviClassification && (
+                                <Text size="xs" c="dimmed">
+                                  {s.naviClassification}
+                                </Text>
+                              )}
+                            </Stack>
+                          ) : (
+                            "—"
+                          )}
                         </Table.Td>
                         <Table.Td>
                           {s.riskLevel ? (

@@ -33,7 +33,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { icon: IconLayoutDashboard, label: "Dashboard", path: ROUTES.SUPER_ADMIN_DASHBOARD },
-  { icon: IconInbox, label: "Signup leads", path: ROUTES.SUPER_ADMIN_LEADS },
+  { icon: IconInbox, label: "Leads", path: ROUTES.SUPER_ADMIN_LEADS },
   { icon: IconBuilding, label: "Organizations", path: ROUTES.SUPER_ADMIN_ORGS },
   { icon: IconSettings, label: "Settings", path: ROUTES.SUPER_ADMIN_SETTINGS },
 ];

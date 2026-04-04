@@ -69,6 +69,7 @@ type InitiativeRoadmapOption = {
   title: string;
   status?: string;
   changeType?: string;
+  sponsorName?: string;
   raciAccountableIds?: unknown[];
   raciResponsibleIds?: unknown[];
   raciConsultedIds?: unknown[];
@@ -143,6 +144,7 @@ export default function AdminRoadmap() {
           title: i.title,
           status: (i as { status?: string }).status,
           changeType: (i as { changeType?: string }).changeType,
+          sponsorName: (i as { sponsorName?: string }).sponsorName,
           raciAccountableIds: (i as { raciAccountableIds?: unknown[] }).raciAccountableIds,
           raciResponsibleIds: (i as { raciResponsibleIds?: unknown[] }).raciResponsibleIds,
           raciConsultedIds: (i as { raciConsultedIds?: unknown[] }).raciConsultedIds,
@@ -335,11 +337,20 @@ export default function AdminRoadmap() {
                   {(() => {
                     const selected = initiatives.find((i) => i.id === selectedInitiativeId);
                     const role = getRaciRoleForUser(selected, String(currentUserId ?? ""));
-                    return role ? (
-                      <Text size="xs" c="dimmed" style={{ maxWidth: 220 }}>
-                        Your RACI role: <b>{role}</b>
-                      </Text>
-                    ) : null;
+                    return (
+                      <Stack gap={2}>
+                        {selected?.sponsorName ? (
+                          <Text size="xs" c="dimmed" style={{ maxWidth: 280 }}>
+                            Sponsor: <b>{selected.sponsorName}</b>
+                          </Text>
+                        ) : null}
+                        {role ? (
+                          <Text size="xs" c="dimmed" style={{ maxWidth: 220 }}>
+                            Your RACI role: <b>{role}</b>
+                          </Text>
+                        ) : null}
+                      </Stack>
+                    );
                   })()}
                 </Stack>
                 {!isEmployee && (

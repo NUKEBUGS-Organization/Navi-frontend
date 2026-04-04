@@ -3,6 +3,8 @@ import { api } from "./client";
 export interface AssessmentStep {
   title: string;
   questions: string[];
+  /** NAVI pillar per question: N, A, V, I */
+  pillars?: string[];
 }
 
 export interface Assessment {
@@ -19,6 +21,12 @@ export interface Assessment {
   completed?: boolean;
   overallScore?: number;
   riskLevel?: string;
+  naviN?: number;
+  naviA?: number;
+  naviV?: number;
+  naviI?: number;
+  naviIndex?: number;
+  naviClassification?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -61,6 +69,17 @@ export function listAssessments(): Promise<Assessment[]> {
   return api.get<Assessment[]>("/assessments");
 }
 
+export interface AssessmentTemplate {
+  id: string;
+  name: string;
+  description: string;
+  steps: AssessmentStep[];
+}
+
+export function listAssessmentTemplates(): Promise<AssessmentTemplate[]> {
+  return api.get<AssessmentTemplate[]>("/assessments/templates");
+}
+
 export function createAssessment(
   payload: CreateAssessmentPayload
 ): Promise<Assessment> {
@@ -85,6 +104,8 @@ export interface AssessmentSubmission {
   userId: string;
   overallScore: number;
   riskLevel?: string;
+  naviIndex?: number;
+  naviClassification?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -93,8 +114,25 @@ export function createSubmission(payload: {
   assessmentId: string;
   overallScore: number;
   riskLevel?: string;
+  answers?: number[];
 }): Promise<AssessmentSubmission> {
   return api.post<AssessmentSubmission>("/assessment-submissions", payload);
+}
+
+export interface NaviSummary {
+  submissionCount: number;
+  avgNaviIndex: number | null;
+  avgN: number | null;
+  avgA: number | null;
+  avgV: number | null;
+  avgI: number | null;
+  leadershipAvgNavi: number | null;
+  employeeAvgNavi: number | null;
+  alignmentGap: number | null;
+}
+
+export function getNaviSummary(): Promise<NaviSummary | null> {
+  return api.get<NaviSummary | null>("/assessment-submissions/navi-summary");
 }
 
 export function listSubmissions(options?: {

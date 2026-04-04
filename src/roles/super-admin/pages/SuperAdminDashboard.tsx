@@ -92,7 +92,7 @@ export default function SuperAdminDashboard() {
             <Group justify="space-between" mb="sm">
               <Group gap="sm">
                 <IconUserPlus size={22} color="#0f2b5c" />
-                <Text fw={700}>Pending signup leads</Text>
+                <Text fw={700}>New leads</Text>
               </Group>
               {newLeadsCount > 0 && (
                 <Badge color="orange" variant="light" fw={700}>
@@ -104,7 +104,7 @@ export default function SuperAdminDashboard() {
               {loading ? "—" : newLeadsCount}
             </Title>
             <Text c="dimmed" size="sm">
-              Public signup form submissions — review under Signup leads.
+              Public signup form submissions — each lead is stored with a timestamp under Leads.
             </Text>
             <Button
               component={Link}
@@ -114,7 +114,7 @@ export default function SuperAdminDashboard() {
               mt="sm"
               fullWidth
             >
-              Open signup leads
+              Open leads
             </Button>
           </Card>
         </Grid.Col>
@@ -124,7 +124,7 @@ export default function SuperAdminDashboard() {
         <Grid.Col span={12}>
           <Card withBorder radius="lg" p="xl" shadow="xs">
             <Group justify="space-between" mb="md">
-              <Text fw={700}>Recent signup leads</Text>
+              <Text fw={700}>Recent leads</Text>
               <Anchor component={Link} to={ROUTES.SUPER_ADMIN_LEADS} size="sm" fw={600}>
                 View all
               </Anchor>
@@ -151,7 +151,8 @@ export default function SuperAdminDashboard() {
                         {lead.organizationName}
                       </Text>
                       <Text size="xs" c="dimmed" truncate>
-                        {lead.email} · {lead.organizationContact}
+                        {lead.email} · {lead.organizationContact} ·{" "}
+                        {new Date(lead.createdAt).toLocaleString()}
                       </Text>
                     </Stack>
                     <Group gap="xs" wrap="nowrap">

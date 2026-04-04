@@ -32,6 +32,8 @@ export interface InitiativeSummary {
   title: string;
   description?: string;
   leadName: string;
+  /** Executive / change sponsor (display name). */
+  sponsorName?: string;
   dateRange: string;
   departments?: string[];
   tags?: string[];

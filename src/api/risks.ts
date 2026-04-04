@@ -39,6 +39,7 @@ export interface RiskSummary {
 }
 
 export interface AssessmentDerivedRisk {
+  areaOfRisk: string;
   initiativeId: string;
   initiativeTitle: string;
   riskLevel: "Medium" | "High";

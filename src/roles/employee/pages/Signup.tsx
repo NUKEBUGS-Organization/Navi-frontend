@@ -11,14 +11,27 @@ import {
   Divider,
   ScrollArea,
   TextInput,
+  Select,
 } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { ROUTES, THEME_BLUE } from "@/constants";
 import logo from "@/assets/navi-logo.jpeg";
 import { submitOrganizationSignupRequest } from "@/api/organizations";
 
+const HEAR_ABOUT_OPTIONS = [
+  { value: "Referral", label: "Referral" },
+  { value: "LinkedIn", label: "LinkedIn" },
+  { value: "IG", label: "IG" },
+  { value: "Google", label: "Google" },
+  { value: "Email", label: "Email" },
+  { value: "Partner Website", label: "Partner Website" },
+  { value: "Other", label: "Other" },
+];
+
 const Signup = () => {
+  const navigate = useNavigate();
   const isMobile = useMediaQuery("(max-width: 768px)");
   const [organizationName, setOrganizationName] = useState("");
   const [organizationContact, setOrganizationContact] = useState("");
@@ -28,20 +41,19 @@ const Signup = () => {
   const [country, setCountry] = useState("");
   const [industry, setIndustry] = useState("");
   const [employeeCount, setEmployeeCount] = useState("");
+  const [hearAboutUs, setHearAboutUs] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     setError(null);
-    setMessage(null);
     if (!organizationName.trim() || !organizationContact.trim() || !email.trim()) {
       setError("Organization name, contact name, and work email are required.");
       return;
     }
     setSubmitting(true);
     try {
-      const res = await submitOrganizationSignupRequest({
+      await submitOrganizationSignupRequest({
         organizationName: organizationName.trim(),
         organizationContact: organizationContact.trim(),
         email: email.trim(),
@@ -50,16 +62,9 @@ const Signup = () => {
         country: country.trim() || undefined,
         industry: industry.trim() || undefined,
         employeeCount: employeeCount.trim() || undefined,
+        hearAboutUs: hearAboutUs ?? undefined,
       });
-      setMessage(res.message ?? "Thanks — our team will review your request.");
-      setOrganizationName("");
-      setOrganizationContact("");
-      setEmail("");
-      setPhoneNumber("");
-      setCity("");
-      setCountry("");
-      setIndustry("");
-      setEmployeeCount("");
+      navigate(ROUTES.AUTH_SIGNUP_THANK_YOU, { replace: true });
     } catch (e) {
       setError((e as { message?: string }).message ?? "Something went wrong. Please try again.");
     } finally {
@@ -126,11 +131,6 @@ const Signup = () => {
               c={"#E2E8F0"}
               size={"sm"}
             />
-            {message && (
-              <Text c="teal.7" size="sm" mt="md" maw={440} ta="center">
-                {message}
-              </Text>
-            )}
             {error && (
               <Text c="red.7" size="sm" mt="md" maw={440} ta="center">
                 {error}
@@ -155,7 +155,7 @@ const Signup = () => {
               />
             </Stack>
             <Stack mt={"25px"} gap={0} w={isMobile ? "100%" : "440px"}>
-              <Text c={"#0F2B5C"}>Organization & admin email</Text>
+              <Text c={"#0F2B5C"}>Organization admin email</Text>
               <Text c="#64748B" size="xs" mb={4}>
                 One address for your organization and the admin account we&apos;ll create for you.
               </Text>
@@ -210,6 +210,22 @@ const Signup = () => {
                 value={employeeCount}
                 onChange={(e) => setEmployeeCount(e.currentTarget.value)}
                 styles={{ input: { height: "49px" } }}
+              />
+            </Stack>
+
+            <Stack mt={"25px"} gap={6} w={isMobile ? "100%" : "440px"}>
+              <Text c={"#0F2B5C"}>Where did you hear about us?</Text>
+              <Text c="#64748B" size="xs">
+                Optional — helps us understand how teams discover NAVI.
+              </Text>
+              <Select
+                placeholder="Select one"
+                data={HEAR_ABOUT_OPTIONS}
+                value={hearAboutUs}
+                onChange={setHearAboutUs}
+                clearable
+                radius="md"
+                styles={{ input: { minHeight: "49px" } }}
               />
             </Stack>
 

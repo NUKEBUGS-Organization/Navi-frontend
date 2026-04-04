@@ -15,7 +15,14 @@ import {
   Textarea,
   Title,
 } from "@mantine/core";
-import { IconDownload, IconHelp, IconMessagePlus, IconTrash, IconUpload } from "@tabler/icons-react";
+import {
+  IconDownload,
+  IconExternalLink,
+  IconHelp,
+  IconMessagePlus,
+  IconTrash,
+  IconUpload,
+} from "@tabler/icons-react";
 import AdminLayout from "@/roles/admin/layout/AdminLayout";
 import { PageHeader } from "@/components";
 import { THEME_BLUE } from "@/constants";
@@ -662,6 +669,46 @@ export default function KnowledgeHub() {
           </Stack>
         </Tabs.Panel>
       </Tabs>
+
+      <Card withBorder radius="lg" p="xl" mt="xl" shadow="xs" style={{ borderColor: "#e2e8f0" }}>
+        <Group gap="sm" mb="sm">
+          <IconExternalLink size={22} color={THEME_BLUE} stroke={1.75} />
+          <Title order={4} fw={800} c={THEME_BLUE}>
+            NAVI insights &amp; blogs
+          </Title>
+        </Group>
+        <Text c="dimmed" size="sm" mb="lg" maw={720}>
+          Curated guidance from the NAVI team on driving change with clarity, structure, and accountability — beyond
+          your organization&apos;s own Knowledge Hub contributions.
+        </Text>
+        <Stack gap="sm">
+          <Button
+            component="a"
+            href="https://changewithnavi.com"
+            target="_blank"
+            rel="noreferrer"
+            variant="light"
+            color="blue"
+            justify="flex-start"
+            leftSection={<IconExternalLink size={16} />}
+            radius="md"
+          >
+            Change with NAVI — articles &amp; resources
+          </Button>
+          <Button
+            component="a"
+            href="https://www.igcollaborative.com"
+            target="_blank"
+            rel="noreferrer"
+            variant="subtle"
+            color="gray"
+            justify="flex-start"
+            radius="md"
+          >
+            IGC Group Inc.
+          </Button>
+        </Stack>
+      </Card>
     </AdminLayout>
   );
 }

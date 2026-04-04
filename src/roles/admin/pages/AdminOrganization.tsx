@@ -23,6 +23,9 @@ import {
   Modal,
   UnstyledButton,
   MultiSelect,
+  FileButton,
+  Alert,
+  Textarea,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { useForm } from "@mantine/form";
@@ -52,6 +55,7 @@ import {
   createUser,
   updateUser,
   deleteUser,
+  bulkImportUsers,
   type AuthUser,
   type UserRole,
 } from "@/api/auth";
@@ -97,6 +101,11 @@ export default function AdminOrganization() {
   const [profileSaving, setProfileSaving] = useState(false);
   const [addDeptOpened, { open: openAddDept, close: closeAddDept }] = useDisclosure(false);
   const [newDeptName, setNewDeptName] = useState("");
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [csvImportOpened, { open: openCsvImport, close: closeCsvImport }] = useDisclosure(false);
+  const [csvText, setCsvText] = useState("");
+  const [csvBusy, setCsvBusy] = useState(false);
+  const [csvResult, setCsvResult] = useState<{ created: number; skipped: number; errors: string[] } | null>(null);
 
   const orgMembers = members.filter((m) => m.role !== "super_admin");
   const admins = orgMembers.filter((m) => m.role === "admin");
@@ -216,6 +225,30 @@ export default function AdminOrganization() {
     setDepartmentsList((prev) => prev.filter((d) => d !== title));
   };
 
+  const handleLogoFile = async (file: File | null) => {
+    if (!file) return;
+    if (file.size > 750_000) {
+      setError("Logo file is too large (max ~750KB).");
+      return;
+    }
+    setLogoUploading(true);
+    setError(null);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result));
+        r.onerror = () => reject(new Error("Could not read file"));
+        r.readAsDataURL(file);
+      });
+      await updateMyOrganization({ logo: dataUrl });
+      await fetchData();
+    } catch (err) {
+      setError((err as ApiError).message ?? "Failed to upload logo");
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
   return (
     <AdminLayout>
       <Box style={{ width: "100%" }}>
@@ -271,12 +304,22 @@ export default function AdminOrganization() {
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    backgroundColor: THEME_BLUE,
+                    backgroundColor: org?.logo ? "#fff" : THEME_BLUE,
+                    overflow: "hidden",
                   }}
                 >
-                  <Text c="white" fw={900} fz="xs" ta="center" px="md">
-                    ACME LOGO
-                  </Text>
+                  {org?.logo ? (
+                    <Box
+                      component="img"
+                      src={org.logo}
+                      alt=""
+                      style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+                    />
+                  ) : (
+                    <Text c="white" fw={900} fz="xs" ta="center" px="md">
+                      ORG LOGO
+                    </Text>
+                  )}
                 </Box>
               </Center>
               <Title order={3} fw={800} mb={5}>
@@ -285,17 +328,23 @@ export default function AdminOrganization() {
               <Text c="dimmed" fz="sm" fw={500} mb="xl">
                 {loading ? "—" : org?.industry ?? "—"}
               </Text>
-              <Button
-                variant="outline"
-                color="gray.3"
-                c="dark"
-                radius="md"
-                fullWidth
-                h={45}
-                fw={700}
-              >
-                Edit Identity
-              </Button>
+              <FileButton onChange={handleLogoFile} accept="image/png,image/jpeg,image/webp,image/svg+xml">
+                {(props) => (
+                  <Button
+                    {...props}
+                    variant="outline"
+                    color="gray.3"
+                    c="dark"
+                    radius="md"
+                    fullWidth
+                    h={45}
+                    fw={700}
+                    loading={logoUploading}
+                  >
+                    {org?.logo ? "Replace logo" : "Upload logo"}
+                  </Button>
+                )}
+              </FileButton>
             </Card>
           </Grid.Col>
 
@@ -333,6 +382,13 @@ export default function AdminOrganization() {
                   </Grid.Col>
                   <Grid.Col span={{ base: 12, sm: 6 }}>
                     <FormLabel label="COMPANY SIZE (number of employees)" />
+                    {org?.pendingEmployeeCount != null &&
+                      org.pendingEmployeeCount !== (org.employeeCount ?? 0) && (
+                      <Alert color="orange" variant="light" mb="sm" title="Approval pending">
+                        Your updated headcount ({org.pendingEmployeeCount}) is waiting for super admin approval.
+                        The number below is what is currently approved.
+                      </Alert>
+                    )}
                     <TextInput
                       type="number"
                       min={0}
@@ -342,6 +398,9 @@ export default function AdminOrganization() {
                       radius="md"
                       size="md"
                     />
+                    <Text size="xs" c="dimmed" mt={6}>
+                      Changes may require super admin approval before they replace the official employee count.
+                    </Text>
                   </Grid.Col>
                   <Grid.Col span={12}>
                     <FormLabel label="PRIMARY CONTACT EMAIL" />
@@ -452,6 +511,19 @@ export default function AdminOrganization() {
             >
               Add Staff
             </Button>
+            <Button
+              variant="light"
+              color="gray"
+              radius="md"
+              fw={700}
+              onClick={() => {
+                setCsvText("");
+                setCsvResult(null);
+                openCsvImport();
+              }}
+            >
+              Import CSV
+            </Button>
           </Group>
         </Group>
         <Group gap="lg" mb="xl">
@@ -559,6 +631,70 @@ export default function AdminOrganization() {
           member={editingMember}
           orgDepartments={org?.departments ?? []}
         />
+        <Modal
+          opened={csvImportOpened}
+          onClose={() => {
+            closeCsvImport();
+            setCsvText("");
+            setCsvResult(null);
+          }}
+          title="Bulk import users (CSV)"
+          centered
+          size="lg"
+        >
+          <Stack gap="md">
+            <Text size="sm" c="dimmed">
+              Header row: <code>name,email,role,departments</code>. Roles: admin, manager, employee. Departments:
+              separate multiple with semicolons (e.g. <code>Engineering;Sales</code>). New users receive a temporary
+              password from the server (share securely outside NAVI). Existing emails are skipped.
+            </Text>
+            <Textarea
+              label="Paste CSV"
+              placeholder={`name,email,role,departments\nJane Doe,jane@co.com,employee,Engineering`}
+              minRows={8}
+              value={csvText}
+              onChange={(e) => setCsvText(e.currentTarget.value)}
+              styles={{ input: { fontFamily: "monospace", fontSize: 12 } }}
+            />
+            {csvResult && (
+              <Alert color={csvResult.errors.length ? "yellow" : "green"} title="Import result">
+                <Text size="sm">Created: {csvResult.created} · Skipped: {csvResult.skipped}</Text>
+                {csvResult.errors.length > 0 && (
+                  <Text size="xs" mt="xs" component="pre" style={{ whiteSpace: "pre-wrap" }}>
+                    {csvResult.errors.slice(0, 12).join("\n")}
+                    {csvResult.errors.length > 12 ? "\n…" : ""}
+                  </Text>
+                )}
+              </Alert>
+            )}
+            <Group justify="flex-end">
+              <Button variant="default" onClick={closeCsvImport} disabled={csvBusy}>
+                Close
+              </Button>
+              <Button
+                bg={THEME_BLUE}
+                loading={csvBusy}
+                disabled={!csvText.trim()}
+                onClick={async () => {
+                  setCsvBusy(true);
+                  setCsvResult(null);
+                  try {
+                    const res = await bulkImportUsers(csvText);
+                    setCsvResult(res);
+                    await fetchData();
+                  } catch (err) {
+                    setError((err as ApiError).message ?? "Import failed");
+                  } finally {
+                    setCsvBusy(false);
+                  }
+                }}
+              >
+                Run import
+              </Button>
+            </Group>
+          </Stack>
+        </Modal>
+
         <Modal
           opened={deleteOpened}
           onClose={() => {

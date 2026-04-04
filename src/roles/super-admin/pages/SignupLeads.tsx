@@ -60,8 +60,8 @@ export default function SignupLeads() {
   return (
     <SuperAdminLayout>
       <PageHeader
-        title="Signup leads"
-        subtitle="Public organization requests — open create organization with fields pre-filled"
+        title="Leads"
+        subtitle="Public signup requests with date and time — open Create organization with fields pre-filled"
         actions={
           <Button variant="light" onClick={load} loading={loading}>
             Refresh
@@ -107,6 +107,9 @@ export default function SignupLeads() {
                   EMAIL
                 </Table.Th>
                 <Table.Th c="dimmed" fw={800} fz={10} lts={1}>
+                  HEARD ABOUT
+                </Table.Th>
+                <Table.Th c="dimmed" fw={800} fz={10} lts={1}>
                   STATUS
                 </Table.Th>
                 <Table.Th c="dimmed" fw={800} fz={10} lts={1}>
@@ -120,7 +123,7 @@ export default function SignupLeads() {
             <Table.Tbody>
               {loading ? (
                 <Table.Tr>
-                  <Table.Td colSpan={6}>
+                  <Table.Td colSpan={7}>
                     <Text c="dimmed" size="sm" ta="center" py="lg">
                       Loading...
                     </Text>
@@ -133,6 +136,11 @@ export default function SignupLeads() {
                     <Table.Td>{lead.organizationContact}</Table.Td>
                     <Table.Td>
                       <Text size="sm">{lead.email}</Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Text size="sm" c="dimmed">
+                        {lead.hearAboutUs?.trim() || "—"}
+                      </Text>
                     </Table.Td>
                     <Table.Td>
                       <Badge

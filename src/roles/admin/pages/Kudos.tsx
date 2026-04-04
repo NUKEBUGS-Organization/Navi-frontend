@@ -120,6 +120,25 @@ export default function Kudos() {
 
         {isEmployee ? (
           <>
+            {import.meta.env.VITE_KUDOS_PLATFORM_URL && (
+              <Card withBorder radius="md" p="md" mb="lg">
+                <Group justify="space-between" align="center" wrap="wrap">
+                  <Text size="sm" c="dimmed">
+                    Company Kudos program (external)
+                  </Text>
+                  <Button
+                    component="a"
+                    href={import.meta.env.VITE_KUDOS_PLATFORM_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    size="sm"
+                    variant="light"
+                  >
+                    Open platform
+                  </Button>
+                </Group>
+              </Card>
+            )}
             {kudosSummary && (
               <Card withBorder radius="lg" p="md" mb="lg">
                 <Group justify="space-between" align="flex-start">
@@ -176,6 +195,9 @@ export default function Kudos() {
             <Tabs defaultValue="give">
               <Tabs.List>
                 <Tabs.Tab value="give">Give Kudos</Tabs.Tab>
+                {import.meta.env.VITE_KUDOS_PLATFORM_URL ? (
+                  <Tabs.Tab value="external">Company Kudos program</Tabs.Tab>
+                ) : null}
               </Tabs.List>
 
               <Tabs.Panel value="give" pt="md">
@@ -243,6 +265,24 @@ export default function Kudos() {
                   </Stack>
                 </Stack>
               </Tabs.Panel>
+
+              {import.meta.env.VITE_KUDOS_PLATFORM_URL ? (
+                <Tabs.Panel value="external" pt="md">
+                  <Card withBorder radius="md" p="md">
+                    <Text size="sm" c="dimmed" mb="md">
+                      Open your organization&apos;s external recognition platform in a new tab.
+                    </Text>
+                    <Button
+                      component="a"
+                      href={import.meta.env.VITE_KUDOS_PLATFORM_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Open Kudos platform
+                    </Button>
+                  </Card>
+                </Tabs.Panel>
+              ) : null}
             </Tabs>
           </>
         )}

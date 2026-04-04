@@ -18,6 +18,7 @@ import {
   TextInput,
   ActionIcon,
   Button,
+  SimpleGrid,
 } from "@mantine/core";
 import {
   IconSearch,
@@ -32,7 +33,14 @@ import type { IconProps } from "@tabler/icons-react";
 import { THEME_BLUE } from "@/constants";
 import { useAppRoutes } from "@/hooks/useAppRoutes";
 import { listInitiatives, type InitiativeListItem } from "@/api/initiatives";
-import { listAssessments, listSubmissions, type Assessment, type AssessmentSubmission } from "@/api/assessments";
+import {
+  listAssessments,
+  listSubmissions,
+  getNaviSummary,
+  type Assessment,
+  type AssessmentSubmission,
+  type NaviSummary,
+} from "@/api/assessments";
 import { getMyOrganization, type MyOrganization } from "@/api/organizations";
 import { getRiskSummary, type RiskSummary } from "@/api/risks";
 import { getKudosSummary, type KudosSummary } from "@/api/kudos";
@@ -104,6 +112,7 @@ export default function AdminDashboard() {
   const appRoutes = useAppRoutes();
   const { user } = useAuth();
   const canViewRiskMonitoring = user?.role === "admin" || user?.role === "manager";
+  const canViewNaviOrg = user?.role === "admin" || user?.role === "manager";
   const isEmployee = user?.role === "employee";
   const currentUserId = user?._id ?? "";
   const [initiatives, setInitiatives] = useState<InitiativeListItem[]>([]);
@@ -112,12 +121,14 @@ export default function AdminDashboard() {
   const [org, setOrg] = useState<MyOrganization | null>(null);
   const [riskSummary, setRiskSummary] = useState<RiskSummary | null>(null);
   const [kudosSummary, setKudosSummary] = useState<KudosSummary | null>(null);
+  const [naviSummary, setNaviSummary] = useState<NaviSummary | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     // Employees shouldn't load risk monitoring data.
     const riskPromise = canViewRiskMonitoring ? getRiskSummary().catch(() => null) : Promise.resolve(null);
     const kudosPromise = isEmployee ? getKudosSummary().catch(() => null) : Promise.resolve(null);
+    const naviPromise = canViewNaviOrg ? getNaviSummary().catch(() => null) : Promise.resolve(null);
     Promise.all([
       listInitiatives(),
       listAssessments(),
@@ -125,14 +136,21 @@ export default function AdminDashboard() {
       getMyOrganization().catch(() => null),
       riskPromise,
       kudosPromise,
+      naviPromise,
     ])
-      .then(([initList, assessList, subList, orgData, riskData, kudosData]) => {
+      .then(([initList, assessList, subList, orgData, riskData, kudosData, naviData]) => {
         setInitiatives(Array.isArray(initList) ? initList : []);
         setAssessments(Array.isArray(assessList) ? assessList : []);
         setSubmissions(Array.isArray(subList) ? subList : []);
         setOrg(orgData ?? null);
         setRiskSummary(riskData ?? null);
         setKudosSummary(kudosData ?? null);
+        // Always keep aggregate when the API returns it (including submissionCount === 0) so the NAVI card stays visible.
+        setNaviSummary(
+          naviData != null && typeof naviData === "object" && "submissionCount" in naviData
+            ? naviData
+            : null,
+        );
       })
       .catch(() => {
         setInitiatives([]);
@@ -141,9 +159,10 @@ export default function AdminDashboard() {
         setOrg(null);
         setRiskSummary(null);
         setKudosSummary(null);
+        setNaviSummary(null);
       })
       .finally(() => setLoading(false));
-  }, [canViewRiskMonitoring, isEmployee]);
+  }, [canViewRiskMonitoring, canViewNaviOrg, isEmployee]);
 
   const activeInitiatives = initiatives.filter((i) => i.status === "ACTIVE");
   const activeCount = activeInitiatives.length;
@@ -329,6 +348,81 @@ export default function AdminDashboard() {
           />
         </Grid.Col>
       </Grid>
+
+      {canViewNaviOrg && !loading && (
+        <Card withBorder radius="lg" p="lg" mb="xl" shadow="xs">
+          <Text fw={800} fz="lg" mb="xs">
+            NAVI score (organization)
+          </Text>
+          {!naviSummary ? (
+            <Text size="sm" c="dimmed">
+              NAVI summary could not be loaded. You may not be linked to an organization, or the request failed. Refresh
+              the page or check that the API is reachable.
+            </Text>
+          ) : (
+            <>
+              <Text size="sm" c="dimmed" mb="md">
+                {naviSummary.avgNaviIndex != null
+                  ? `Based on ${naviSummary.submissionCount} assessment submission${naviSummary.submissionCount === 1 ? "" : "s"} that include NAVI pillar scores.`
+                  : naviSummary.submissionCount === 0
+                    ? "No assessment submissions in your organization yet. When staff complete assessments built from NAVI templates (with N/A/V/I pillar tags), scores will appear here."
+                    : `You have ${naviSummary.submissionCount} submission${naviSummary.submissionCount === 1 ? "" : "s"}, but none include NAVI pillar scoring yet. Create or assign assessments from a NAVI template so answers can be scored.`}
+              </Text>
+              <Stack gap="lg">
+                <Box>
+                  <Text size="xs" c="dimmed" fw={700} tt="uppercase">
+                    Index (average)
+                  </Text>
+                  <Text fz={28} fw={800}>
+                    {naviSummary.avgNaviIndex != null ? naviSummary.avgNaviIndex.toFixed(2) : "—"}
+                  </Text>
+                </Box>
+                <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
+                  {(["avgN", "avgA", "avgV", "avgI"] as const).map((key, i) => {
+                    const labels = ["Navigate", "Align", "Value", "Implement"];
+                    const v = naviSummary[key];
+                    return (
+                      <Box key={key}>
+                        <Text size="xs" c="dimmed" fw={700}>
+                          {labels[i]}
+                        </Text>
+                        <Text fz="md" fw={700}>
+                          {v != null ? v.toFixed(2) : "—"}
+                        </Text>
+                        {v != null && (
+                          <Progress value={Math.min(100, (v / 5) * 100)} mt={6} size="sm" color={THEME_BLUE} radius="xl" />
+                        )}
+                      </Box>
+                    );
+                  })}
+                </SimpleGrid>
+                <Box>
+                  <Text size="xs" c="dimmed" fw={700} tt="uppercase">
+                    Leadership vs employees
+                  </Text>
+                  <Text size="sm" mt={4}>
+                    Leadership avg:{" "}
+                    <Text span fw={700}>
+                      {naviSummary.leadershipAvgNavi != null ? naviSummary.leadershipAvgNavi.toFixed(2) : "—"}
+                    </Text>
+                  </Text>
+                  <Text size="sm">
+                    Employees avg:{" "}
+                    <Text span fw={700}>
+                      {naviSummary.employeeAvgNavi != null ? naviSummary.employeeAvgNavi.toFixed(2) : "—"}
+                    </Text>
+                  </Text>
+                  {naviSummary.alignmentGap != null && (
+                    <Badge mt="sm" variant="light" color={naviSummary.alignmentGap > 0.5 ? "orange" : "teal"}>
+                      Alignment gap {naviSummary.alignmentGap.toFixed(2)}
+                    </Badge>
+                  )}
+                </Box>
+              </Stack>
+            </>
+          )}
+        </Card>
+      )}
 
       {canViewRiskMonitoring && riskSummary && (riskSummary.open > 0 || riskSummary.low > 0 || riskSummary.medium > 0 || riskSummary.high > 0) && (
         <Card withBorder radius="lg" p="md" mb="xl" style={{ cursor: "pointer" }} onClick={() => navigate(appRoutes.RISKS)}>

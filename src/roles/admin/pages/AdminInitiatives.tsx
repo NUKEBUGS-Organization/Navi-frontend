@@ -26,7 +26,7 @@ import {
 } from "@mantine/core";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAppRoutes } from "@/hooks/useAppRoutes";
 import {
@@ -59,6 +59,43 @@ import { IconCheck } from "@tabler/icons-react";
 import { useForm } from "@mantine/form";
 import { THEME_BLUE, TEAL_BLUE } from "@/constants";
 import type { InitiativeFaq, InitiativeSummary, InitiativeStatus } from "@/types";
+
+/** CSV (Question,Answer) or tab-separated rows; optional header row "Question"/"Answer". */
+function parseFaqImportFromText(text: string): InitiativeFaq[] {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return [];
+  const tabular = lines.some((l) => l.includes("\t"));
+  const splitLine = (line: string): string[] => {
+    if (tabular) return line.split("\t").map((c) => c.trim());
+    const idx = line.indexOf(",");
+    if (idx === -1) return [line.replace(/^"|"$/g, "").trim()];
+    return [
+      line.slice(0, idx).replace(/^"|"$/g, "").trim(),
+      line.slice(idx + 1).replace(/^"|"$/g, "").trim(),
+    ];
+  };
+  let start = 0;
+  const firstCell = (splitLine(lines[0])[0] ?? "").toLowerCase();
+  if (firstCell === "question" || firstCell === "q" || firstCell.startsWith("question")) {
+    start = 1;
+  }
+  const out: InitiativeFaq[] = [];
+  for (let i = start; i < lines.length; i++) {
+    const cells = splitLine(lines[i]);
+    if (cells.length >= 2 && cells[0]) {
+      out.push({
+        question: cells[0],
+        answer: cells.slice(1).join(tabular ? "\t" : ", "),
+      });
+    } else if (cells[0]) {
+      out.push({ question: cells[0], answer: "" });
+    }
+  }
+  return out;
+}
 
 function toBackendStatus(status: InitiativeStatus): CreateInitiativePayload["status"] {
   if (status === "In Progress" || status === "Active") return "ACTIVE";
@@ -321,6 +358,7 @@ export default function AdminInitiatives() {
       await updateInitiative(id, {
         title: data.title,
         leadName: data.leadName,
+        sponsorName: data.sponsorName?.trim() || undefined,
         status: toBackendStatus(data.status),
         dateRange: data.dateRange,
         departments: data.departments,
@@ -346,9 +384,10 @@ export default function AdminInitiatives() {
     setError(null);
     try {
       const payload: CreateInitiativePayload = {
-        title: data.title,
+        title: data.title?.trim() || "Untitled Initiative",
         description: data.description,
-        leadName: data.leadName,
+        leadName: data.leadName?.trim() || "Unassigned",
+        sponsorName: data.sponsorName?.trim() || undefined,
         status: user?.role === "manager" ? "WAITING_FOR_APPROVAL" : toBackendStatus(data.status),
         dateRange: data.dateRange,
         departments: data.departments ?? [],
@@ -634,6 +673,7 @@ export default function AdminInitiatives() {
           onAddDepartment={handleAddDepartment}
           leadEnrollmentCounts={leadEnrollmentCounts}
           leadEnrollmentInitiativesByLead={leadEnrollmentInitiativesByLead}
+          organizationPath={appRoutes.ORGANIZATION}
         />
       ) : (
         <InitiativeModal
@@ -700,6 +740,7 @@ function InitiativeModal({
     initialValues: {
       title: initial?.title || "",
       leadName: initial?.leadName || "",
+      sponsorName: initial?.sponsorName || "",
       status: initial?.status || "ACTIVE",
       dateRange: initial?.dateRange || "",
       departments: initial?.departments || [],
@@ -731,6 +772,33 @@ function InitiativeModal({
     },
   });
 
+  useEffect(() => {
+    if (!opened || !initial) return;
+    form.setValues({
+      title: initial.title || "",
+      leadName: initial.leadName || "",
+      sponsorName: initial.sponsorName || "",
+      status: initial.status || "ACTIVE",
+      dateRange: initial.dateRange || "",
+      departments: initial.departments || [],
+      progress: initial.progress || 0,
+      goals: initial.goals?.length ? initial.goals : [{ goal: "", metric: "" }],
+      faqs:
+        initial.faqs?.length && initial.faqs.some((f) => f.question?.trim() || f.answer?.trim())
+          ? initial.faqs.map((f) => ({
+              question: f.question ?? "",
+              answer: f.answer ?? "",
+            }))
+          : [{ question: "", answer: "" }],
+      changeType: initial.changeType ?? "Other",
+      raciAccountableIds: initial.raciAccountableIds ?? [],
+      raciResponsibleIds: initial.raciResponsibleIds ?? [],
+      raciConsultedIds: initial.raciConsultedIds ?? [],
+      raciInformedIds: initial.raciInformedIds ?? [],
+    });
+    setImpactScope((initial.departments?.length ?? 0) > 0 ? "departments" : "organization");
+  }, [opened, initial?.id]);
+
   const selectedLeadInitiatives =
     leadEnrollmentInitiativesByLead[form.values.leadName ?? ""] ?? [];
 
@@ -753,6 +821,11 @@ function InitiativeModal({
       >
         <Stack gap="md">
           <TextInput label="Title" {...form.getInputProps("title")} />
+          <TextInput
+            label="Sponsor (executive)"
+            description="Visible on roadmap and initiative details."
+            {...form.getInputProps("sponsorName")}
+          />
           <Select
             label="Change Lead"
             placeholder="Select a manager..."
@@ -1082,6 +1155,7 @@ interface CreateInitiativeModalProps {
   onAddDepartment: (name: string) => void | Promise<void>;
   leadEnrollmentCounts: Record<string, number>;
   leadEnrollmentInitiativesByLead: Record<string, InitiativeListItem[]>;
+  organizationPath: string;
 }
 
 function CreateInitiativeModal({
@@ -1093,6 +1167,7 @@ function CreateInitiativeModal({
   onAddDepartment,
   leadEnrollmentCounts,
   leadEnrollmentInitiativesByLead,
+  organizationPath,
 }: CreateInitiativeModalProps) {
   const departmentOptions = orgDepartments;
   const leadOptions = managers.map((m) => ({
@@ -1124,6 +1199,7 @@ function CreateInitiativeModal({
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [sponsorName, setSponsorName] = useState("");
   const [lead, setLead] = useState("");
   const [changeType, setChangeType] = useState<ChangeType>("Other");
   const [raciAccountableId, setRaciAccountableId] = useState<string>("");
@@ -1144,6 +1220,8 @@ function CreateInitiativeModal({
   const [faqs, setFaqs] = useState<InitiativeFaq[]>([{ question: "", answer: "" }]);
   type InitialStatus = "Drafting" | "Pending Review" | "Published";
   const [initialStatus, setInitialStatus] = useState<InitialStatus>("Drafting");
+  const faqFileInputRef = useRef<HTMLInputElement>(null);
+  const [faqImportError, setFaqImportError] = useState<string | null>(null);
 
   const selectedLeadInitiatives = leadEnrollmentInitiativesByLead[lead] ?? [];
 
@@ -1166,7 +1244,6 @@ function CreateInitiativeModal({
     ].filter((id) => id && id !== raciAccountableId),
   ).size;
   const raciOverLimit = nonAccountableUniqueCount > 10;
-  const raciAccountableMissing = !raciAccountableId;
 
   const breadcrumbs = [
     { title: "Initiatives", href: "#" },
@@ -1254,6 +1331,18 @@ function CreateInitiativeModal({
                         onChange={(e) => setDescription(e.currentTarget.value)}
                       />
                     </Box>
+                    <TextInput
+                      label={
+                        <Text fw={700} fz="sm" mb={5}>
+                          Executive sponsor
+                        </Text>
+                      }
+                      placeholder="Name of executive sponsor"
+                      radius="md"
+                      size="md"
+                      value={sponsorName}
+                      onChange={(e) => setSponsorName(e.currentTarget.value)}
+                    />
                     <Select
                       label={
                         <Text fw={700} fz="sm" mb={5}>
@@ -1268,6 +1357,13 @@ function CreateInitiativeModal({
                       value={lead}
                       onChange={(value) => setLead(value || "")}
                     />
+                    <Text size="xs" c="dimmed" maw={520}>
+                      Managers and admins listed here are added under{" "}
+                      <Text component={Link} to={organizationPath} fw={700} c={THEME_BLUE} span>
+                        Organization → Team
+                      </Text>
+                      . You can save a draft without a lead and assign one later.
+                    </Text>
 
                     {selectedLeadInitiatives.length > 0 && (
                       <Box style={{ border: "1px solid #e9ecef", borderRadius: 8, padding: 10 }}>
@@ -1672,24 +1768,71 @@ function CreateInitiativeModal({
                 </Box>
 
                 <Box>
-                  <Group justify="space-between" mb="md">
+                  <Group justify="space-between" mb="md" wrap="wrap">
                     <Group gap="xs">
                       <IconHelp size={22} color={THEME_BLUE} stroke={2} />
                       <Title order={4} fw={800} fz="lg">
                         FAQs (optional)
                       </Title>
                     </Group>
-                    <Anchor
-                      component="button"
-                      type="button"
-                      size="sm"
-                      fw={700}
-                      c={THEME_BLUE}
-                      onClick={() => setFaqs((f) => [...f, { question: "", answer: "" }])}
-                    >
-                      Add FAQ
-                    </Anchor>
+                    <Group gap="sm">
+                      <input
+                        ref={faqFileInputRef}
+                        type="file"
+                        accept=".csv,.txt,text/csv,text/plain"
+                        style={{ display: "none" }}
+                        onChange={(e) => {
+                          setFaqImportError(null);
+                          const file = e.target.files?.[0];
+                          e.target.value = "";
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            try {
+                              const parsed = parseFaqImportFromText(String(reader.result ?? ""));
+                              if (!parsed.length) {
+                                setFaqImportError("No FAQ rows found. Use Question,Answer columns or tab-separated pairs.");
+                                return;
+                              }
+                              setFaqs(parsed);
+                            } catch {
+                              setFaqImportError("Could not read that file.");
+                            }
+                          };
+                          reader.onerror = () => setFaqImportError("Could not read that file.");
+                          reader.readAsText(file);
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="light"
+                        size="xs"
+                        fw={700}
+                        onClick={() => faqFileInputRef.current?.click()}
+                      >
+                        Import from file
+                      </Button>
+                      <Anchor
+                        component="button"
+                        type="button"
+                        size="sm"
+                        fw={700}
+                        c={THEME_BLUE}
+                        onClick={() => setFaqs((f) => [...f, { question: "", answer: "" }])}
+                      >
+                        Add FAQ
+                      </Anchor>
+                    </Group>
                   </Group>
+                  {faqImportError && (
+                    <Text size="sm" c="red" mb="sm">
+                      {faqImportError}
+                    </Text>
+                  )}
+                  <Text size="xs" c="dimmed" mb="sm">
+                    Import a .csv or .txt file with Question and Answer columns (comma- or tab-separated). You can still
+                    edit rows below.
+                  </Text>
                   <Divider mb="xl" color="#e9ecef" />
                   <Stack gap="md">
                     {faqs.map((item, idx) => (
@@ -1962,7 +2105,7 @@ function CreateInitiativeModal({
                 fw={700}
                 px={30}
                 h={45}
-                disabled={!title || !lead || raciOverLimit || raciAccountableMissing}
+                disabled={raciOverLimit}
                 onClick={() => {
                   const dateRange =
                     startDate && endDate
@@ -1974,6 +2117,7 @@ function CreateInitiativeModal({
                     status: "DRAFT",
                     title: title || "Untitled Initiative",
                     description,
+                    sponsorName: sponsorName.trim() || undefined,
                     leadName: lead,
                     changeType,
                     raciAccountableIds: raciAccountableId ? [raciAccountableId] : [],
@@ -1988,6 +2132,7 @@ function CreateInitiativeModal({
                   });
                   setTitle("");
                   setDescription("");
+                  setSponsorName("");
                   setLead("");
                   setStartDate(null);
                   setEndDate(null);
@@ -2032,6 +2177,7 @@ function CreateInitiativeModal({
                     status: statusMap[initialStatus],
                     title,
                     description,
+                    sponsorName: sponsorName.trim() || undefined,
                     leadName: lead,
                     changeType,
                     raciAccountableIds: raciAccountableId ? [raciAccountableId] : [],
@@ -2046,6 +2192,7 @@ function CreateInitiativeModal({
                   });
                   setTitle("");
                   setDescription("");
+                  setSponsorName("");
                   setLead("");
                   setStartDate(null);
                   setEndDate(null);

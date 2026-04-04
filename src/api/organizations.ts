@@ -11,6 +11,7 @@ export interface OrganizationListItem {
   departments: string[];
   departmentCount: number;
   employeeCount: number;
+  pendingEmployeeCount?: number;
   email?: string;
   country?: string;
 }
@@ -50,6 +51,8 @@ export interface MyOrganization {
   city?: string;
   country?: string;
   employeeCount?: number;
+  pendingEmployeeCount?: number;
+  logo?: string;
   departments?: string[];
   status?: string;
   createdAt?: string;
@@ -69,6 +72,7 @@ export interface UpdateOrganizationPayload {
   city?: string;
   country?: string;
   employeeCount?: number;
+  logo?: string;
   departments?: string[];
 }
 
@@ -93,6 +97,7 @@ export interface OrganizationSignupRequestPayload {
   country?: string;
   industry?: string;
   employeeCount?: string;
+  hearAboutUs?: string;
 }
 
 export function submitOrganizationSignupRequest(
@@ -111,6 +116,7 @@ export interface OrganizationSignupLead {
   country?: string;
   industry?: string;
   employeeCount?: string;
+  hearAboutUs?: string;
   status: string;
   createdAt: string;
 }
@@ -121,4 +127,8 @@ export function listSignupLeads(): Promise<OrganizationSignupLead[]> {
 
 export function getSignupLead(leadId: string): Promise<OrganizationSignupLead> {
   return api.get<OrganizationSignupLead>(`/organizations/signup-leads/${leadId}`);
+}
+
+export function approveOrganizationEmployeeCount(orgId: string): Promise<MyOrganization> {
+  return api.post<MyOrganization>(`/organizations/${orgId}/approve-employee-count`, {});
 }

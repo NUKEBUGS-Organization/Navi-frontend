@@ -26,11 +26,12 @@ import {
   createCommunication,
   updateCommunication,
   deleteCommunication,
+  sendCommunicationEmail,
   type CommunicationDto,
   type CreateCommunicationPayload,
 } from "@/api/communications";
 import { useAuth } from "@/contexts/AuthContext";
-import { IconPlus, IconPencil, IconTrash } from "@tabler/icons-react";
+import { IconPlus, IconPencil, IconTrash, IconMailForward } from "@tabler/icons-react";
 
 const TYPE_OPTIONS = [
   { value: "Email", label: "Email" },
@@ -45,6 +46,15 @@ const STATUS_OPTIONS = [
   { value: "Sent", label: "Sent" },
   { value: "Completed", label: "Completed" },
   { value: "Cancelled", label: "Cancelled" },
+];
+
+/** Values understood by the backend when sending email (`CommunicationService.resolveAudienceEmails`). */
+const AUDIENCE_PRESETS = [
+  { value: "all", label: "Everyone in organization" },
+  { value: "leadership", label: "Leadership (admins + managers)" },
+  { value: "managers", label: "Managers only" },
+  { value: "employees", label: "Employees only" },
+  { value: "custom", label: "Custom (comma-separated emails)" },
 ];
 
 function formatDate(s: string | undefined): string {
@@ -234,6 +244,8 @@ export default function CommunicationPlanning() {
   const [formMessage, setFormMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<CommunicationDto | null>(null);
+  const [audiencePreset, setAudiencePreset] = useState<string | null>("all");
+  const [sendingId, setSendingId] = useState<string | null>(null);
 
   useEffect(() => {
     listInitiatives()
@@ -262,6 +274,7 @@ export default function CommunicationPlanning() {
     setFormTitle("");
     setFormType("Email");
     setFormAudience("");
+    setAudiencePreset("all");
     setFormScheduledDate(null);
     setFormStatus("Planned");
     setFormMessage("");
@@ -276,6 +289,9 @@ export default function CommunicationPlanning() {
     setEditing(row);
     setFormTitle(row.title);
     setFormType(row.type ?? "Email");
+    const aud = (row.audience ?? "").trim().toLowerCase();
+    const presetMatch = AUDIENCE_PRESETS.find((p) => p.value !== "custom" && p.value === aud);
+    setAudiencePreset(presetMatch ? presetMatch.value : aud.includes("@") ? "custom" : "all");
     setFormAudience(row.audience ?? "");
     setFormScheduledDate(row.scheduledDate ? new Date(row.scheduledDate) : null);
     setFormStatus(row.status ?? "Planned");
@@ -314,6 +330,22 @@ export default function CommunicationPlanning() {
       if (selectedInitiativeId) listCommunications(selectedInitiativeId).then((d) => setList(Array.isArray(d) ? d : []));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSendEmail = async (row: CommunicationDto) => {
+    if (row.type && row.type !== "Email") return;
+    setSendingId(row._id);
+    try {
+      await sendCommunicationEmail(row._id);
+      if (selectedInitiativeId) {
+        const d = await listCommunications(selectedInitiativeId);
+        setList(Array.isArray(d) ? d : []);
+      }
+    } catch {
+      // surface minimally: list refresh on success only
+    } finally {
+      setSendingId(null);
     }
   };
 
@@ -394,7 +426,8 @@ export default function CommunicationPlanning() {
                         <Table.Th>Audience</Table.Th>
                         <Table.Th>Date</Table.Th>
                         <Table.Th>Status</Table.Th>
-                        {canEdit && <Table.Th w={80}></Table.Th>}
+                        <Table.Th>Email</Table.Th>
+                        {canEdit && <Table.Th w={120}></Table.Th>}
                       </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
@@ -405,9 +438,30 @@ export default function CommunicationPlanning() {
                           <Table.Td>{row.audience ?? "—"}</Table.Td>
                           <Table.Td>{formatDate(row.scheduledDate)}</Table.Td>
                           <Table.Td>{row.status ?? "—"}</Table.Td>
+                          <Table.Td>
+                            {row.emailSentAt ? (
+                              <Text size="xs" c="dimmed">
+                                Sent {new Date(row.emailSentAt).toLocaleString()}
+                              </Text>
+                            ) : (
+                              "—"
+                            )}
+                          </Table.Td>
                           {canEdit && (
                             <Table.Td>
                               <Group gap="xs">
+                                {row.type === "Email" && (
+                                  <ActionIcon
+                                    variant="light"
+                                    color="teal"
+                                    size="sm"
+                                    title="Send now"
+                                    loading={sendingId === row._id}
+                                    onClick={() => handleSendEmail(row)}
+                                  >
+                                    <IconMailForward size={16} />
+                                  </ActionIcon>
+                                )}
                                 <ActionIcon variant="subtle" size="sm" onClick={() => openEdit(row)}>
                                   <IconPencil size={16} />
                                 </ActionIcon>
@@ -431,7 +485,24 @@ export default function CommunicationPlanning() {
           <Stack gap="md">
             <TextInput label="Title" value={formTitle} onChange={(e) => setFormTitle(e.currentTarget.value)} required placeholder="e.g. Kick-off email" />
             <Select label="Type" data={TYPE_OPTIONS} value={formType} onChange={setFormType} />
-            <TextInput label="Audience" value={formAudience} onChange={(e) => setFormAudience(e.currentTarget.value)} placeholder="e.g. All staff" />
+            <Select
+              label="Audience preset"
+              description="Used when you click Send on an email communication."
+              data={AUDIENCE_PRESETS}
+              value={audiencePreset}
+              onChange={(v) => {
+                setAudiencePreset(v);
+                if (v && v !== "custom") setFormAudience(v);
+              }}
+            />
+            {audiencePreset === "custom" && (
+              <TextInput
+                label="Email addresses"
+                value={formAudience}
+                onChange={(e) => setFormAudience(e.currentTarget.value)}
+                placeholder="a@co.com, b@co.com"
+              />
+            )}
             <DateInput
               label="Scheduled date"
               value={formScheduledDate}

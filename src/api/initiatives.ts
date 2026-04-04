@@ -22,6 +22,7 @@ export interface CreateInitiativePayload {
   description?: string;
   status?: "ACTIVE" | "DRAFT" | "WAITING_FOR_APPROVAL" | "COMPLETED" | "PLANNING";
   leadName: string;
+  sponsorName?: string;
   dateRange?: string;
   departments?: string[];
   progress?: number;
@@ -80,4 +81,18 @@ export interface MyInitiativeParticipation {
 /** Initiatives where the current user is lead, on RACI, or has assigned tasks. */
 export function listMyInitiativeParticipations(): Promise<MyInitiativeParticipation[]> {
   return api.get<MyInitiativeParticipation[]>("/initiatives/me/participations");
+}
+
+export interface RaciRollupRow {
+  userId: string;
+  name: string;
+  email?: string;
+  asAccountable: string[];
+  asResponsible: string[];
+  asConsulted: string[];
+  asInformed: string[];
+}
+
+export function listRaciRollup(): Promise<RaciRollupRow[]> {
+  return api.get<RaciRollupRow[]>("/initiatives/raci/rollup");
 }

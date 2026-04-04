@@ -18,7 +18,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { PageHeader } from "@/components";
 import { THEME_BLUE } from "@/constants";
 import { useAppRoutes } from "@/hooks/useAppRoutes";
-import { listInitiatives } from "@/api/initiatives";
+import { listInitiatives, listRaciRollup, type RaciRollupRow } from "@/api/initiatives";
 import {
   listStakeholders,
   createStakeholder,
@@ -59,6 +59,15 @@ export default function StakeholderMapping() {
   const [formNotes, setFormNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<StakeholderDto | null>(null);
+  const [raciRollup, setRaciRollup] = useState<RaciRollupRow[]>([]);
+  const [raciLoading, setRaciLoading] = useState(true);
+
+  useEffect(() => {
+    listRaciRollup()
+      .then((rows) => setRaciRollup(Array.isArray(rows) ? rows : []))
+      .catch(() => setRaciRollup([]))
+      .finally(() => setRaciLoading(false));
+  }, []);
 
   useEffect(() => {
     listInitiatives()
@@ -184,6 +193,43 @@ export default function StakeholderMapping() {
             </Group>
           }
         />
+
+        <Paper withBorder radius="md" p="md" mb="lg">
+          <Text fw={700} size="sm" c="dimmed" mb="md" tt="uppercase" lts={0.5}>
+            RACI rollup (organization)
+          </Text>
+          <Text size="sm" c="dimmed" mb="md">
+            People who appear on initiative RACI matrices, rolled up across all initiatives in your org.
+          </Text>
+          {raciLoading ? (
+            <Text size="sm" c="dimmed">Loading…</Text>
+          ) : raciRollup.length === 0 ? (
+            <Text size="sm" c="dimmed">No RACI assignments yet.</Text>
+          ) : (
+            <Table striped highlightOnHover>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Name</Table.Th>
+                  <Table.Th>Accountable (initiatives)</Table.Th>
+                  <Table.Th>Responsible</Table.Th>
+                  <Table.Th>Consulted</Table.Th>
+                  <Table.Th>Informed</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {raciRollup.map((row) => (
+                  <Table.Tr key={row.userId}>
+                    <Table.Td fw={600}>{row.name}</Table.Td>
+                    <Table.Td><Text size="sm" lineClamp={2}>{row.asAccountable.join(", ") || "—"}</Text></Table.Td>
+                    <Table.Td><Text size="sm" lineClamp={2}>{row.asResponsible.join(", ") || "—"}</Text></Table.Td>
+                    <Table.Td><Text size="sm" lineClamp={2}>{row.asConsulted.join(", ") || "—"}</Text></Table.Td>
+                    <Table.Td><Text size="sm" lineClamp={2}>{row.asInformed.join(", ") || "—"}</Text></Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          )}
+        </Paper>
 
         <Paper withBorder radius="md" p="md">
           {loading ? (
