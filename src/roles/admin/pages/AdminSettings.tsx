@@ -28,8 +28,9 @@ import {
   IconUser,
   IconLock,
   IconStar,
+  IconLogout,
 } from "@tabler/icons-react";
-import { THEME_BLUE, TEAL_BLUE, setStoredUser } from "@/constants";
+import { ROUTES, THEME_BLUE, TEAL_BLUE, setStoredUser } from "@/constants";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAppRoutes } from "@/hooks/useAppRoutes";
 import { getMyOrganization } from "@/api/organizations";
@@ -95,7 +96,7 @@ async function imageFileToProfileDataUrl(file: File): Promise<string> {
 }
 
 export default function AdminSettings() {
-  const { user, setUser } = useAuth();
+  const { user, setUser, logout } = useAuth();
   const navigate = useNavigate();
   const appRoutes = useAppRoutes();
   const [org, setOrg] = useState<MyOrganization | null>(null);
@@ -310,6 +311,22 @@ export default function AdminSettings() {
                 onClick={() => photoInputRef.current?.click()}
               >
                 Upload new photo
+              </Button>
+              <Button
+                variant="outline"
+                color="red"
+                radius="md"
+                mt="md"
+                h={50}
+                fw={700}
+                fullWidth
+                leftSection={<IconLogout size={18} />}
+                onClick={() => {
+                  logout();
+                  navigate(ROUTES.AUTH_LOGIN, { replace: true });
+                }}
+              >
+                Log out
               </Button>
             </Card>
           </Grid.Col>

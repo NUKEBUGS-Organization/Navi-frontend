@@ -14,6 +14,7 @@ export interface OrganizationListItem {
   pendingEmployeeCount?: number;
   email?: string;
   country?: string;
+  industry?: string;
 }
 
 export interface CreateOrganizationPayload {

@@ -16,7 +16,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { IconLayoutDashboard, IconTarget, IconCheckbox, IconRoute, IconHierarchy, IconSettings, IconLogout, IconUsers, IconMessage, IconChartLine, IconAlertTriangle, IconStar, IconBooks } from "@tabler/icons-react";
 import type { IconProps } from "@tabler/icons-react";
 import { COLORS, ROUTES } from "@/constants";
-import naviLogo from "@/assets/navi-logo.jpeg";
+import { NaviLogo } from "@/components/ui/NaviLogo";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAppRoutes } from "@/hooks/useAppRoutes";
 
@@ -38,6 +38,7 @@ export default function AdminLayout({
   const location = useLocation();
   const { user, logout } = useAuth();
   const appRoutes = useAppRoutes();
+  const settingsPath = appRoutes.SETTINGS;
 
   const NAV_ITEMS: NavItem[] = [
     { icon: IconLayoutDashboard, label: "Dashboard", path: appRoutes.DASHBOARD },
@@ -71,11 +72,7 @@ export default function AdminLayout({
       >
         <Group justify="space-between" style={{ width: "100%" }}>
           <Group>
-            <img
-              src={naviLogo}
-              alt="Navi"
-              style={{ height: 28, borderRadius: 6 }}
-            />
+            <NaviLogo height={28} />
             <Text fw={700} c="white" ff="'Montserrat', sans-serif" lts={0.6}>
               NAVI
             </Text>
@@ -96,11 +93,7 @@ export default function AdminLayout({
         style={{ border: "none", zIndex: 100 }}
       >
         <Group mb={40} mt={10} px="xs" visibleFrom="sm">
-          <img
-            src={naviLogo}
-            alt="Navi"
-            style={{ height: 32, borderRadius: 8 }}
-          />
+          <NaviLogo height={32} />
           <Stack gap={0}>
             <Text
               fw={700}
@@ -201,6 +194,13 @@ export default function AdminLayout({
               </UnstyledButton>
             </Menu.Target>
             <Menu.Dropdown>
+              <Menu.Item
+                leftSection={<IconSettings size={14} />}
+                onClick={() => navigate(settingsPath)}
+              >
+                Profile & settings
+              </Menu.Item>
+              <Menu.Divider />
               <Menu.Item
                 leftSection={<IconLogout size={14} />}
                 color="red"

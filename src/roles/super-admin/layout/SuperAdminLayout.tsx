@@ -22,7 +22,7 @@ import {
 } from "@tabler/icons-react";
 import type { IconProps } from "@tabler/icons-react";
 import { COLORS, ROUTES } from "@/constants";
-import logo from "@/assets/navi-logo.jpeg";
+import { NaviLogo } from "@/components/ui/NaviLogo";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface NavItem {
@@ -57,11 +57,7 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
       >
         <Group justify="space-between" style={{ width: "100%" }}>
           <Group>
-            <img
-              src={logo}
-              alt="Navi"
-              style={{ height: 28, borderRadius: 6 }}
-            />
+            <NaviLogo height={28} />
             <Text fw={700} c="white" ff="'Montserrat', sans-serif" lts={0.5}>
               NAVI Super Admin
             </Text>

@@ -119,8 +119,12 @@ export default function Organizations() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- open-once from query
   }, [leadIdParam]);
 
-  const filtered = orgs.filter((o) =>
-    o.name.toLowerCase().includes(search.toLowerCase()),
+  const q = search.toLowerCase();
+  const filtered = orgs.filter(
+    (o) =>
+      o.name.toLowerCase().includes(q) ||
+      (o.industry ?? "").toLowerCase().includes(q) ||
+      (o.adminName ?? "").toLowerCase().includes(q),
   );
 
   return (
@@ -347,6 +351,12 @@ export default function Organizations() {
             </Group>
             <Group justify="space-between">
               <Text fw={600} c="dimmed" size="sm">
+                Industry
+              </Text>
+              <Text size="sm">{detailOrg.industry ?? "—"}</Text>
+            </Group>
+            <Group justify="space-between">
+              <Text fw={600} c="dimmed" size="sm">
                 Country
               </Text>
               <Text size="sm">{detailOrg.country ?? "—"}</Text>
@@ -392,7 +402,7 @@ export default function Organizations() {
       )}
 
       <Card withBorder radius="lg" shadow="xs">
-        <Table.ScrollContainer minWidth={700}>
+        <Table.ScrollContainer minWidth={800}>
           <Table striped highlightOnHover>
             <Table.Thead>
               <Table.Tr>
@@ -401,6 +411,9 @@ export default function Organizations() {
                 </Table.Th>
                 <Table.Th c="dimmed" fw={800} fz={10} lts={1}>
                   ADMIN
+                </Table.Th>
+                <Table.Th c="dimmed" fw={800} fz={10} lts={1}>
+                  INDUSTRY
                 </Table.Th>
                 <Table.Th c="dimmed" fw={800} fz={10} lts={1}>
                   DEPARTMENTS
@@ -422,7 +435,7 @@ export default function Organizations() {
             <Table.Tbody>
               {loading ? (
                 <Table.Tr>
-                  <Table.Td colSpan={7}>
+                  <Table.Td colSpan={8}>
                     <Text c="dimmed" size="sm" ta="center" py="lg">
                       Loading...
                     </Text>
@@ -439,6 +452,9 @@ export default function Organizations() {
                       </UnstyledButton>
                     </Table.Td>
                     <Table.Td>{org.adminName}</Table.Td>
+                    <Table.Td>
+                      <Text size="sm">{org.industry ?? "—"}</Text>
+                    </Table.Td>
                     <Table.Td>
                       <Text size="sm">
                         {org.departmentCount > 0

@@ -304,7 +304,7 @@ export default function AdminOrganization() {
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    backgroundColor: org?.logo ? "#fff" : THEME_BLUE,
+                    backgroundColor: org?.logo ? "#fff" : "#f1f3f5",
                     overflow: "hidden",
                   }}
                 >
@@ -316,7 +316,7 @@ export default function AdminOrganization() {
                       style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
                     />
                   ) : (
-                    <Text c="white" fw={900} fz="xs" ta="center" px="md">
+                    <Text c="dimmed" fw={900} fz="xs" ta="center" px="md">
                       ORG LOGO
                     </Text>
                   )}

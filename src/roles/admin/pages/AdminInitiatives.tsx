@@ -23,6 +23,7 @@ import {
   Anchor,
   Breadcrumbs,
   Grid,
+  FileButton,
 } from "@mantine/core";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
@@ -382,30 +383,31 @@ export default function AdminInitiatives() {
 
   const handleAdd = async (data: InitiativeSummary & { description?: string }) => {
     setError(null);
+    const payload: CreateInitiativePayload = {
+      title: data.title?.trim() || "Untitled Initiative",
+      description: data.description,
+      leadName: data.leadName?.trim() || "Unassigned",
+      sponsorName: data.sponsorName?.trim() || undefined,
+      status: user?.role === "manager" ? "WAITING_FOR_APPROVAL" : toBackendStatus(data.status),
+      dateRange: data.dateRange,
+      departments: data.departments ?? [],
+      progress: data.progress ?? 0,
+      goals: data.goals ?? [],
+      faqs: data.faqs ?? [],
+      readiness: data.readiness,
+      changeType: data.changeType,
+      raciAccountableIds: data.raciAccountableIds ?? [],
+      raciResponsibleIds: data.raciResponsibleIds ?? [],
+      raciConsultedIds: data.raciConsultedIds ?? [],
+      raciInformedIds: data.raciInformedIds ?? [],
+    };
     try {
-      const payload: CreateInitiativePayload = {
-        title: data.title?.trim() || "Untitled Initiative",
-        description: data.description,
-        leadName: data.leadName?.trim() || "Unassigned",
-        sponsorName: data.sponsorName?.trim() || undefined,
-        status: user?.role === "manager" ? "WAITING_FOR_APPROVAL" : toBackendStatus(data.status),
-        dateRange: data.dateRange,
-        departments: data.departments ?? [],
-        progress: data.progress ?? 0,
-        goals: data.goals ?? [],
-        faqs: data.faqs ?? [],
-        readiness: data.readiness,
-        changeType: data.changeType,
-        raciAccountableIds: data.raciAccountableIds ?? [],
-        raciResponsibleIds: data.raciResponsibleIds ?? [],
-        raciConsultedIds: data.raciConsultedIds ?? [],
-        raciInformedIds: data.raciInformedIds ?? [],
-      };
       await createInitiative(payload);
       await fetchInitiatives();
-      close();
     } catch (err) {
-      setError((err as ApiError).message ?? "Failed to create initiative");
+      const msg = (err as ApiError).message ?? "Failed to create initiative";
+      setError(msg);
+      throw err;
     }
   };
 
@@ -1149,7 +1151,7 @@ const DEPT_ABBREV: Record<string, string> = {
 interface CreateInitiativeModalProps {
   opened: boolean;
   onClose: () => void;
-  onAdd: (data: InitiativeSummary) => void;
+  onAdd: (data: InitiativeSummary) => Promise<void>;
   managers: { name: string; id: string }[];
   orgDepartments: string[];
   onAddDepartment: (name: string) => void | Promise<void>;
@@ -1169,6 +1171,7 @@ function CreateInitiativeModal({
   leadEnrollmentInitiativesByLead,
   organizationPath,
 }: CreateInitiativeModalProps) {
+  const [createSaving, setCreateSaving] = useState(false);
   const departmentOptions = orgDepartments;
   const leadOptions = managers.map((m) => ({
     value: m.name,
@@ -1220,8 +1223,27 @@ function CreateInitiativeModal({
   const [faqs, setFaqs] = useState<InitiativeFaq[]>([{ question: "", answer: "" }]);
   type InitialStatus = "Drafting" | "Pending Review" | "Published";
   const [initialStatus, setInitialStatus] = useState<InitialStatus>("Drafting");
-  const faqFileInputRef = useRef<HTMLInputElement>(null);
   const [faqImportError, setFaqImportError] = useState<string | null>(null);
+
+  const handleFaqFile = (file: File | null) => {
+    setFaqImportError(null);
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = parseFaqImportFromText(String(reader.result ?? ""));
+        if (!parsed.length) {
+          setFaqImportError("No FAQ rows found. Use Question,Answer columns or tab-separated pairs.");
+          return;
+        }
+        setFaqs(parsed);
+      } catch {
+        setFaqImportError("Could not read that file.");
+      }
+    };
+    reader.onerror = () => setFaqImportError("Could not read that file.");
+    reader.readAsText(file);
+  };
 
   const selectedLeadInitiatives = leadEnrollmentInitiativesByLead[lead] ?? [];
 
@@ -1776,42 +1798,13 @@ function CreateInitiativeModal({
                       </Title>
                     </Group>
                     <Group gap="sm">
-                      <input
-                        ref={faqFileInputRef}
-                        type="file"
-                        accept=".csv,.txt,text/csv,text/plain"
-                        style={{ display: "none" }}
-                        onChange={(e) => {
-                          setFaqImportError(null);
-                          const file = e.target.files?.[0];
-                          e.target.value = "";
-                          if (!file) return;
-                          const reader = new FileReader();
-                          reader.onload = () => {
-                            try {
-                              const parsed = parseFaqImportFromText(String(reader.result ?? ""));
-                              if (!parsed.length) {
-                                setFaqImportError("No FAQ rows found. Use Question,Answer columns or tab-separated pairs.");
-                                return;
-                              }
-                              setFaqs(parsed);
-                            } catch {
-                              setFaqImportError("Could not read that file.");
-                            }
-                          };
-                          reader.onerror = () => setFaqImportError("Could not read that file.");
-                          reader.readAsText(file);
-                        }}
-                      />
-                      <Button
-                        type="button"
-                        variant="light"
-                        size="xs"
-                        fw={700}
-                        onClick={() => faqFileInputRef.current?.click()}
-                      >
-                        Import from file
-                      </Button>
+                      <FileButton onChange={handleFaqFile} accept=".csv,.txt,text/csv,text/plain">
+                        {(props) => (
+                          <Button type="button" variant="light" size="xs" fw={700} {...props}>
+                            Import from file
+                          </Button>
+                        )}
+                      </FileButton>
                       <Anchor
                         component="button"
                         type="button"
@@ -2105,48 +2098,57 @@ function CreateInitiativeModal({
                 fw={700}
                 px={30}
                 h={45}
-                disabled={raciOverLimit}
-                onClick={() => {
+                disabled={raciOverLimit || createSaving}
+                loading={createSaving}
+                onClick={async () => {
+                  if (raciOverLimit || createSaving) return;
                   const dateRange =
                     startDate && endDate
                       ? `${startDate.toLocaleDateString()} – ${endDate.toLocaleDateString()}`
                       : startDate
                         ? startDate.toLocaleDateString() + " – —"
                         : "—";
-                  onAdd({
-                    status: "DRAFT",
-                    title: title || "Untitled Initiative",
-                    description,
-                    sponsorName: sponsorName.trim() || undefined,
-                    leadName: lead,
-                    changeType,
-                    raciAccountableIds: raciAccountableId ? [raciAccountableId] : [],
-                    raciResponsibleIds: raciResponsibleIds,
-                    raciConsultedIds: raciConsultedIds,
-                    raciInformedIds: raciInformedIds,
-                    dateRange,
-                    departments: impactScope === "organization" ? [] : selectedDepts,
-                    goals,
-                    faqs: faqsPayload,
-                    progress: 0,
-                  });
-                  setTitle("");
-                  setDescription("");
-                  setSponsorName("");
-                  setLead("");
-                  setStartDate(null);
-                  setEndDate(null);
-                  setSelectedDepts([]);
-                  setImpactScope("departments");
-                  setGoals([{ goal: "", metric: "" }]);
-                  setFaqs([{ question: "", answer: "" }]);
-                  setChangeType("Other");
-                  setRaciAccountableId("");
-                  setRaciResponsibleIds([]);
-                  setRaciConsultedIds([]);
-                  setRaciInformedIds([]);
-                  setInitialStatus("Drafting");
-                  onClose();
+                  setCreateSaving(true);
+                  try {
+                    await onAdd({
+                      status: "DRAFT",
+                      title: title || "Untitled Initiative",
+                      description,
+                      sponsorName: sponsorName.trim() || undefined,
+                      leadName: lead,
+                      changeType,
+                      raciAccountableIds: raciAccountableId ? [raciAccountableId] : [],
+                      raciResponsibleIds: raciResponsibleIds,
+                      raciConsultedIds: raciConsultedIds,
+                      raciInformedIds: raciInformedIds,
+                      dateRange,
+                      departments: impactScope === "organization" ? [] : selectedDepts,
+                      goals,
+                      faqs: faqsPayload,
+                      progress: 0,
+                    });
+                    setTitle("");
+                    setDescription("");
+                    setSponsorName("");
+                    setLead("");
+                    setStartDate(null);
+                    setEndDate(null);
+                    setSelectedDepts([]);
+                    setImpactScope("departments");
+                    setGoals([{ goal: "", metric: "" }]);
+                    setFaqs([{ question: "", answer: "" }]);
+                    setChangeType("Other");
+                    setRaciAccountableId("");
+                    setRaciResponsibleIds([]);
+                    setRaciConsultedIds([]);
+                    setRaciInformedIds([]);
+                    setInitialStatus("Drafting");
+                    onClose();
+                  } catch {
+                    /* Parent sets global error; keep modal open */
+                  } finally {
+                    setCreateSaving(false);
+                  }
                 }}
               >
                 Save as Draft
@@ -2159,9 +2161,10 @@ function CreateInitiativeModal({
                 px={30}
                 h={45}
                 c="white"
-                disabled={!title || !lead || !raciAccountableId || raciOverLimit}
-                onClick={() => {
-                  if (!title || !lead || !raciAccountableId || raciOverLimit) return;
+                disabled={!title || !lead || !raciAccountableId || raciOverLimit || createSaving}
+                loading={createSaving}
+                onClick={async () => {
+                  if (!title || !lead || !raciAccountableId || raciOverLimit || createSaving) return;
                   const dateRange =
                     startDate && endDate
                       ? `${startDate.toLocaleDateString()} – ${endDate.toLocaleDateString()}`
@@ -2173,40 +2176,47 @@ function CreateInitiativeModal({
                     "Pending Review": "WAITING_FOR_APPROVAL",
                     Published: "ACTIVE",
                   };
-                  onAdd({
-                    status: statusMap[initialStatus],
-                    title,
-                    description,
-                    sponsorName: sponsorName.trim() || undefined,
-                    leadName: lead,
-                    changeType,
-                    raciAccountableIds: raciAccountableId ? [raciAccountableId] : [],
-                    raciResponsibleIds: raciResponsibleIds,
-                    raciConsultedIds: raciConsultedIds,
-                    raciInformedIds: raciInformedIds,
-                    dateRange,
-                    departments: impactScope === "organization" ? [] : selectedDepts,
-                    goals,
-                    faqs: faqsPayload,
-                    progress: 0,
-                  });
-                  setTitle("");
-                  setDescription("");
-                  setSponsorName("");
-                  setLead("");
-                  setStartDate(null);
-                  setEndDate(null);
-                  setSelectedDepts([]);
-                  setImpactScope("departments");
-                  setGoals([{ goal: "", metric: "" }]);
-                  setFaqs([{ question: "", answer: "" }]);
-                  setChangeType("Other");
-                  setRaciAccountableId("");
-                  setRaciResponsibleIds([]);
-                  setRaciConsultedIds([]);
-                  setRaciInformedIds([]);
-                  setInitialStatus("Drafting");
-                  onClose();
+                  setCreateSaving(true);
+                  try {
+                    await onAdd({
+                      status: statusMap[initialStatus],
+                      title,
+                      description,
+                      sponsorName: sponsorName.trim() || undefined,
+                      leadName: lead,
+                      changeType,
+                      raciAccountableIds: raciAccountableId ? [raciAccountableId] : [],
+                      raciResponsibleIds: raciResponsibleIds,
+                      raciConsultedIds: raciConsultedIds,
+                      raciInformedIds: raciInformedIds,
+                      dateRange,
+                      departments: impactScope === "organization" ? [] : selectedDepts,
+                      goals,
+                      faqs: faqsPayload,
+                      progress: 0,
+                    });
+                    setTitle("");
+                    setDescription("");
+                    setSponsorName("");
+                    setLead("");
+                    setStartDate(null);
+                    setEndDate(null);
+                    setSelectedDepts([]);
+                    setImpactScope("departments");
+                    setGoals([{ goal: "", metric: "" }]);
+                    setFaqs([{ question: "", answer: "" }]);
+                    setChangeType("Other");
+                    setRaciAccountableId("");
+                    setRaciResponsibleIds([]);
+                    setRaciConsultedIds([]);
+                    setRaciInformedIds([]);
+                    setInitialStatus("Drafting");
+                    onClose();
+                  } catch {
+                    /* Parent sets global error */
+                  } finally {
+                    setCreateSaving(false);
+                  }
                 }}
               >
                 Create Initiative

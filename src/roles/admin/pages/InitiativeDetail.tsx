@@ -251,6 +251,9 @@ export default function InitiativeDetail() {
   const [employeeAdoptionsLoading, setEmployeeAdoptionsLoading] = useState(false);
   const [adoptStopping, setAdoptStopping] = useState(false);
   const [adoptStopOpened, { open: openAdoptStop, close: closeAdoptStop }] = useDisclosure(false);
+  const [adoptResuming, setAdoptResuming] = useState(false);
+  const [adoptResumeError, setAdoptResumeError] = useState<string | null>(null);
+  const [adoptResumeOpened, { open: openAdoptResume, close: closeAdoptResume }] = useDisclosure(false);
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
 
   const handleAddDepartment = useCallback(
@@ -918,12 +921,8 @@ export default function InitiativeDetail() {
                           onChange={(e) => {
                             const on = e.currentTarget.checked;
                             if (on) {
-                              updateInitiative(initiative.id, { adoptionTrackingEnabled: true })
-                                .then((data) => {
-                                  setInitiative(mapApiToInitiative(data));
-                                  return refreshActivity(initiative.id);
-                                })
-                                .catch(() => {});
+                              setAdoptResumeError(null);
+                              openAdoptResume();
                             } else {
                               openAdoptStop();
                             }
@@ -1404,6 +1403,58 @@ export default function InitiativeDetail() {
           </Card>
         </Tabs.Panel>
       </Tabs>
+
+      <Modal
+        opened={adoptResumeOpened}
+        onClose={() => {
+          setAdoptResumeError(null);
+          closeAdoptResume();
+        }}
+        title="Resume adoption tracking?"
+        centered
+        radius="lg"
+      >
+        <Text size="sm" c="dimmed" mb="md">
+          Saved adoption milestones will again contribute to this initiative’s overall progress. Employees who can view this initiative will see adoption milestones while tracking is on.
+        </Text>
+        {adoptResumeError ? (
+          <Text size="sm" c="red" mb="md">
+            {adoptResumeError}
+          </Text>
+        ) : null}
+        <Group justify="flex-end" gap="sm">
+          <Button
+            variant="default"
+            onClick={() => {
+              setAdoptResumeError(null);
+              closeAdoptResume();
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            bg={THEME_BLUE}
+            loading={adoptResuming}
+            onClick={() => {
+              if (!initiative) return;
+              setAdoptResumeError(null);
+              setAdoptResuming(true);
+              updateInitiative(initiative.id, { adoptionTrackingEnabled: true })
+                .then((data) => {
+                  setInitiative(mapApiToInitiative(data));
+                  closeAdoptResume();
+                  return refreshActivity(initiative.id);
+                })
+                .catch(() => {
+                  setAdoptResumeError("Could not resume adoption tracking. Try again.");
+                })
+                .finally(() => setAdoptResuming(false));
+            }}
+          >
+            Resume tracking
+          </Button>
+        </Group>
+      </Modal>
 
       <Modal
         opened={adoptStopOpened}

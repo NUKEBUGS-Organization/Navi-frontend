@@ -5,7 +5,6 @@ import {
   Stack,
   Box,
   SimpleGrid,
-  Image,
   Text,
   Title,
   ThemeIcon,
@@ -15,7 +14,7 @@ import { useMediaQuery } from "@mantine/hooks";
 import { IconCircleCheck } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
 import { ROUTES, THEME_BLUE } from "@/constants";
-import logo from "@/assets/navi-logo.jpeg";
+import { NaviLogo } from "@/components/ui/NaviLogo";
 
 /** Confirmation after submitting the public organization signup form (UAT: prominent next step vs. small toast). */
 export default function SignupThankYou() {
@@ -25,21 +24,17 @@ export default function SignupThankYou() {
     <Box w="100vw" mih="100vh" style={{ overflow: "auto" }}>
       <SimpleGrid cols={isMobile ? 1 : 2} spacing={0} mih="100vh">
         <Stack
-          bg={THEME_BLUE}
+          bg="#f4f6f8"
           justify="center"
           align="center"
           px={isMobile ? "md" : "xl"}
           py={isMobile ? "xl" : "xl"}
           mih={isMobile ? 200 : "100vh"}
+          style={isMobile ? undefined : { borderRight: "1px solid #e9ecef" }}
         >
-          <Group>
-            <Image
-              src={logo}
-              h={isMobile ? 72 : 100}
-              w={isMobile ? 72 : 100}
-              radius="50%"
-            />
-            <Text c="white" size={isMobile ? "md" : "lg"} ff="'Montserrat', sans-serif" lh={1.4} maw={320}>
+          <Group wrap="nowrap">
+            <NaviLogo height={isMobile ? 56 : 72} />
+            <Text c="#0F2B5C" size={isMobile ? "md" : "lg"} ff="'Montserrat', sans-serif" lh={1.4} maw={320}>
               Your Change Navigator.
             </Text>
           </Group>

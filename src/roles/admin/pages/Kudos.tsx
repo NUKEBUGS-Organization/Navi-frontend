@@ -1,9 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
-import { Box, Button, Card, Group, Select, Stack, Tabs, Text, Title } from "@mantine/core";
+import { Box, Button, Card, Group, Select, Stack, Tabs, Text, Title, Textarea } from "@mantine/core";
 import { IconStar, IconStarFilled } from "@tabler/icons-react";
 import AdminLayout from "@/roles/admin/layout/AdminLayout";
 import { useAuth } from "@/contexts/AuthContext";
-import { giveManagerStar, getKudosSummary, listKudosContributions, listKudosInitiatives, listMyKudos, type KudosContribution, type KudosContributionType, type KudosInitiativeSummary, type KudosSummary } from "@/api/kudos";
+import {
+  createManagerKudosAward,
+  giveManagerStar,
+  getKudosSummary,
+  listKudosContributions,
+  listKudosInitiatives,
+  listMyKudos,
+  type KudosContribution,
+  type KudosContributionType,
+  type KudosInitiativeSummary,
+  type KudosSummary,
+} from "@/api/kudos";
+import { listOrganizationUsers, type AuthUser } from "@/api/auth";
+import { THEME_BLUE } from "@/constants";
 
 function formatDate(d?: string) {
   if (!d) return "—";
@@ -19,6 +32,8 @@ function contributionLabel(type: KudosContributionType) {
       return "Comment added";
     case "assessment_submitted":
       return "Assessment submitted";
+    case "manager_award":
+      return "Manager recognition";
     default:
       return "Contribution";
   }
@@ -35,6 +50,11 @@ export default function Kudos() {
   const [initiatives, setInitiatives] = useState<KudosInitiativeSummary[]>([]);
   const [selectedInitiativeId, setSelectedInitiativeId] = useState<string>("");
   const [contributions, setContributions] = useState<KudosContribution[]>([]);
+  const [orgUsers, setOrgUsers] = useState<AuthUser[]>([]);
+  const [awardEmployeeId, setAwardEmployeeId] = useState<string>("");
+  const [awardNote, setAwardNote] = useState("");
+  const [awardBusy, setAwardBusy] = useState(false);
+  const [awardError, setAwardError] = useState<string | null>(null);
 
   const isEmployee = role === "employee";
 
@@ -69,6 +89,27 @@ export default function Kudos() {
   }, [isEmployee]);
 
   useEffect(() => {
+    if (isEmployee) return;
+    listOrganizationUsers()
+      .then((list) => setOrgUsers(Array.isArray(list) ? list : []))
+      .catch(() => setOrgUsers([]));
+  }, [isEmployee]);
+
+  const employeeAwardOptions = useMemo(() => {
+    const employees = orgUsers.filter((u) => u.role === "employee");
+    if (role === "manager") {
+      const my = new Set((user?.departments ?? []).map((d) => String(d).toLowerCase()));
+      return employees
+        .filter((u) => (u.departments ?? []).some((d) => my.has(String(d).toLowerCase())))
+        .map((u) => ({ value: u._id, label: `${u.name} (${u.email})` }));
+    }
+    if (role === "admin" || role === "super_admin") {
+      return employees.map((u) => ({ value: u._id, label: `${u.name} (${u.email})` }));
+    }
+    return [];
+  }, [orgUsers, role, user?.departments]);
+
+  useEffect(() => {
     let cancelled = false;
     if (isEmployee) return;
     if (!selectedInitiativeId) {
@@ -98,6 +139,31 @@ export default function Kudos() {
     () => initiatives.map((i) => ({ value: i.initiativeId, label: i.title })),
     [initiatives]
   );
+
+  const handleCreateManagerAward = async () => {
+    if (!selectedInitiativeId || !awardEmployeeId) return;
+    setAwardBusy(true);
+    setAwardError(null);
+    try {
+      await createManagerKudosAward({
+        initiativeId: selectedInitiativeId,
+        employeeId: awardEmployeeId,
+        note: awardNote.trim() || undefined,
+      });
+      setAwardNote("");
+      setAwardEmployeeId("");
+      const list = await listKudosContributions(selectedInitiativeId);
+      setContributions(Array.isArray(list) ? (list as KudosContribution[]) : []);
+    } catch (e) {
+      setAwardError(
+        e && typeof e === "object" && "message" in e && typeof (e as { message: unknown }).message === "string"
+          ? (e as { message: string }).message
+          : "Could not create kudos.",
+      );
+    } finally {
+      setAwardBusy(false);
+    }
+  };
 
   const handleGiveStar = async (contributionId: string) => {
     try {
@@ -203,6 +269,48 @@ export default function Kudos() {
               <Tabs.Panel value="give" pt="md">
                 <Stack gap="md">
                   <Card withBorder radius="lg" p="md">
+                    <Title order={5} fw={800} mb="xs">
+                      Recognize an employee
+                    </Title>
+                    <Text size="sm" c="dimmed" mb="md">
+                      Give a manager star for great work on this initiative. This is separate from automatic stars
+                      for tasks, comments, and assessments.
+                    </Text>
+                    <Stack gap="sm">
+                      <Select
+                        label="Employee"
+                        placeholder="Choose employee"
+                        data={employeeAwardOptions}
+                        value={awardEmployeeId}
+                        onChange={(v) => setAwardEmployeeId(v ?? "")}
+                        searchable
+                        disabled={!selectedInitiativeId}
+                      />
+                      <Textarea
+                        label="Note (optional)"
+                        placeholder="What are you recognizing them for?"
+                        minRows={2}
+                        value={awardNote}
+                        onChange={(e) => setAwardNote(e.currentTarget.value)}
+                        disabled={!selectedInitiativeId}
+                      />
+                      {awardError ? (
+                        <Text size="sm" c="red">
+                          {awardError}
+                        </Text>
+                      ) : null}
+                      <Button
+                        bg={THEME_BLUE}
+                        loading={awardBusy}
+                        disabled={!selectedInitiativeId || !awardEmployeeId}
+                        onClick={() => void handleCreateManagerAward()}
+                      >
+                        Give kudos (manager star)
+                      </Button>
+                    </Stack>
+                  </Card>
+
+                  <Card withBorder radius="lg" p="md">
                     <Group justify="space-between" align="flex-end" wrap="wrap">
                       <Box>
                         <Text fw={800} mb={4}>
@@ -231,7 +339,10 @@ export default function Kudos() {
                       <Text c="dimmed">No contributions found for this initiative.</Text>
                     ) : (
                       contributions.map((c: any) => {
-                        const canAward = canGiveStars && (c.managerStars ?? 0) === 0;
+                        const canAward =
+                          canGiveStars &&
+                          (c.managerStars ?? 0) === 0 &&
+                          c.contributionType !== "manager_award";
                         const total = (c.systemStars ?? 0) + (c.managerStars ?? 0);
                         return (
                           <Card key={c._id} withBorder radius="md" p="md" shadow="xs">

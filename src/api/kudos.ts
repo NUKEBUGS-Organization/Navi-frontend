@@ -1,6 +1,10 @@
 import { api } from "./client";
 
-export type KudosContributionType = "task_completed" | "task_comment" | "assessment_submitted";
+export type KudosContributionType =
+  | "task_completed"
+  | "task_comment"
+  | "assessment_submitted"
+  | "manager_award";
 
 export interface KudosSummary {
   totalStars: number;
@@ -44,5 +48,13 @@ export function listKudosContributions(initiativeId: string): Promise<KudosContr
 
 export function giveManagerStar(contributionId: string): Promise<KudosContribution> {
   return api.post<KudosContribution>(`/kudos/contributions/${encodeURIComponent(contributionId)}/manager-star`);
+}
+
+export function createManagerKudosAward(payload: {
+  initiativeId: string;
+  employeeId: string;
+  note?: string;
+}): Promise<KudosContribution> {
+  return api.post<KudosContribution>("/kudos/manager-award", payload);
 }
 

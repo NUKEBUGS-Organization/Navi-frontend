@@ -7,7 +7,6 @@ import {
   Stack,
   Box,
   SimpleGrid,
-  Image,
   Divider,
   ScrollArea,
   TextInput,
@@ -16,8 +15,8 @@ import {
 import { useMediaQuery } from "@mantine/hooks";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ROUTES, THEME_BLUE } from "@/constants";
-import logo from "@/assets/navi-logo.jpeg";
+import { ROUTES } from "@/constants";
+import { NaviLogo } from "@/components/ui/NaviLogo";
 import { submitOrganizationSignupRequest } from "@/api/organizations";
 
 const HEAR_ABOUT_OPTIONS = [
@@ -83,24 +82,19 @@ const Signup = () => {
         }}
       >
         <Stack
-          bg={THEME_BLUE}
+          bg="#f4f6f8"
           h="100%"
           justify="center"
           align="center"
           px={isMobile ? "md" : 0}
           py={isMobile ? "lg" : 0}
+          style={isMobile ? undefined : { borderRight: "1px solid #e9ecef" }}
         >
-          <Group>
-            <Image
-              src={logo}
-              h={isMobile ? "72px" : "100px"}
-              w={isMobile ? "72px" : "100px"}
-              radius="50%"
-            />
-
+          <Group wrap="nowrap">
+            <NaviLogo height={isMobile ? 56 : 72} />
             <Text
-              c="white"
-              mr={"10px"}
+              c="#0F2B5C"
+              mr="10px"
               size={isMobile ? "16px" : "20px"}
               ff="'Montserrat', sans-serif"
               lh="28px"
