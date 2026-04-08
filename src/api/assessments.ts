@@ -104,8 +104,15 @@ export interface AssessmentSubmission {
   userId: string;
   overallScore: number;
   riskLevel?: string;
+  naviN?: number;
+  naviA?: number;
+  naviV?: number;
+  naviI?: number;
   naviIndex?: number;
+  /** Unweighted (N+A+V+I)/4 when backend provides it. */
+  naviIndexSimple?: number;
   naviClassification?: string;
+  answers?: number[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -129,6 +136,7 @@ export interface NaviSummary {
   leadershipAvgNavi: number | null;
   employeeAvgNavi: number | null;
   alignmentGap: number | null;
+  alignmentGapMagnitude: number | null;
 }
 
 export function getNaviSummary(): Promise<NaviSummary | null> {

@@ -31,6 +31,7 @@ import {
   IconLogout,
 } from "@tabler/icons-react";
 import { ROUTES, THEME_BLUE, TEAL_BLUE, setStoredUser } from "@/constants";
+import { REPLAY_ORG_TOUR_EVENT } from "@/components/onboarding";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAppRoutes } from "@/hooks/useAppRoutes";
 import { getMyOrganization } from "@/api/organizations";
@@ -462,6 +463,24 @@ export default function AdminSettings() {
                     one uppercase letter, one number, and one special character.
                   </Text>
                 </Box>
+              </Card>
+
+              <Card withBorder radius="lg" p="xl" shadow="xs">
+                <Title order={5} fw={800} mb="xs">
+                  Getting started
+                </Title>
+                <Text size="sm" c="dimmed" mb="md">
+                  Open the welcome tour again for your role (password, navigation, and key tasks).
+                </Text>
+                <Button
+                  variant="light"
+                  color="teal"
+                  radius="md"
+                  fw={600}
+                  onClick={() => window.dispatchEvent(new CustomEvent(REPLAY_ORG_TOUR_EVENT))}
+                >
+                  Replay welcome tour
+                </Button>
               </Card>
 
               <Group justify="flex-end" gap="xl" mt="xl" pb={40}>

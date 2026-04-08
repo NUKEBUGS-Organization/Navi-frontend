@@ -918,13 +918,14 @@ export default function InitiativeDetail() {
                         </Text>
                         <Switch
                           checked={initiative.adoptionTrackingEnabled}
-                          onChange={(e) => {
-                            const on = e.currentTarget.checked;
-                            if (on) {
+                          onChange={() => {
+                            // Use server state, not event.currentTarget.checked — Mantine’s controlled Switch
+                            // can pass a stale/ambiguous checked value, which skipped the “resume” modal when turning on.
+                            if (initiative.adoptionTrackingEnabled) {
+                              openAdoptStop();
+                            } else {
                               setAdoptResumeError(null);
                               openAdoptResume();
-                            } else {
-                              openAdoptStop();
                             }
                           }}
                           label="Milestones affect initiative progress"

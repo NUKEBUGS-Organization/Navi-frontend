@@ -13,6 +13,7 @@ import {
   Group,
 } from "@mantine/core";
 import { useState } from "react";
+import { REPLAY_SUPER_TOUR_EVENT } from "@/components/onboarding";
 
 export default function SuperAdminSettings() {
   const [allowLeads, setAllowLeads] = useState(true);
@@ -85,6 +86,22 @@ export default function SuperAdminSettings() {
           </Card>
         </Grid.Col>
       </Grid>
+
+      <Card withBorder radius="lg" p="xl" shadow="xs" mt="xl">
+        <Text fw={700} mb="xs">
+          Getting started
+        </Text>
+        <Text c="dimmed" size="sm" mb="md">
+          Replay the super-admin welcome tour (leads, organizations, settings).
+        </Text>
+        <Button
+          variant="light"
+          color="teal"
+          onClick={() => window.dispatchEvent(new CustomEvent(REPLAY_SUPER_TOUR_EVENT))}
+        >
+          Replay welcome tour
+        </Button>
+      </Card>
 
       <Box mt="xl">
         <Group justify="flex-end">

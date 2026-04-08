@@ -19,6 +19,7 @@ import { COLORS, ROUTES } from "@/constants";
 import { NaviLogo } from "@/components/ui/NaviLogo";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAppRoutes } from "@/hooks/useAppRoutes";
+import { OrgOnboardingTour } from "@/components/onboarding";
 
 interface NavItem {
   icon: React.FC<IconProps>;
@@ -217,6 +218,7 @@ export default function AdminLayout({
       </AppShell.Navbar>
 
       <AppShell.Main bg={COLORS.mainBg} style={{ minHeight: "100vh" }}>
+        <OrgOnboardingTour />
         <Box p={{ base: "md", sm: "35px" }}>{children}</Box>
       </AppShell.Main>
     </AppShell>

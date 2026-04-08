@@ -3,6 +3,11 @@
  * Import from '@/constants' to avoid duplicate hex values across the app.
  */
 export const THEME_BLUE = "#0f2b5c";
+/** Auth pages: left hero column behind transparent logo */
+export const AUTH_HERO_BG = "#18275b";
+
+/** Logo height on auth hero (transparent asset includes small type — keep desktop tall enough to read). */
+export const AUTH_LOGO_HEIGHT = { mobile: 100, desktop: 140 } as const;
 export const NAVY = "#0F2B5B";
 export const TEAL = "#00A99D";
 export const TEAL_BLUE = "#00a99d";
