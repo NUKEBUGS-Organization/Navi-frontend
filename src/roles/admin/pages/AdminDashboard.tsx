@@ -413,8 +413,18 @@ export default function AdminDashboard() {
                     </Text>
                   </Text>
                   {naviSummary.alignmentGap != null && (
-                    <Badge mt="sm" variant="light" color={naviSummary.alignmentGap > 0.5 ? "orange" : "teal"}>
-                      Alignment gap {naviSummary.alignmentGap.toFixed(2)}
+                    <Badge
+                      mt="sm"
+                      variant="light"
+                      color={
+                        (naviSummary.alignmentGapMagnitude ?? Math.abs(naviSummary.alignmentGap)) >= 0.9
+                          ? "red"
+                          : (naviSummary.alignmentGapMagnitude ?? Math.abs(naviSummary.alignmentGap)) > 0.3
+                            ? "orange"
+                            : "teal"
+                      }
+                    >
+                      Alignment (L − E) {naviSummary.alignmentGap.toFixed(2)}
                     </Badge>
                   )}
                 </Box>

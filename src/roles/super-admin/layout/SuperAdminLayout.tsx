@@ -24,6 +24,7 @@ import type { IconProps } from "@tabler/icons-react";
 import { COLORS, ROUTES } from "@/constants";
 import { NaviLogo } from "@/components/ui/NaviLogo";
 import { useAuth } from "@/contexts/AuthContext";
+import { SuperAdminOnboardingTour } from "@/components/onboarding";
 
 interface NavItem {
   icon: React.FC<IconProps>;
@@ -163,6 +164,7 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
       </AppShell.Navbar>
 
       <AppShell.Main bg={COLORS.mainBg} style={{ minHeight: "100vh" }}>
+        <SuperAdminOnboardingTour />
         <Box p={{ base: "md", sm: "35px" }}>{children}</Box>
       </AppShell.Main>
     </AppShell>

@@ -13,7 +13,7 @@ import {
 import { useMediaQuery } from "@mantine/hooks";
 import { IconCircleCheck } from "@tabler/icons-react";
 import { Link } from "react-router-dom";
-import { ROUTES, THEME_BLUE } from "@/constants";
+import { AUTH_HERO_BG, AUTH_LOGO_HEIGHT, ROUTES, THEME_BLUE } from "@/constants";
 import { NaviLogo } from "@/components/ui/NaviLogo";
 
 /** Confirmation after submitting the public organization signup form (UAT: prominent next step vs. small toast). */
@@ -24,7 +24,7 @@ export default function SignupThankYou() {
     <Box w="100vw" mih="100vh" style={{ overflow: "auto" }}>
       <SimpleGrid cols={isMobile ? 1 : 2} spacing={0} mih="100vh">
         <Stack
-          bg="#f4f6f8"
+          bg={AUTH_HERO_BG}
           justify="center"
           align="center"
           px={isMobile ? "md" : "xl"}
@@ -32,9 +32,16 @@ export default function SignupThankYou() {
           mih={isMobile ? 200 : "100vh"}
           style={isMobile ? undefined : { borderRight: "1px solid #e9ecef" }}
         >
-          <Group wrap="nowrap">
-            <NaviLogo height={isMobile ? 56 : 72} />
-            <Text c="#0F2B5C" size={isMobile ? "md" : "lg"} ff="'Montserrat', sans-serif" lh={1.4} maw={320}>
+          <Group wrap="wrap" justify="center" gap="sm">
+            <NaviLogo height={isMobile ? AUTH_LOGO_HEIGHT.mobile : AUTH_LOGO_HEIGHT.desktop} />
+            <Text
+              c="white"
+              size={isMobile ? "lg" : "xl"}
+              ff="'Montserrat', sans-serif"
+              lh={1.35}
+              maw={360}
+              ta={isMobile ? "center" : "left"}
+            >
               Your Change Navigator.
             </Text>
           </Group>

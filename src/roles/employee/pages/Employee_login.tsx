@@ -14,7 +14,7 @@ import {
   Input,
 } from "@mantine/core";
 import { useMediaQuery } from "@mantine/hooks";
-import { ROUTES, getAppDashboardRoute } from "@/constants";
+import { AUTH_HERO_BG, AUTH_LOGO_HEIGHT, ROUTES, getAppDashboardRoute } from "@/constants";
 import { NaviLogo } from "@/components/ui/NaviLogo";
 import { useNavigate, Navigate, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -77,7 +77,7 @@ const EmployeeLogin = () => {
         }}
       >
         <Stack
-          bg="#f4f6f8"
+          bg={AUTH_HERO_BG}
           h="100%"
           justify="center"
           align="center"
@@ -85,14 +85,15 @@ const EmployeeLogin = () => {
           py={isMobile ? "lg" : 0}
           style={isMobile ? undefined : { borderRight: "1px solid #e9ecef" }}
         >
-          <Group wrap="nowrap">
-            <NaviLogo height={isMobile ? 56 : 72} />
+          <Group wrap="wrap" justify="center" gap="sm">
+            <NaviLogo height={isMobile ? AUTH_LOGO_HEIGHT.mobile : AUTH_LOGO_HEIGHT.desktop} />
             <Text
-              c="#0F2B5C"
+              c="white"
               mr="10px"
-              size={isMobile ? "16px" : "20px"}
+              size={isMobile ? "lg" : "xl"}
               ff="'Montserrat', sans-serif"
-              lh="28px"
+              lh={1.35}
+              ta={isMobile ? "center" : "left"}
             >
               Your Change Navigator.
             </Text>

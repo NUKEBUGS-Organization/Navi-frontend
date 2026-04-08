@@ -61,7 +61,44 @@ import { useForm } from "@mantine/form";
 import { THEME_BLUE, TEAL_BLUE } from "@/constants";
 import type { InitiativeFaq, InitiativeSummary, InitiativeStatus } from "@/types";
 
-/** CSV (Question,Answer) or tab-separated rows; optional header row "Question"/"Answer". */
+function normalizeFaqHeaderCell(raw: string): string {
+  return raw.replace(/^"|"$/g, "").trim().toLowerCase();
+}
+
+/** Comma-separated row with optional double-quoted fields (commas inside quotes). */
+function parseCsvRow(line: string): string[] {
+  const cells: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (c === "," && !inQuotes) {
+      cells.push(cur.trim().replace(/^"|"$/g, "").trim());
+      cur = "";
+    } else {
+      cur += c;
+    }
+  }
+  cells.push(cur.trim().replace(/^"|"$/g, "").trim());
+  return cells;
+}
+
+function isQuestionColHeader(h: string): boolean {
+  return h === "question" || h === "q" || /^question(\s|$)/.test(h);
+}
+
+function isAnswerColHeader(h: string): boolean {
+  return h === "answer" || h === "a" || /^answer(\s|$)/.test(h);
+}
+
+/**
+ * CSV or tab-separated; header row may be Question/Answer in either column order.
+ * Uses header cells to pick column indices so "Answer,Question" files map correctly.
+ */
 function parseFaqImportFromText(text: string): InitiativeFaq[] {
   const lines = text
     .split(/\r?\n/)
@@ -70,30 +107,62 @@ function parseFaqImportFromText(text: string): InitiativeFaq[] {
   if (lines.length === 0) return [];
   const tabular = lines.some((l) => l.includes("\t"));
   const splitLine = (line: string): string[] => {
-    if (tabular) return line.split("\t").map((c) => c.trim());
-    const idx = line.indexOf(",");
-    if (idx === -1) return [line.replace(/^"|"$/g, "").trim()];
-    return [
-      line.slice(0, idx).replace(/^"|"$/g, "").trim(),
-      line.slice(idx + 1).replace(/^"|"$/g, "").trim(),
-    ];
+    if (tabular) return line.split("\t").map((c) => c.trim().replace(/^"|"$/g, "").trim());
+    return parseCsvRow(line);
   };
+
+  const headerCells = splitLine(lines[0]).map(normalizeFaqHeaderCell);
+  let qIdx = headerCells.findIndex(isQuestionColHeader);
+  let aIdx = headerCells.findIndex(isAnswerColHeader);
   let start = 0;
-  const firstCell = (splitLine(lines[0])[0] ?? "").toLowerCase();
-  if (firstCell === "question" || firstCell === "q" || firstCell.startsWith("question")) {
+  if (qIdx >= 0 && aIdx >= 0) {
     start = 1;
+  } else {
+    qIdx = 0;
+    aIdx = 1;
   }
+
   const out: InitiativeFaq[] = [];
   for (let i = start; i < lines.length; i++) {
     const cells = splitLine(lines[i]);
-    if (cells.length >= 2 && cells[0]) {
-      out.push({
-        question: cells[0],
-        answer: cells.slice(1).join(tabular ? "\t" : ", "),
-      });
-    } else if (cells[0]) {
-      out.push({ question: cells[0], answer: "" });
+    let question = (cells[qIdx] ?? "").trim();
+    let answer = (cells[aIdx] ?? "").trim();
+
+    // Extra columns: join into answer (e.g. third column) when using default 0,1 mapping
+    if (start === 0 && cells.length > 2) {
+      answer = cells
+        .slice(1)
+        .map((c) => c.trim())
+        .filter(Boolean)
+        .join(", ");
+    } else if (start === 1 && cells.length > Math.max(qIdx, aIdx) + 1) {
+      const rest = cells.filter((_, j) => j !== qIdx && j !== aIdx).join(tabular ? "\t" : ", ");
+      if (rest.trim()) answer = answer ? `${answer}\n${rest.trim()}` : rest.trim();
     }
+
+    if (!question && !answer) continue;
+
+    // Single column: "Answer: …" meant as answer text only
+    const answerPrefix = /^answer\s*:\s*(.*)$/i.exec(question);
+    if (cells.length === 1 && answerPrefix && !answer) {
+      answer = answerPrefix[1].trim();
+      question = "";
+    }
+
+    // Header says Question,Answer but row has answer-like text in col A and real question in col B
+    if (
+      start === 1 &&
+      qIdx < aIdx &&
+      /^answer\s*:/i.test(question) &&
+      answer &&
+      !/^answer\s*:/i.test(answer)
+    ) {
+      const t = question;
+      question = answer;
+      answer = t.replace(/^answer\s*:\s*/i, "").trim() || t;
+    }
+
+    out.push({ question, answer });
   }
   return out;
 }
