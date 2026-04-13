@@ -23,6 +23,7 @@ import {
 import type { IconProps } from "@tabler/icons-react";
 import { COLORS, ROUTES } from "@/constants";
 import { NaviLogo } from "@/components/ui/NaviLogo";
+import { ColorSchemeToggle } from "@/components/ui/ColorSchemeToggle";
 import { useAuth } from "@/contexts/AuthContext";
 import { SuperAdminOnboardingTour } from "@/components/onboarding";
 
@@ -131,23 +132,25 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
           p="md"
           style={{ backgroundColor: "rgba(255,255,255,0.05)", borderRadius: 12 }}
         >
-          <Menu shadow="md" width={200} position="top-end">
-            <Menu.Target>
-              <UnstyledButton style={{ width: "100%" }}>
-                <Group gap="sm">
-                  <Avatar radius="md" size="md" />
-                  <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
-                    <Text size="sm" fw={700} c="white" truncate>
-                      {user?.name ?? "Super Admin"}
-                    </Text>
-                    <Text size="xs" c={COLORS.sidebarText} fw={500}>
-                      Platform Owner
-                    </Text>
-                  </Stack>
-                </Group>
-              </UnstyledButton>
-            </Menu.Target>
-            <Menu.Dropdown>
+          <Group align="center" justify="space-between" gap="sm" wrap="nowrap">
+            <Box style={{ flex: 1, minWidth: 0 }}>
+              <Menu shadow="md" width={200} position="top-end" withinPortal>
+                <Menu.Target>
+                  <UnstyledButton style={{ flex: 1, minWidth: 0, display: "block", width: "100%" }}>
+                  <Group gap="sm" wrap="nowrap" align="center">
+                    <Avatar radius="md" size="md" />
+                    <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
+                      <Text size="sm" fw={700} c="white" truncate>
+                        {user?.name ?? "Super Admin"}
+                      </Text>
+                      <Text size="xs" c={COLORS.sidebarText} fw={500} truncate>
+                        Platform Owner
+                      </Text>
+                    </Stack>
+                  </Group>
+                </UnstyledButton>
+              </Menu.Target>
+              <Menu.Dropdown>
               <Menu.Item
                 leftSection={<IconLogout size={14} />}
                 color="red"
@@ -158,12 +161,15 @@ export default function SuperAdminLayout({ children }: { children: ReactNode }) 
               >
                 Log out
               </Menu.Item>
-            </Menu.Dropdown>
-          </Menu>
+              </Menu.Dropdown>
+              </Menu>
+            </Box>
+            <ColorSchemeToggle variant="sidebar" compact />
+          </Group>
         </Box>
       </AppShell.Navbar>
 
-      <AppShell.Main bg={COLORS.mainBg} style={{ minHeight: "100vh" }}>
+      <AppShell.Main style={{ minHeight: "100vh" }}>
         <SuperAdminOnboardingTour />
         <Box p={{ base: "md", sm: "35px" }}>{children}</Box>
       </AppShell.Main>

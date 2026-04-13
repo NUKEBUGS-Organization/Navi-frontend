@@ -56,14 +56,17 @@ import {
   updateUser,
   deleteUser,
   bulkImportUsers,
+  sendAccessEmails,
   type AuthUser,
   type UserRole,
 } from "@/api/auth";
 import type { ApiError } from "@/api/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface MemberRowProps {
   name: string;
   email: string;
+  phone: string;
   role: string;
   dept: string;
   status: "Active" | "Pending";
@@ -82,6 +85,7 @@ const ROLE_OPTIONS: { value: UserRole; label: string; desc: string }[] = [
 type RoleFilter = "all" | "admin" | "manager" | "employee";
 
 export default function AdminOrganization() {
+  const { user: authUser } = useAuth();
   const [opened, { open, close }] = useDisclosure(false);
   const [editOpened, { open: openEdit, close: closeEdit }] = useDisclosure(false);
   const [deleteOpened, { open: openDelete, close: closeDelete }] = useDisclosure(false);
@@ -106,6 +110,9 @@ export default function AdminOrganization() {
   const [csvText, setCsvText] = useState("");
   const [csvBusy, setCsvBusy] = useState(false);
   const [csvResult, setCsvResult] = useState<{ created: number; skipped: number; errors: string[] } | null>(null);
+  const [csvPendingCredentials, setCsvPendingCredentials] = useState<{ email: string; password: string }[]>([]);
+  const [csvEmailBusy, setCsvEmailBusy] = useState(false);
+  const [csvEmailNotice, setCsvEmailNotice] = useState<string | null>(null);
 
   const orgMembers = members.filter((m) => m.role !== "super_admin");
   const admins = orgMembers.filter((m) => m.role === "admin");
@@ -519,6 +526,7 @@ export default function AdminOrganization() {
               onClick={() => {
                 setCsvText("");
                 setCsvResult(null);
+                setCsvEmailNotice(null);
                 openCsvImport();
               }}
             >
@@ -526,7 +534,7 @@ export default function AdminOrganization() {
             </Button>
           </Group>
         </Group>
-        <Group gap="lg" mb="xl">
+        <Group gap="lg" mb="xl" align="center">
           <Badge variant="light" color="blue" size="lg" radius="sm">
             {admins.length} Admin{admins.length !== 1 ? "s" : ""}
           </Badge>
@@ -536,6 +544,9 @@ export default function AdminOrganization() {
           <Badge variant="light" color="grape" size="lg" radius="sm">
             {employees.length} Employee{employees.length !== 1 ? "s" : ""}
           </Badge>
+          <Text size="sm" c="dimmed" fw={600}>
+            Employee seats: {employees.length} / {org?.maxEmployeeSeats ?? 100}
+          </Text>
         </Group>
 
         <Card withBorder radius="lg" p={0} shadow="sm">
@@ -545,6 +556,9 @@ export default function AdminOrganization() {
                 <Table.Tr>
                   <Table.Th fz={10} fw={800} c="dimmed" lts={1}>
                     USER
+                  </Table.Th>
+                  <Table.Th fz={10} fw={800} c="dimmed" lts={1}>
+                    PHONE
                   </Table.Th>
                   <Table.Th fz={10} fw={800} c="dimmed" lts={1}>
                     ROLE
@@ -564,7 +578,7 @@ export default function AdminOrganization() {
               <Table.Tbody>
                 {loading ? (
                   <Table.Tr>
-                    <Table.Td colSpan={6}>
+                    <Table.Td colSpan={7}>
                       <Text c="dimmed" size="sm" ta="center" py="lg">
                         Loading...
                       </Text>
@@ -572,7 +586,7 @@ export default function AdminOrganization() {
                   </Table.Tr>
                 ) : orgMembers.length === 0 ? (
                   <Table.Tr>
-                    <Table.Td colSpan={6}>
+                    <Table.Td colSpan={7}>
                       <Text c="dimmed" size="sm" ta="center" py="lg">
                         No team members yet. Invite users to get started.
                       </Text>
@@ -580,7 +594,7 @@ export default function AdminOrganization() {
                   </Table.Tr>
                 ) : filteredMembers.length === 0 ? (
                   <Table.Tr>
-                    <Table.Td colSpan={6}>
+                    <Table.Td colSpan={7}>
                       <Text c="dimmed" size="sm" ta="center" py="lg">
                         No members match the current filter.
                       </Text>
@@ -592,6 +606,7 @@ export default function AdminOrganization() {
                       key={m._id}
                       name={m.name}
                       email={m.email}
+                      phone={(m as AuthUser & { phoneNumber?: string }).phoneNumber?.trim() || "—"}
                       role={m.role.charAt(0).toUpperCase() + m.role.slice(1)}
                       dept={m.departments?.length ? m.departments.join(", ") : "—"}
                       status={m.isActive !== false ? "Active" : "Pending"}
@@ -608,6 +623,53 @@ export default function AdminOrganization() {
               </Table.Tbody>
             </Table>
           </Table.ScrollContainer>
+          {csvPendingCredentials.length > 0 && (
+            <Box px="xl" py="md" style={{ borderTop: "1px solid #e9ecef" }}>
+              <Group justify="space-between" align="center" wrap="wrap" gap="sm">
+                <Text size="sm" c="dimmed" maw={480}>
+                  Send login details by email to everyone from your last CSV import ({csvPendingCredentials.length}{" "}
+                  accounts). This uses the passwords shown in the import result so recipients can sign in.
+                </Text>
+                <Button
+                  leftSection={<IconMail size={18} />}
+                  variant="light"
+                  color="teal"
+                  loading={csvEmailBusy}
+                  onClick={async () => {
+                    setCsvEmailBusy(true);
+                    setCsvEmailNotice(null);
+                    setError(null);
+                    try {
+                      const res = await sendAccessEmails(csvPendingCredentials);
+                      const failedMsg =
+                        res.failed.length > 0
+                          ? ` Some could not be sent: ${res.failed
+                              .slice(0, 5)
+                              .map((f) => `${f.email} (${f.reason})`)
+                              .join("; ")}${res.failed.length > 5 ? "…" : ""}`
+                          : "";
+                      setCsvEmailNotice(`Sent ${res.sent} email(s).${failedMsg}`);
+                      const failedEmails = new Set(res.failed.map((f) => f.email.trim().toLowerCase()));
+                      setCsvPendingCredentials((prev) =>
+                        prev.filter((p) => failedEmails.has(p.email.trim().toLowerCase()))
+                      );
+                    } catch (err) {
+                      setError((err as ApiError).message ?? "Failed to send emails");
+                    } finally {
+                      setCsvEmailBusy(false);
+                    }
+                  }}
+                >
+                  Send login emails
+                </Button>
+              </Group>
+              {csvEmailNotice && (
+                <Text size="xs" c="dimmed" mt="xs">
+                  {csvEmailNotice}
+                </Text>
+              )}
+            </Box>
+          )}
         </Card>
 
         {error && (
@@ -620,6 +682,7 @@ export default function AdminOrganization() {
           onClose={close}
           onSuccess={handleInviteSuccess}
           orgDepartments={org?.departments ?? []}
+          viewerRole={authUser?.role}
         />
         <EditStaffModal
           opened={editOpened}
@@ -630,6 +693,7 @@ export default function AdminOrganization() {
           onSuccess={handleEditSuccess}
           member={editingMember}
           orgDepartments={org?.departments ?? []}
+          viewerRole={authUser?.role}
         />
         <Modal
           opened={csvImportOpened}
@@ -637,6 +701,7 @@ export default function AdminOrganization() {
             closeCsvImport();
             setCsvText("");
             setCsvResult(null);
+            setCsvEmailNotice(null);
           }}
           title="Bulk import users (CSV)"
           centered
@@ -644,13 +709,15 @@ export default function AdminOrganization() {
         >
           <Stack gap="md">
             <Text size="sm" c="dimmed">
-              Header row: <code>name,email,role,departments</code>. Roles: admin, manager, employee. Departments:
-              separate multiple with semicolons (e.g. <code>Engineering;Sales</code>). New users receive a temporary
-              password from the server (share securely outside NAVI). Existing emails are skipped.
+              Columns: <code>name,email,phone,role,departments</code> (phone optional — if omitted, use{" "}
+              <code>name,email,role,departments</code>). Roles: admin, manager, employee. Departments: semicolon-separated.
+              Employees get password <code>OrganizationName@1</code>, <code>@2</code>, … (from your org name). Managers
+              and admins from CSV get a random temporary password (shown after import). Existing emails are skipped. Use{" "}
+              <strong>Send login emails</strong> below the team table after import.
             </Text>
             <Textarea
               label="Paste CSV"
-              placeholder={`name,email,role,departments\nJane Doe,jane@co.com,employee,Engineering`}
+              placeholder={`name,email,phone,role,departments\nJane Doe,jane@co.com,+15550199,employee,Engineering`}
               minRows={8}
               value={csvText}
               onChange={(e) => setCsvText(e.currentTarget.value)}
@@ -681,6 +748,9 @@ export default function AdminOrganization() {
                   try {
                     const res = await bulkImportUsers(csvText);
                     setCsvResult(res);
+                    setCsvPendingCredentials(
+                      (res.credentials ?? []).map((c) => ({ email: c.email, password: c.password }))
+                    );
                     await fetchData();
                   } catch (err) {
                     setError((err as ApiError).message ?? "Import failed");
@@ -736,11 +806,13 @@ function InviteUserModal({
   onClose,
   onSuccess,
   orgDepartments,
+  viewerRole,
 }: {
   opened: boolean;
   onClose: () => void;
   onSuccess: () => void;
   orgDepartments: string[];
+  viewerRole?: UserRole;
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -748,6 +820,7 @@ function InviteUserModal({
     name: string;
     email: string;
     password: string;
+    phoneNumber: string;
     role: UserRole;
     departments: string[];
   }>({
@@ -755,15 +828,24 @@ function InviteUserModal({
       name: "",
       email: "",
       password: "",
+      phoneNumber: "",
       role: "employee",
       departments: [],
     },
     validate: {
       name: (v) => (!v?.trim() ? "Name is required" : null),
       email: (v) => (!v?.trim() ? "Email is required" : null),
-      password: (v) => (!v?.trim() ? "Password is required" : null),
+      password: (v, values) => {
+        if (values.role === "employee") return null;
+        if (!v?.trim()) return "Password is required";
+        if (v.trim().length < 8) return "At least 8 characters";
+        return null;
+      },
     },
   });
+
+  const roleChoices =
+    viewerRole === "manager" ? ROLE_OPTIONS.filter((o) => o.value !== "admin") : ROLE_OPTIONS;
 
   const handleClose = () => {
     form.reset();
@@ -775,13 +857,19 @@ function InviteUserModal({
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await createUser({
+      const payload: Parameters<typeof createUser>[0] = {
         name: values.name.trim(),
         email: values.email.trim(),
-        password: values.password,
         role: values.role,
         departments: values.departments ?? [],
-      });
+      };
+      if (values.phoneNumber.trim()) {
+        payload.phoneNumber = values.phoneNumber.trim();
+      }
+      if (values.role !== "employee") {
+        payload.password = values.password.trim();
+      }
+      await createUser(payload);
       onSuccess();
       handleClose();
     } catch (err) {
@@ -846,21 +934,40 @@ function InviteUserModal({
             <TextInput
               label={
                 <Text fw={700} fz="sm" mb={8}>
-                  Password
+                  Phone (optional)
                 </Text>
               }
-              placeholder="Temporary password"
-              type="password"
+              placeholder="+1 555 0123"
               radius="md"
               size="md"
-              {...form.getInputProps("password")}
+              {...form.getInputProps("phoneNumber")}
             />
+            {form.values.role !== "employee" && (
+              <TextInput
+                label={
+                  <Text fw={700} fz="sm" mb={8}>
+                    Password
+                  </Text>
+                }
+                placeholder="Temporary password (min 8 characters)"
+                type="password"
+                radius="md"
+                size="md"
+                {...form.getInputProps("password")}
+              />
+            )}
+            {form.values.role === "employee" && (
+              <Text size="sm" c="dimmed">
+                Password is set automatically as your organization name plus @ and the next number (e.g. AcmeInc@6). A
+                welcome email can be sent from the team list after CSV import, or share credentials securely.
+              </Text>
+            )}
             <Box>
               <Text fw={700} fz="sm" mb={10}>
                 Role
               </Text>
               <Stack gap="md">
-                {ROLE_OPTIONS.map((opt) => (
+                {roleChoices.map((opt) => (
                   <RoleOption
                     key={opt.value}
                     active={form.values.role === opt.value}
@@ -1032,7 +1139,7 @@ function DepartmentCard({ title, members, color, onRemove }: DepartmentCardProps
   );
 }
 
-function MemberRow({ name, email, role, dept, status, date, member, onEdit, onDelete }: MemberRowProps) {
+function MemberRow({ name, email, phone, role, dept, status, date, member, onEdit, onDelete }: MemberRowProps) {
   return (
     <Table.Tr>
       <Table.Td>
@@ -1047,6 +1154,11 @@ function MemberRow({ name, email, role, dept, status, date, member, onEdit, onDe
             </Text>
           </Stack>
         </Group>
+      </Table.Td>
+      <Table.Td>
+        <Text fz="sm" fw={500} c="dimmed">
+          {phone}
+        </Text>
       </Table.Td>
       <Table.Td>
         <Badge variant="filled" bg="#f1f3f5" c="dark" radius="sm" fw={800}>
@@ -1123,18 +1235,21 @@ function EditStaffModal({
   onSuccess,
   member,
   orgDepartments,
+  viewerRole,
 }: {
   opened: boolean;
   onClose: () => void;
   onSuccess: () => void;
   member: AuthUser | null;
   orgDepartments: string[];
+  viewerRole?: UserRole;
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const form = useForm<{
     name: string;
     email: string;
+    phoneNumber: string;
     password: string;
     role: UserRole;
     departments: string[];
@@ -1143,6 +1258,7 @@ function EditStaffModal({
     initialValues: {
       name: "",
       email: "",
+      phoneNumber: "",
       password: "",
       role: "employee",
       departments: [],
@@ -1159,6 +1275,7 @@ function EditStaffModal({
       form.setValues({
         name: member.name ?? "",
         email: member.email ?? "",
+        phoneNumber: (member as AuthUser & { phoneNumber?: string }).phoneNumber ?? "",
         password: "",
         role: member.role ?? "employee",
         departments: member.departments ?? [],
@@ -1166,6 +1283,9 @@ function EditStaffModal({
       });
     }
   }, [member, opened]);
+
+  const editRoleChoices =
+    viewerRole === "manager" ? ROLE_OPTIONS.filter((o) => o.value !== "admin") : ROLE_OPTIONS;
 
   const handleClose = () => {
     form.reset();
@@ -1184,6 +1304,7 @@ function EditStaffModal({
         role: values.role,
         departments: values.departments ?? [],
         isActive: values.isActive,
+        phoneNumber: values.phoneNumber.trim() || undefined,
       };
       if (values.password?.trim()) {
         payload.password = values.password;
@@ -1238,6 +1359,13 @@ function EditStaffModal({
               {...form.getInputProps("email")}
             />
             <TextInput
+              label={<Text fw={700} fz="sm" mb={8}>Phone</Text>}
+              placeholder="+1 555 0123"
+              radius="md"
+              size="md"
+              {...form.getInputProps("phoneNumber")}
+            />
+            <TextInput
               label={<Text fw={700} fz="sm" mb={8}>New Password (optional)</Text>}
               placeholder="Leave blank to keep current password"
               type="password"
@@ -1248,7 +1376,7 @@ function EditStaffModal({
             <Box>
               <Text fw={700} fz="sm" mb={10}>Role</Text>
               <Stack gap="md">
-                {ROLE_OPTIONS.map((opt) => (
+                {editRoleChoices.map((opt) => (
                   <RoleOption
                     key={opt.value}
                     active={form.values.role === opt.value}

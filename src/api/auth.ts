@@ -12,6 +12,7 @@ export interface AuthUser {
   departments?: string[];
   isActive?: boolean;
   photoDataUrl?: string;
+  phoneNumber?: string;
 }
 
 export interface LoginResponse {
@@ -22,9 +23,11 @@ export interface LoginResponse {
 export interface CreateUserPayload {
   name: string;
   email: string;
-  password: string;
+  /** Required for admin/manager; omitted for employees (server assigns OrganizationName@{n}). */
+  password?: string;
   role: UserRole;
   departments?: string[];
+  phoneNumber?: string;
 }
 
 export interface UpdateUserPayload {
@@ -35,16 +38,41 @@ export interface UpdateUserPayload {
   departments?: string[];
   isActive?: boolean;
   photoDataUrl?: string;
+  phoneNumber?: string;
+}
+
+export interface BulkImportCredential {
+  email: string;
+  name: string;
+  password: string;
+  phone?: string;
+  role: UserRole;
+}
+
+export interface BulkImportUsersResult {
+  created: number;
+  skipped: number;
+  errors: string[];
+  credentials: BulkImportCredential[];
+}
+
+export interface SendAccessEmailsResult {
+  sent: number;
+  failed: { email: string; reason: string }[];
 }
 
 export function updateMyProfile(payload: { name?: string; photoDataUrl?: string }): Promise<AuthUser> {
   return api.patch<AuthUser>("/auth/me/profile", payload);
 }
 
-export function bulkImportUsers(csvText: string): Promise<{ created: number; skipped: number; errors: string[] }> {
-  return api.post<{ created: number; skipped: number; errors: string[] }>("/auth/users/bulk-import", {
+export function bulkImportUsers(csvText: string): Promise<BulkImportUsersResult> {
+  return api.post<BulkImportUsersResult>("/auth/users/bulk-import", {
     csvText,
   });
+}
+
+export function sendAccessEmails(entries: { email: string; password: string }[]): Promise<SendAccessEmailsResult> {
+  return api.post<SendAccessEmailsResult>("/auth/users/send-access-emails", { entries });
 }
 
 /**

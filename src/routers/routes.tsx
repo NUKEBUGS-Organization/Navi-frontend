@@ -206,7 +206,14 @@ export default function AppRoutes() {
         <Route path={ROUTES.MANAGER_COMMUNICATIONS} element={<ProtectedRoute allowedRoles={["admin", "manager"]}><CommunicationPlanning /></ProtectedRoute>} />
         <Route path={ROUTES.MANAGER_ADOPTION} element={<ProtectedRoute allowedRoles={["admin", "manager"]}><AdoptionTracking /></ProtectedRoute>} />
         <Route path={ROUTES.MANAGER_RISKS} element={<ProtectedRoute allowedRoles={["admin", "manager"]}><RiskMonitoring /></ProtectedRoute>} />
-        <Route path={ROUTES.MANAGER_ORGANIZATION} element={<ProtectedRoute allowedRoles={["admin"]}><AdminOrganization /></ProtectedRoute>} />
+        <Route
+          path={ROUTES.MANAGER_ORGANIZATION}
+          element={
+            <ProtectedRoute allowedRoles={["admin", "manager"]}>
+              <AdminOrganization />
+            </ProtectedRoute>
+          }
+        />
         <Route path={ROUTES.MANAGER_SETTINGS} element={<ProtectedRoute allowedRoles={["admin", "manager", "employee"]}><AdminSettings /></ProtectedRoute>} />
         <Route
           path={ROUTES.MANAGER_KUDOS}

@@ -25,6 +25,7 @@ import {
   createOrganization,
   getSignupLead,
   approveOrganizationEmployeeCount,
+  patchOrganizationById,
   type OrganizationListItem,
   type CreateOrganizationPayload,
 } from "@/api/organizations";
@@ -43,6 +44,8 @@ export default function Organizations() {
   const [error, setError] = useState<string | null>(null);
   const [sourceLeadId, setSourceLeadId] = useState<string | null>(null);
   const [detailOrg, setDetailOrg] = useState<OrganizationListItem | null>(null);
+  const [detailMaxSeats, setDetailMaxSeats] = useState(100);
+  const [savingSeats, setSavingSeats] = useState(false);
   const [approvingId, setApprovingId] = useState<string | null>(null);
 
   const createForm = useForm<CreateOrgFormValues>({
@@ -57,6 +60,7 @@ export default function Organizations() {
       country: "",
       industry: "",
       employeeCount: 0,
+      maxEmployeeSeats: 100,
     },
     validate: {
       organizationName: (v) => (!v ? "Organization name is required" : null),
@@ -83,6 +87,12 @@ export default function Organizations() {
     fetchOrgs();
   }, []);
 
+  useEffect(() => {
+    if (detailOrg) {
+      setDetailMaxSeats(detailOrg.maxEmployeeSeats ?? 100);
+    }
+  }, [detailOrg]);
+
   const leadIdParam = searchParams.get("leadId");
   useEffect(() => {
     if (!leadIdParam) return;
@@ -101,7 +111,8 @@ export default function Organizations() {
           city: lead.city ?? "",
           country: lead.country ?? "",
           industry: lead.industry ?? "",
-          employeeCount: Number.isNaN(ec) ? 0 : ec,
+                employeeCount: Number.isNaN(ec) ? 0 : ec,
+          maxEmployeeSeats: 100,
         });
         setSourceLeadId(lead.id);
         setCreateOpen(true);
@@ -192,6 +203,7 @@ export default function Organizations() {
                 country: values.country || undefined,
                 industry: values.industry || undefined,
                 employeeCount: values.employeeCount,
+                maxEmployeeSeats: values.maxEmployeeSeats,
                 sourceLeadId: sourceLeadId ?? undefined,
               });
               setCreateOpen(false);
@@ -312,6 +324,20 @@ export default function Organizations() {
               />
             </Stack>
 
+            <Stack gap={4}>
+              <Text fw={600} size="sm">
+                Max employee seats
+              </Text>
+              <Text size="xs" c="dimmed">
+                Admins and managers cannot add more active employees than this cap (they can still add managers/admins).
+              </Text>
+              <NumberInput
+                min={1}
+                placeholder="100"
+                {...createForm.getInputProps("maxEmployeeSeats")}
+              />
+            </Stack>
+
             <Group justify="flex-end" mt="md">
               <Button variant="default" onClick={() => setCreateOpen(false)} disabled={createLoading}>
                 Cancel
@@ -375,6 +401,39 @@ export default function Organizations() {
               </Text>
               <Text>{detailOrg.employeeCount ?? 0}</Text>
             </Group>
+            <Stack gap={6}>
+              <Group justify="space-between" align="flex-end">
+                <Text fw={600} c="dimmed" size="sm">
+                  Max employee seats
+                </Text>
+                <Text size="xs" c="dimmed" maw={200} ta="right">
+                  Cap on employees admins/managers can add
+                </Text>
+              </Group>
+              <Group grow align="flex-end" gap="sm">
+                <NumberInput min={1} label="" hideControls={false} value={detailMaxSeats} onChange={(v) => setDetailMaxSeats(typeof v === "number" ? v : parseInt(String(v), 10) || 1)} />
+                <Button
+                  loading={savingSeats}
+                  onClick={async () => {
+                    setSavingSeats(true);
+                    setError(null);
+                    try {
+                      await patchOrganizationById(detailOrg.id, { maxEmployeeSeats: detailMaxSeats });
+                      await fetchOrgs();
+                      setDetailOrg((prev) =>
+                        prev ? { ...prev, maxEmployeeSeats: detailMaxSeats } : prev
+                      );
+                    } catch (err) {
+                      setError((err as ApiError).message ?? "Failed to update seat limit");
+                    } finally {
+                      setSavingSeats(false);
+                    }
+                  }}
+                >
+                  Save limit
+                </Button>
+              </Group>
+            </Stack>
             <Group justify="space-between">
               <Text fw={600} c="dimmed" size="sm">
                 Status
@@ -464,7 +523,12 @@ export default function Organizations() {
                     </Table.Td>
                     <Table.Td>
                       <Group gap={6} wrap="wrap">
-                        <Text size="sm">{org.employeeCount ?? 0}</Text>
+                        <Text size="sm">
+                          {org.employeeCount ?? 0}{" "}
+                          <Text component="span" c="dimmed" size="xs">
+                            / {org.maxEmployeeSeats ?? 100} cap
+                          </Text>
+                        </Text>
                         {org.pendingEmployeeCount != null && org.pendingEmployeeCount !== org.employeeCount && (
                           <Badge size="sm" color="orange" variant="light">
                             Pending: {org.pendingEmployeeCount}

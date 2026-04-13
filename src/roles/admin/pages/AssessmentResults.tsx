@@ -664,27 +664,16 @@ export default function AssessmentResults() {
         </Paper>
         )}
 
-        {!hasState ? (
-          <Paper withBorder p="xl" radius="md" bg="white">
-            <Stack align="center" gap="lg" py="xl">
-              <IconCheckbox size={48} color={NAVY} stroke={1.5} />
-              <Box ta="center">
-                <Title order={4} c={NAVY} mb="xs">
-                  No assessment results yet
-                </Title>
-                <Text c="dimmed" size="sm" maw={400}>
-                  Take an assessment from an initiative to see your readiness results here. Go to an initiative, open the <strong>Assessment</strong> tab, and take an assessment assigned to your role.
-                </Text>
-              </Box>
-              <Button
-                color={NAVY}
-                onClick={() => navigate(appRoutes.INITIATIVES)}
-              >
-                View Initiatives
-              </Button>
-            </Stack>
+        {!hasState && submittedSubmissions.length > 0 && (
+          <Paper withBorder radius="md" p="md" mb="lg" bg="var(--mantine-color-default-hover)">
+            <Text size="sm" c="dimmed">
+              After you submit an assessment, a detailed readiness breakdown appears below for the rest of that visit.
+              Your history stays in <strong>My submissions</strong> above.
+            </Text>
           </Paper>
-        ) : (
+        )}
+
+        {hasState && (
           <>
             {initiativeTitle && (
               <Paper withBorder p="md" radius="md" bg="white" mb="lg">
@@ -875,7 +864,7 @@ export default function AssessmentResults() {
               </Grid.Col>
             </Grid>
 
-            </>
+          </>
         )}
       </Box>
     </AdminLayout>

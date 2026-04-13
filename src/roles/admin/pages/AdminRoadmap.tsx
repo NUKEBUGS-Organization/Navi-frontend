@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import AdminLayout from "@/roles/admin/layout/AdminLayout";
 import {
   Box,
@@ -24,6 +24,8 @@ import {
   Menu,
   Paper,
   Grid,
+  Alert,
+  Anchor,
 } from "@mantine/core";
 import type { ReactNode } from "react";
 import { DateInput } from "@mantine/dates";
@@ -70,6 +72,7 @@ type InitiativeRoadmapOption = {
   status?: string;
   changeType?: string;
   sponsorName?: string;
+  adoptionTrackingEnabled?: boolean;
   raciAccountableIds?: unknown[];
   raciResponsibleIds?: unknown[];
   raciConsultedIds?: unknown[];
@@ -145,6 +148,7 @@ export default function AdminRoadmap() {
           status: (i as { status?: string }).status,
           changeType: (i as { changeType?: string }).changeType,
           sponsorName: (i as { sponsorName?: string }).sponsorName,
+          adoptionTrackingEnabled: (i as { adoptionTrackingEnabled?: boolean }).adoptionTrackingEnabled,
           raciAccountableIds: (i as { raciAccountableIds?: unknown[] }).raciAccountableIds,
           raciResponsibleIds: (i as { raciResponsibleIds?: unknown[] }).raciResponsibleIds,
           raciConsultedIds: (i as { raciConsultedIds?: unknown[] }).raciConsultedIds,
@@ -797,6 +801,7 @@ export default function AdminRoadmap() {
           initiativeId={selectedInitiativeId}
           users={users}
           adoptions={adoptions}
+          adoptionTrackingEnabled={selectedInitiative?.adoptionTrackingEnabled}
           onCreated={refetchTasks}
         />
         <EditTaskModal
@@ -1230,6 +1235,7 @@ function CreateTaskModal({
   initiativeId,
   users,
   adoptions,
+  adoptionTrackingEnabled,
   onCreated,
 }: {
   opened: boolean;
@@ -1237,8 +1243,15 @@ function CreateTaskModal({
   initiativeId: string | null;
   users: { _id: string; name: string }[];
   adoptions: AdoptionDto[];
+  /** When not `false`, new tasks must link to an adoption milestone (if any exist). */
+  adoptionTrackingEnabled?: boolean;
   onCreated: () => void;
 }) {
+  const appRoutes = useAppRoutes();
+  const trackingOn = adoptionTrackingEnabled !== false;
+  const adoptionMilestoneRequired = trackingOn && adoptions.length > 0;
+  const cannotCreateWithoutMilestones = trackingOn && adoptions.length === 0;
+
   const form = useForm({
     initialValues: {
       title: "",
@@ -1249,7 +1262,12 @@ function CreateTaskModal({
       progress: 0,
       adoptionMilestoneId: "" as string | null,
     },
-    validate: { title: (v) => (!v?.trim() ? "Title is required" : null), assigneeId: (v) => (!v ? "Owner is required" : null) },
+    validate: {
+      title: (v) => (!v?.trim() ? "Title is required" : null),
+      assigneeId: (v) => (!v ? "Owner is required" : null),
+      adoptionMilestoneId: (v) =>
+        adoptionMilestoneRequired && !(v && String(v).trim()) ? "Select an adoption milestone" : null,
+    },
   });
 
   const handleSubmit = form.onSubmit(async (values) => {
@@ -1335,7 +1353,33 @@ function CreateTaskModal({
             size="md"
             {...form.getInputProps("assigneeId")}
           />
-          {adoptions.length > 0 && (
+          {cannotCreateWithoutMilestones ? (
+            <Alert color="orange" title="Adoption milestone required" radius="md">
+              <Text size="sm">
+                Adoption tracking is on for this initiative, but there are no milestones yet. Add at least one on{" "}
+                <Anchor component={Link} to={appRoutes.ADOPTION} fw={700} c="orange.9">
+                  Adoption Tracking
+                </Anchor>{" "}
+                before creating tasks.
+              </Text>
+            </Alert>
+          ) : null}
+          {adoptionMilestoneRequired ? (
+            <Select
+              label={
+                <Text fw={700} fz="sm" mb={5}>
+                  Adoption milestone <Text span c="red">*</Text>
+                </Text>
+              }
+              placeholder="Select milestone"
+              data={adoptions.map((a) => ({ value: a._id, label: `${a.milestone} (target ${a.targetPercent ?? 100}%)` }))}
+              radius="md"
+              size="md"
+              required
+              rightSection={<IconChevronDown size={18} />}
+              {...form.getInputProps("adoptionMilestoneId")}
+            />
+          ) : !trackingOn && adoptions.length > 0 ? (
             <Select
               label={<Text fw={700} fz="sm" mb={5}>Adoption milestone (optional)</Text>}
               placeholder="None"
@@ -1349,7 +1393,7 @@ function CreateTaskModal({
               rightSection={<IconChevronDown size={18} />}
               {...form.getInputProps("adoptionMilestoneId")}
             />
-          )}
+          ) : null}
           <Box>
             <Group justify="space-between" mb={8}>
               <Text fw={700} fz="sm">Progress</Text>
@@ -1366,7 +1410,16 @@ function CreateTaskModal({
           <Divider />
           <Group justify="flex-end" gap="md" mt="md">
             <Button type="button" variant="transparent" c="gray.6" fw={700} onClick={onClose}>Cancel</Button>
-            <Button type="submit" bg={TEAL_BLUE} radius="md" px={30} h={45} fw={700} leftSection={<IconRocket size={18} />}>
+            <Button
+              type="submit"
+              bg={TEAL_BLUE}
+              radius="md"
+              px={30}
+              h={45}
+              fw={700}
+              leftSection={<IconRocket size={18} />}
+              disabled={cannotCreateWithoutMilestones}
+            >
               Save Task
             </Button>
           </Group>

@@ -11,6 +11,8 @@ export interface OrganizationListItem {
   departments: string[];
   departmentCount: number;
   employeeCount: number;
+  /** Max employees org admins/managers may add (super admin can change). */
+  maxEmployeeSeats?: number;
   pendingEmployeeCount?: number;
   email?: string;
   country?: string;
@@ -28,6 +30,7 @@ export interface CreateOrganizationPayload {
   country?: string;
   industry?: string;
   employeeCount?: number;
+  maxEmployeeSeats?: number;
   departments?: string[];
   /** Marks a public signup lead as converted after org is created. */
   sourceLeadId?: string;
@@ -42,6 +45,14 @@ export function listOrganizations(): Promise<OrganizationListItem[]> {
   return api.get<OrganizationListItem[]>("/organizations");
 }
 
+/** Super admin: PATCH /organizations/:id */
+export function patchOrganizationById(
+  organizationId: string,
+  payload: { maxEmployeeSeats?: number; name?: string; employeeCount?: number; industry?: string }
+): Promise<MyOrganization> {
+  return api.patch<MyOrganization>(`/organizations/${organizationId}`, payload);
+}
+
 export interface MyOrganization {
   _id: string;
   name: string;
@@ -53,6 +64,8 @@ export interface MyOrganization {
   country?: string;
   employeeCount?: number;
   pendingEmployeeCount?: number;
+  /** Max active employees for this org (enforced on create). */
+  maxEmployeeSeats?: number;
   logo?: string;
   departments?: string[];
   status?: string;

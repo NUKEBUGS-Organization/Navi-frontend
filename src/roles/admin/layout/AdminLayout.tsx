@@ -17,6 +17,7 @@ import { IconLayoutDashboard, IconTarget, IconCheckbox, IconRoute, IconHierarchy
 import type { IconProps } from "@tabler/icons-react";
 import { COLORS, ROUTES } from "@/constants";
 import { NaviLogo } from "@/components/ui/NaviLogo";
+import { ColorSchemeToggle } from "@/components/ui/ColorSchemeToggle";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAppRoutes } from "@/hooks/useAppRoutes";
 import { OrgOnboardingTour } from "@/components/onboarding";
@@ -52,7 +53,7 @@ export default function AdminLayout({
     { icon: IconAlertTriangle, label: "Risk Monitoring", path: appRoutes.RISKS, roles: ["admin", "manager"] },
     { icon: IconStar, label: "Kudos", path: appRoutes.KUDOS },
     { icon: IconBooks, label: "Knowledge Hub", path: appRoutes.KNOWLEDGE_HUB },
-    { icon: IconHierarchy, label: "Organization", path: appRoutes.ORGANIZATION, roles: ["admin"] },
+    { icon: IconHierarchy, label: "Organization", path: appRoutes.ORGANIZATION, roles: ["admin", "manager"] },
     { icon: IconSettings, label: "Settings", path: appRoutes.SETTINGS },
   ];
 
@@ -178,23 +179,25 @@ export default function AdminLayout({
             borderRadius: "12px",
           }}
         >
-          <Menu shadow="md" width={200} position="top-end">
-            <Menu.Target>
-              <UnstyledButton style={{ width: "100%" }}>
-                <Group gap="sm">
-                  <Avatar radius="md" size="md" />
-                  <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
-                    <Text size="sm" fw={700} c="white" truncate>
-                      {user?.name ?? "User"}
-                    </Text>
-                    <Text size="xs" c={COLORS.sidebarText} fw={500}>
-                      {user?.role ?? "—"}
-                    </Text>
-                  </Stack>
-                </Group>
-              </UnstyledButton>
-            </Menu.Target>
-            <Menu.Dropdown>
+          <Group align="center" justify="space-between" gap="sm" wrap="nowrap">
+            <Box style={{ flex: 1, minWidth: 0 }}>
+              <Menu shadow="md" width={200} position="top-end" withinPortal>
+                <Menu.Target>
+                  <UnstyledButton style={{ flex: 1, minWidth: 0, display: "block", width: "100%" }}>
+                  <Group gap="sm" wrap="nowrap" align="center">
+                    <Avatar radius="md" size="md" />
+                    <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
+                      <Text size="sm" fw={700} c="white" truncate>
+                        {user?.name ?? "User"}
+                      </Text>
+                      <Text size="xs" c={COLORS.sidebarText} fw={500} truncate>
+                        {user?.role ?? "—"}
+                      </Text>
+                    </Stack>
+                  </Group>
+                </UnstyledButton>
+              </Menu.Target>
+              <Menu.Dropdown>
               <Menu.Item
                 leftSection={<IconSettings size={14} />}
                 onClick={() => navigate(settingsPath)}
@@ -212,12 +215,15 @@ export default function AdminLayout({
               >
                 Log out
               </Menu.Item>
-            </Menu.Dropdown>
-          </Menu>
+              </Menu.Dropdown>
+              </Menu>
+            </Box>
+            <ColorSchemeToggle variant="sidebar" compact />
+          </Group>
         </Box>
       </AppShell.Navbar>
 
-      <AppShell.Main bg={COLORS.mainBg} style={{ minHeight: "100vh" }}>
+      <AppShell.Main style={{ minHeight: "100vh" }}>
         <OrgOnboardingTour />
         <Box p={{ base: "md", sm: "35px" }}>{children}</Box>
       </AppShell.Main>
