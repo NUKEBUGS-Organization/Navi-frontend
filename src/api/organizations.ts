@@ -17,6 +17,9 @@ export interface OrganizationListItem {
   email?: string;
   country?: string;
   industry?: string;
+  adminId?: string;
+  adminEmail?: string;
+  adminLastActiveAt?: string | null;
 }
 
 export interface CreateOrganizationPayload {

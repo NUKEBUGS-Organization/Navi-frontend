@@ -29,6 +29,7 @@ import {
   type OrganizationListItem,
   type CreateOrganizationPayload,
 } from "@/api/organizations";
+import { updateUser } from "@/api/auth";
 import type { ApiError } from "@/api/client";
 
 type CreateOrgFormValues = Omit<CreateOrganizationPayload, "departments" | "sourceLeadId">;
@@ -47,6 +48,10 @@ export default function Organizations() {
   const [detailMaxSeats, setDetailMaxSeats] = useState(100);
   const [savingSeats, setSavingSeats] = useState(false);
   const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [adminEmailInput, setAdminEmailInput] = useState("");
+  const [newAdminPassword, setNewAdminPassword] = useState("");
+  const [savingAdminEmail, setSavingAdminEmail] = useState(false);
+  const [resettingAdminPassword, setResettingAdminPassword] = useState(false);
 
   const createForm = useForm<CreateOrgFormValues>({
     initialValues: {
@@ -90,6 +95,8 @@ export default function Organizations() {
   useEffect(() => {
     if (detailOrg) {
       setDetailMaxSeats(detailOrg.maxEmployeeSeats ?? 100);
+      setAdminEmailInput(detailOrg.adminEmail ?? "");
+      setNewAdminPassword("");
     }
   }, [detailOrg]);
 
@@ -371,10 +378,90 @@ export default function Organizations() {
             </Group>
             <Group justify="space-between">
               <Text fw={600} c="dimmed" size="sm">
+                Admin last active
+              </Text>
+              <Text size="sm">
+                {detailOrg.adminLastActiveAt
+                  ? new Date(detailOrg.adminLastActiveAt).toLocaleString()
+                  : "Never recorded"}
+              </Text>
+            </Group>
+            <Group justify="space-between">
+              <Text fw={600} c="dimmed" size="sm">
                 Contact email
               </Text>
               <Text size="sm">{detailOrg.email ?? "—"}</Text>
             </Group>
+            <Stack gap={6}>
+              <Text fw={600} c="dimmed" size="sm">
+                Admin login email
+              </Text>
+              <Group grow align="flex-end" gap="sm">
+                <TextInput
+                  placeholder="admin@organization.com"
+                  type="email"
+                  value={adminEmailInput}
+                  onChange={(e) => setAdminEmailInput(e.currentTarget.value)}
+                />
+                <Button
+                  loading={savingAdminEmail}
+                  disabled={!detailOrg.adminId || !adminEmailInput.trim()}
+                  onClick={async () => {
+                    if (!detailOrg.adminId) return;
+                    setSavingAdminEmail(true);
+                    setError(null);
+                    try {
+                      await updateUser(detailOrg.adminId, { email: adminEmailInput.trim() });
+                      await fetchOrgs();
+                      setDetailOrg((prev) =>
+                        prev ? { ...prev, adminEmail: adminEmailInput.trim() } : prev
+                      );
+                    } catch (err) {
+                      setError((err as ApiError).message ?? "Failed to update admin email");
+                    } finally {
+                      setSavingAdminEmail(false);
+                    }
+                  }}
+                >
+                  Save email
+                </Button>
+              </Group>
+            </Stack>
+            <Stack gap={6}>
+              <Text fw={600} c="dimmed" size="sm">
+                Reset admin password
+              </Text>
+              <Text size="xs" c="dimmed">
+                Set a temporary password (minimum 8 characters) and share it securely with the admin.
+              </Text>
+              <Group grow align="flex-end" gap="sm">
+                <TextInput
+                  placeholder="Temporary password"
+                  type="password"
+                  value={newAdminPassword}
+                  onChange={(e) => setNewAdminPassword(e.currentTarget.value)}
+                />
+                <Button
+                  loading={resettingAdminPassword}
+                  disabled={!detailOrg.adminId || newAdminPassword.trim().length < 8}
+                  onClick={async () => {
+                    if (!detailOrg.adminId) return;
+                    setResettingAdminPassword(true);
+                    setError(null);
+                    try {
+                      await updateUser(detailOrg.adminId, { password: newAdminPassword.trim() });
+                      setNewAdminPassword("");
+                    } catch (err) {
+                      setError((err as ApiError).message ?? "Failed to reset password");
+                    } finally {
+                      setResettingAdminPassword(false);
+                    }
+                  }}
+                >
+                  Reset password
+                </Button>
+              </Group>
+            </Stack>
             <Group justify="space-between">
               <Text fw={600} c="dimmed" size="sm">
                 Industry

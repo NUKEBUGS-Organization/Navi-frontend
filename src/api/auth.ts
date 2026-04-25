@@ -11,6 +11,7 @@ export interface AuthUser {
   organizationId?: string;
   departments?: string[];
   isActive?: boolean;
+  lastActiveAt?: string;
   photoDataUrl?: string;
   phoneNumber?: string;
 }
