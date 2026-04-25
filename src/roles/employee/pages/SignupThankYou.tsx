@@ -86,8 +86,8 @@ export default function SignupThankYou() {
               <List.Item>
                 <Text size="sm" component="span">
                   Join our mailing list for product updates:{" "}
-                  <Anchor href="mailto:hello@igcollaborative.com?subject=NAVI%20mailing%20list" fw={600}>
-                    hello@igcollaborative.com
+                  <Anchor href="https://zc.vg/ZNmeY" target="_blank" rel="noreferrer" fw={600}>
+                    https://zc.vg/ZNmeY
                   </Anchor>
                 </Text>
               </List.Item>
