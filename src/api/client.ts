@@ -18,10 +18,11 @@ async function request<T>(
   const res = await fetch(url, { ...options, headers });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const err: ApiError = {
-      message: (data as { message?: string }).message || res.statusText || "Request failed",
-      status: res.status,
-    };
+    const raw = (data as { message?: string | string[] }).message;
+    const message = Array.isArray(raw)
+      ? raw.join(", ")
+      : raw || res.statusText || "Request failed";
+    const err: ApiError = { message, status: res.status };
     throw err;
   }
   return data as T;

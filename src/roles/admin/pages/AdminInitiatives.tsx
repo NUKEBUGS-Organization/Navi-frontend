@@ -1278,7 +1278,7 @@ function CreateInitiativeModal({
   const [raciResponsibleIds, setRaciResponsibleIds] = useState<string[]>([]);
   const [raciConsultedIds, setRaciConsultedIds] = useState<string[]>([]);
   const [raciInformedIds, setRaciInformedIds] = useState<string[]>([]);
-  const [startDate, setStartDate] = useState<Date | null>(new Date(2024, 9, 12));
+  const [startDate, setStartDate] = useState<Date | null>(new Date());
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [selectedDepts, setSelectedDepts] = useState<string[]>([]);
   type ImpactScope = "departments" | "organization";

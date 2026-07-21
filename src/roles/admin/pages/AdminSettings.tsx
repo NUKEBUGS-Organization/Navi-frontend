@@ -41,7 +41,7 @@ import {
   listMyInitiativeParticipations,
   type MyInitiativeParticipation,
 } from "@/api/initiatives";
-import { updateMyProfile } from "@/api/auth";
+import { updateMyProfile, changePassword } from "@/api/auth";
 
 function getInitials(name: string | undefined): string {
   if (!name?.trim()) return "?";
@@ -65,6 +65,15 @@ function roleBadgeColor(r: MyInitiativeParticipation["roles"][number]): string {
   if (r === "lead") return "teal";
   if (r === "raci") return "blue";
   return "gray";
+}
+
+function errMessage(e: unknown, fallback: string): string {
+  if (e && typeof e === "object" && "message" in e) {
+    const m = (e as { message: unknown }).message;
+    if (typeof m === "string") return m;
+    if (Array.isArray(m)) return m.map(String).join(", ");
+  }
+  return fallback;
 }
 
 /** Downscale and JPEG-compress so the data URL fits API limits and avoids default ~100kb JSON issues on small servers. */
@@ -108,6 +117,23 @@ export default function AdminSettings() {
   const [photoError, setPhotoError] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
+  const nameParts = user?.name?.trim()?.split(/\s+/) ?? [];
+  const [firstName, setFirstName] = useState(nameParts[0] ?? "");
+  const [lastName, setLastName] = useState(nameParts.slice(1).join(" ") ?? "");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    const parts = user?.name?.trim()?.split(/\s+/) ?? [];
+    setFirstName(parts[0] ?? "");
+    setLastName(parts.slice(1).join(" ") ?? "");
+  }, [user?.name]);
+
   useEffect(() => {
     getMyOrganization()
       .then(setOrg)
@@ -134,9 +160,6 @@ export default function AdminSettings() {
     };
   }, []);
 
-  const nameParts = user?.name?.trim()?.split(/\s+/) ?? [];
-  const firstName = nameParts[0] ?? "";
-  const lastName = nameParts.slice(1).join(" ") ?? "";
   const departmentsDisplay = user?.departments?.length ? user.departments.join(", ") : "—";
 
   const handlePhotoPick = async (file: File | null) => {
@@ -155,13 +178,78 @@ export default function AdminSettings() {
       setUser(merged);
       setStoredUser(merged as unknown as Record<string, unknown>);
     } catch (e) {
-      const msg =
-        e && typeof e === "object" && "message" in e && typeof (e as { message: unknown }).message === "string"
-          ? (e as { message: string }).message
-          : "Could not update profile photo. Check your connection and try again.";
-      setPhotoError(msg);
+      setPhotoError(errMessage(e, "Could not update profile photo. Check your connection and try again."));
     } finally {
       setPhotoBusy(false);
+    }
+  };
+
+  const handleSavePassword = async (): Promise<boolean> => {
+    if (!user?.email) {
+      setPasswordError("You must be signed in to change your password.");
+      return false;
+    }
+    if (!currentPassword.trim() || !newPassword.trim()) {
+      setPasswordError("Enter both current and new password.");
+      return false;
+    }
+    if (newPassword.length < 12) {
+      setPasswordError("New password must be at least 12 characters.");
+      return false;
+    }
+    setPasswordError(null);
+    setPasswordSuccess(null);
+    try {
+      await changePassword(user.email, currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setPasswordSuccess("Password updated successfully.");
+      return true;
+    } catch (e) {
+      setPasswordError(errMessage(e, "Could not change password. Check your current password and try again."));
+      return false;
+    }
+  };
+
+  const handleSaveProfile = async (): Promise<boolean> => {
+    if (!user) {
+      setProfileError("You must be signed in to update your profile.");
+      return false;
+    }
+    const name = `${firstName} ${lastName}`.trim();
+    if (!name) {
+      setProfileError("First name or last name is required.");
+      return false;
+    }
+    setProfileError(null);
+    setProfileSuccess(null);
+    try {
+      const updated = await updateMyProfile({ name });
+      const merged = { ...user, ...updated };
+      setUser(merged);
+      setStoredUser(merged as unknown as Record<string, unknown>);
+      setProfileSuccess("Profile updated successfully.");
+      return true;
+    } catch (e) {
+      setProfileError(errMessage(e, "Could not update profile. Please try again."));
+      return false;
+    }
+  };
+
+  const handleSaveChanges = async () => {
+    setPasswordSaving(true);
+    setPasswordError(null);
+    setPasswordSuccess(null);
+    setProfileError(null);
+    setProfileSuccess(null);
+    try {
+      await handleSaveProfile();
+      const wantsPasswordChange = Boolean(currentPassword.trim() || newPassword.trim());
+      if (wantsPasswordChange) {
+        await handleSavePassword();
+      }
+    } finally {
+      setPasswordSaving(false);
     }
   };
 
@@ -343,12 +431,30 @@ export default function AdminSettings() {
                     </Title>
                   </Group>
                   <Divider mb="xl" color="#f1f3f5" />
+                  {(profileError || profileSuccess) && (
+                    <Text
+                      size="sm"
+                      fw={600}
+                      c={profileError ? "red" : "teal.7"}
+                      mb="md"
+                    >
+                      {profileError ?? profileSuccess}
+                    </Text>
+                  )}
                   <Grid gutter="xl">
                     <Grid.Col span={6}>
-                      <SettingInput label="FIRST NAME" defaultValue={firstName} />
+                      <SettingInput
+                        label="FIRST NAME"
+                        value={firstName}
+                        onChange={setFirstName}
+                      />
                     </Grid.Col>
                     <Grid.Col span={6}>
-                      <SettingInput label="LAST NAME" defaultValue={lastName} />
+                      <SettingInput
+                        label="LAST NAME"
+                        value={lastName}
+                        onChange={setLastName}
+                      />
                     </Grid.Col>
                     <Grid.Col span={12}>
                       <Text fz={10} fw={800} c="dimmed" lts={1} mb={8}>
@@ -436,12 +542,24 @@ export default function AdminSettings() {
                     </Title>
                   </Group>
                   <Divider mb="xl" color="#f1f3f5" />
+                  {(passwordError || passwordSuccess) && (
+                    <Text
+                      size="sm"
+                      fw={600}
+                      c={passwordError ? "red" : "teal.7"}
+                      mb="md"
+                    >
+                      {passwordError ?? passwordSuccess}
+                    </Text>
+                  )}
                   <Grid gutter="xl">
                     <Grid.Col span={6}>
                       <SettingPasswordInput
                         label="CURRENT PASSWORD"
                         placeholder="Enter current password"
                         ariaLabelToggle="Show or hide current password"
+                        value={currentPassword}
+                        onChange={setCurrentPassword}
                       />
                     </Grid.Col>
                     <Grid.Col span={6}>
@@ -449,6 +567,8 @@ export default function AdminSettings() {
                         label="NEW PASSWORD"
                         placeholder="Enter new password"
                         ariaLabelToggle="Show or hide new password"
+                        value={newPassword}
+                        onChange={setNewPassword}
                       />
                     </Grid.Col>
                   </Grid>
@@ -484,7 +604,23 @@ export default function AdminSettings() {
               </Card>
 
               <Group justify="flex-end" gap="xl" mt="xl" pb={40}>
-                <Button variant="transparent" c="gray.6" fw={700} size="md">
+                <Button
+                  variant="transparent"
+                  c="gray.6"
+                  fw={700}
+                  size="md"
+                  onClick={() => {
+                    const parts = user?.name?.trim()?.split(/\s+/) ?? [];
+                    setFirstName(parts[0] ?? "");
+                    setLastName(parts.slice(1).join(" ") ?? "");
+                    setCurrentPassword("");
+                    setNewPassword("");
+                    setPasswordError(null);
+                    setPasswordSuccess(null);
+                    setProfileError(null);
+                    setProfileSuccess(null);
+                  }}
+                >
                   Cancel
                 </Button>
                 <Button
@@ -494,6 +630,8 @@ export default function AdminSettings() {
                   px={50}
                   fw={700}
                   size="md"
+                  loading={passwordSaving}
+                  onClick={() => void handleSaveChanges()}
                 >
                   Save Changes
                 </Button>
@@ -508,11 +646,13 @@ export default function AdminSettings() {
 
 function SettingInput({
   label,
-  defaultValue,
+  value,
+  onChange,
   placeholder,
 }: {
   label: string;
-  defaultValue?: string;
+  value: string;
+  onChange: (value: string) => void;
   placeholder?: string;
 }) {
   return (
@@ -522,7 +662,8 @@ function SettingInput({
           {label}
         </Text>
       }
-      defaultValue={defaultValue}
+      value={value}
+      onChange={(e) => onChange(e.currentTarget.value)}
       placeholder={placeholder}
       radius="md"
       size="md"
@@ -537,10 +678,14 @@ function SettingPasswordInput({
   label,
   placeholder,
   ariaLabelToggle,
+  value,
+  onChange,
 }: {
   label: string;
   placeholder?: string;
   ariaLabelToggle: string;
+  value: string;
+  onChange: (value: string) => void;
 }) {
   return (
     <PasswordInput
@@ -550,6 +695,8 @@ function SettingPasswordInput({
         </Text>
       }
       placeholder={placeholder}
+      value={value}
+      onChange={(e) => onChange(e.currentTarget.value)}
       radius="md"
       size="md"
       visibilityToggleButtonProps={{ "aria-label": ariaLabelToggle }}

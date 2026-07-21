@@ -98,11 +98,11 @@ export default function ForgotPassword() {
   };
 
   return (
-    <Box w="100vw" h="100vh" style={{ overflow: "hidden" }}>
+    <Box w="100vw" mih="100vh">
       <SimpleGrid
         cols={isMobile ? 1 : 2}
         spacing={0}
-        h="100%"
+        mih="100vh"
         style={{ gridTemplateRows: isMobile ? "auto 1fr" : undefined }}
       >
         <Stack
@@ -131,12 +131,12 @@ export default function ForgotPassword() {
 
         <Stack
           bg="#FFFFFF"
-          h="100%"
+          style={{ minHeight: "100%", overflowY: "auto" }}
           justify={isMobile ? "flex-start" : "center"}
           align="center"
           gap={0}
           px={isMobile ? "md" : 0}
-          py={isMobile ? "lg" : 0}
+          py="xl"
         >
           <Title c="#0F2B5C" fz={isMobile ? 22 : 28} ta="center">
             {step === "email" ? "Forgot password" : "Reset password"}

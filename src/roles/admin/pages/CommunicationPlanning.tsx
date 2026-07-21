@@ -20,6 +20,7 @@ import { DateInput } from "@mantine/dates";
 import { PageHeader } from "@/components";
 import { THEME_BLUE } from "@/constants";
 import { useAppRoutes } from "@/hooks/useAppRoutes";
+import { toLocalDateString, parseLocalDateString } from "@/utils";
 import { listInitiatives } from "@/api/initiatives";
 import {
   listCommunications,
@@ -59,7 +60,8 @@ const AUDIENCE_PRESETS = [
 
 function formatDate(s: string | undefined): string {
   if (!s) return "—";
-  return new Date(s).toLocaleDateString();
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(s.trim());
+  return (dateOnly ? parseLocalDateString(s.trim()) : new Date(s)).toLocaleDateString();
 }
 
 const GANTT_ROW_HEIGHT = 40;
@@ -76,8 +78,14 @@ function CommunicationGanttChart({
   canEdit: boolean;
 }) {
   const { startDate, endDate, scaleDays } = useMemo(() => {
+    const parseSched = (s: string) => {
+      const day = s.trim().slice(0, 10);
+      return /^\d{4}-\d{2}-\d{2}$/.test(day)
+        ? parseLocalDateString(day).getTime()
+        : new Date(s).getTime();
+    };
     const dates = list
-      .map((c) => c.scheduledDate ? new Date(c.scheduledDate).getTime() : null)
+      .map((c) => (c.scheduledDate ? parseSched(c.scheduledDate) : null))
       .filter((t): t is number => t != null);
     const now = Date.now();
     const min = dates.length ? Math.min(...dates) : now - 30 * 24 * 60 * 60 * 1000;
@@ -95,7 +103,10 @@ function CommunicationGanttChart({
 
   const getLeftPercent = (scheduledDate: string | undefined): number => {
     if (!scheduledDate) return 0;
-    const t = new Date(scheduledDate).getTime();
+    const day = scheduledDate.trim().slice(0, 10);
+    const t = /^\d{4}-\d{2}-\d{2}$/.test(day)
+      ? parseLocalDateString(day).getTime()
+      : new Date(scheduledDate).getTime();
     const start = startDate.getTime();
     const end = endDate.getTime();
     return Math.max(0, Math.min(1, (t - start) / (end - start))) * 100;
@@ -115,10 +126,16 @@ function CommunicationGanttChart({
   }, [startDate, endDate]);
 
   const sortedList = useMemo(() => {
+    const schedTime = (s: string) => {
+      const day = s.trim().slice(0, 10);
+      return /^\d{4}-\d{2}-\d{2}$/.test(day)
+        ? parseLocalDateString(day).getTime()
+        : new Date(s).getTime();
+    };
     return [...list].sort((a, b) => {
       if (!a.scheduledDate) return 1;
       if (!b.scheduledDate) return -1;
-      return new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime();
+      return schedTime(a.scheduledDate) - schedTime(b.scheduledDate);
     });
   }, [list]);
 
@@ -293,7 +310,16 @@ export default function CommunicationPlanning() {
     const presetMatch = AUDIENCE_PRESETS.find((p) => p.value !== "custom" && p.value === aud);
     setAudiencePreset(presetMatch ? presetMatch.value : aud.includes("@") ? "custom" : "all");
     setFormAudience(row.audience ?? "");
-    setFormScheduledDate(row.scheduledDate ? new Date(row.scheduledDate) : null);
+    setFormScheduledDate(
+      row.scheduledDate
+        ? /^\d{4}-\d{2}-\d{2}$/.test(row.scheduledDate.trim())
+          ? parseLocalDateString(row.scheduledDate.trim())
+          : (() => {
+              const [y, m, d] = row.scheduledDate.split("T")[0].split("-").map(Number);
+              return new Date(y, m - 1, d);
+            })()
+        : null
+    );
     setFormStatus(row.status ?? "Planned");
     setFormMessage(row.message ?? "");
     openModal();
@@ -303,7 +329,7 @@ export default function CommunicationPlanning() {
     if (!formTitle.trim() || !selectedInitiativeId) return;
     setSaving(true);
     try {
-      const scheduledStr = formScheduledDate ? formScheduledDate.toISOString().slice(0, 10) : undefined;
+      const scheduledStr = formScheduledDate ? toLocalDateString(formScheduledDate) : undefined;
       if (editing) {
         await updateCommunication(editing._id, {
           title: formTitle.trim(),
@@ -506,7 +532,22 @@ export default function CommunicationPlanning() {
             <DateInput
               label="Scheduled date"
               value={formScheduledDate}
-              onChange={(v: Date | string | null) => setFormScheduledDate(v == null ? null : v instanceof Date ? v : new Date(v))}
+              onChange={(v: Date | string | null) => {
+                if (v == null) {
+                  setFormScheduledDate(null);
+                  return;
+                }
+                if (v instanceof Date) {
+                  setFormScheduledDate(v);
+                  return;
+                }
+                const s = String(v).slice(0, 10);
+                if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+                  setFormScheduledDate(parseLocalDateString(s));
+                } else {
+                  setFormScheduledDate(new Date(v));
+                }
+              }}
               placeholder="Pick date"
               popoverProps={{ withinPortal: true, zIndex: 10000 }}
               clearable

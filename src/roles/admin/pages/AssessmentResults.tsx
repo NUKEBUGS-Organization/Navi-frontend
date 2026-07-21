@@ -51,6 +51,7 @@ import {
   type AssessmentTemplate,
 } from "@/api/assessments";
 import { useAuth } from "@/contexts/AuthContext";
+import { toLocalDateString, parseLocalDateString } from "@/utils";
 
 // Category labels used when mapping categoryScores from assessment form
 const DIMENSION_LABELS = [
@@ -121,6 +122,7 @@ export default function AssessmentResults() {
   const appRoutes = useAppRoutes();
   const canCreateAssessment = user?.role === "admin";
   const [createOpen, setCreateOpen] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [managers, setManagers] = useState<{ value: string; label: string }[]>([]);
   const [initiatives, setInitiatives] = useState<{ value: string; label: string }[]>([]);
   const [orgDepartments, setOrgDepartments] = useState<string[]>([]);
@@ -242,7 +244,11 @@ export default function AssessmentResults() {
         {canCreateAssessment && (
         <Modal
           opened={createOpen}
-          onClose={() => setCreateOpen(false)}
+          onClose={() => {
+            setCreateOpen(false);
+            setCreateError(null);
+            createForm.reset();
+          }}
           title="Create Assessment"
           centered
           size="lg"
@@ -250,7 +256,11 @@ export default function AssessmentResults() {
         >
           <form
             onSubmit={createForm.onSubmit(async (values) => {
-              if (!values.initiative?.trim()) return;
+              setCreateError(null);
+              if (!values.initiative?.trim()) {
+                setCreateError("Related initiative is required.");
+                return;
+              }
               try {
                 await createAssessment({
                   name: values.name,
@@ -276,9 +286,16 @@ export default function AssessmentResults() {
                   }),
                 });
                 setCreateOpen(false);
+                setCreateError(null);
                 createForm.reset();
-              } catch {
-                // Error could be shown in UI
+                const list = await listAssessments().catch(() => null);
+                if (Array.isArray(list)) setAssessmentsList(list);
+              } catch (err) {
+                const raw = (err as { message?: string | string[] }).message;
+                const msg = Array.isArray(raw)
+                  ? raw.join(", ")
+                  : (raw ?? "Failed to create assessment. Please try again.");
+                setCreateError(msg);
               }
             })}
           >
@@ -304,15 +321,21 @@ export default function AssessmentResults() {
                   <DateInput
                     label="Due date"
                     placeholder="Pick date"
-                    value={createForm.values.dueDate ? new Date(createForm.values.dueDate) : null}
+                    value={
+                      createForm.values.dueDate
+                        ? /^\d{4}-\d{2}-\d{2}$/.test(createForm.values.dueDate)
+                          ? parseLocalDateString(createForm.values.dueDate)
+                          : new Date(createForm.values.dueDate)
+                        : null
+                    }
                     onChange={(d) => {
                       if (!d) {
                         createForm.setFieldValue("dueDate", "");
                         return;
                       }
                       const dateStr =
-                        d && typeof d === "object" && "toISOString" in d
-                          ? (d as Date).toISOString().slice(0, 10)
+                        d instanceof Date
+                          ? toLocalDateString(d)
                           : typeof d === "string"
                             ? d.slice(0, 10)
                             : "";
@@ -458,8 +481,22 @@ export default function AssessmentResults() {
                 Add step
               </Button>
 
+              {createError && (
+                <Text c="red" size="sm" fw={600}>
+                  {createError}
+                </Text>
+              )}
+
               <Group justify="flex-end" mt="md">
-                <Button variant="default" type="button" onClick={() => setCreateOpen(false)}>
+                <Button
+                  variant="default"
+                  type="button"
+                  onClick={() => {
+                    setCreateOpen(false);
+                    setCreateError(null);
+                    createForm.reset();
+                  }}
+                >
                   Cancel
                 </Button>
                 <Button type="submit">Create Assessment</Button>
@@ -503,7 +540,11 @@ export default function AssessmentResults() {
               {canCreateAssessment && (
                 <Button
                   color={NAVY}
-                  onClick={() => setCreateOpen(true)}
+                  onClick={() => {
+                    createForm.reset();
+                    setCreateError(null);
+                    setCreateOpen(true);
+                  }}
                 >
                   Create Assessment
                 </Button>
@@ -636,7 +677,10 @@ export default function AssessmentResults() {
                           <Table.Td>{initiativeTitle}</Table.Td>
                           <Table.Td>
                             {a.dueDate
-                              ? new Date(a.dueDate).toLocaleDateString()
+                              ? (/^\d{4}-\d{2}-\d{2}$/.test(a.dueDate.trim())
+                                  ? parseLocalDateString(a.dueDate.trim())
+                                  : new Date(a.dueDate)
+                                ).toLocaleDateString()
                               : "—"}
                           </Table.Td>
                           <Table.Td>

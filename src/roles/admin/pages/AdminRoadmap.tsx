@@ -63,6 +63,7 @@ import { listAdoption, type AdoptionDto } from "@/api/adoption";
 import { listOrganizationUsers } from "@/api/auth";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAppRoutes } from "@/hooks/useAppRoutes";
+import { toLocalDateString, parseLocalDateString } from "@/utils";
 
 const PHASES: TaskPhase[] = ["Discovery", "Awareness", "Alignment", "Implementation", "Adoption", "Reinforcement"];
 
@@ -114,7 +115,8 @@ function hasAnyRaciConfigured(option: InitiativeRoadmapOption | undefined): bool
 
 function formatTaskDate(d: string | undefined): string {
   if (!d) return "—";
-  const date = new Date(d);
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(d.trim());
+  const date = dateOnly ? parseLocalDateString(d.trim()) : new Date(d);
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
@@ -1278,7 +1280,11 @@ function CreateTaskModal({
         title: values.title.trim(),
         description: values.description?.trim() || undefined,
         phase: values.phase,
-        dueDate: values.dueDate ? (typeof values.dueDate === "string" ? values.dueDate : (values.dueDate as Date).toISOString().slice(0, 10)) : undefined,
+        dueDate: values.dueDate
+          ? typeof values.dueDate === "string"
+            ? values.dueDate.slice(0, 10)
+            : toLocalDateString(values.dueDate as Date)
+          : undefined,
         assigneeId: values.assigneeId,
         progress: values.progress,
         adoptionMilestoneId: values.adoptionMilestoneId?.trim() || undefined,

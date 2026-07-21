@@ -66,6 +66,14 @@ export function updateMyProfile(payload: { name?: string; photoDataUrl?: string 
   return api.patch<AuthUser>("/auth/me/profile", payload);
 }
 
+export function changePassword(
+  email: string,
+  oldPassword: string,
+  newPassword: string
+): Promise<void> {
+  return api.post<void>("/auth/change-password", { email, oldPassword, newPassword });
+}
+
 export function bulkImportUsers(csvText: string): Promise<BulkImportUsersResult> {
   return api.post<BulkImportUsersResult>("/auth/users/bulk-import", {
     csvText,
