@@ -333,12 +333,16 @@ export default function AssessmentResults() {
                         createForm.setFieldValue("dueDate", "");
                         return;
                       }
-                      const dateStr =
-                        d instanceof Date
-                          ? toLocalDateString(d)
-                          : typeof d === "string"
-                            ? d.slice(0, 10)
-                            : "";
+                      let dateStr = "";
+                      if (typeof d === "string") {
+                        dateStr = d.slice(0, 10);
+                      } else if (
+                        typeof d === "object" &&
+                        d !== null &&
+                        typeof (d as Date).getFullYear === "function"
+                      ) {
+                        dateStr = toLocalDateString(d as Date);
+                      }
                       createForm.setFieldValue("dueDate", dateStr);
                     }}
                     valueFormat="YYYY-MM-DD"
