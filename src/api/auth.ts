@@ -71,7 +71,11 @@ export function changePassword(
   oldPassword: string,
   newPassword: string
 ): Promise<void> {
-  return api.post<void>("/auth/change-password", { email, oldPassword, newPassword });
+  return api.post<void>("/auth/change-password", {
+    email: email.trim().toLowerCase(),
+    oldPassword,
+    newPassword,
+  });
 }
 
 export function bulkImportUsers(csvText: string): Promise<BulkImportUsersResult> {

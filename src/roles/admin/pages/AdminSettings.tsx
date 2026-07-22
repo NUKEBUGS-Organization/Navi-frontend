@@ -197,6 +197,12 @@ export default function AdminSettings() {
       setPasswordError("New password must be at least 12 characters.");
       return false;
     }
+    if (!/(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])/.test(newPassword)) {
+      setPasswordError(
+        "New password must include at least one uppercase letter, one number, and one special character."
+      );
+      return false;
+    }
     setPasswordError(null);
     setPasswordSuccess(null);
     try {
@@ -206,7 +212,9 @@ export default function AdminSettings() {
       setPasswordSuccess("Password updated successfully.");
       return true;
     } catch (e) {
-      setPasswordError(errMessage(e, "Could not change password. Check your current password and try again."));
+      setPasswordError(
+        errMessage(e, "Could not change password. Check your current password and try again.")
+      );
       return false;
     }
   };
@@ -220,6 +228,10 @@ export default function AdminSettings() {
     if (!name) {
       setProfileError("First name or last name is required.");
       return false;
+    }
+    const currentName = (user.name ?? "").trim();
+    if (name === currentName) {
+      return true;
     }
     setProfileError(null);
     setProfileSuccess(null);
@@ -243,8 +255,19 @@ export default function AdminSettings() {
     setProfileError(null);
     setProfileSuccess(null);
     try {
-      await handleSaveProfile();
       const wantsPasswordChange = Boolean(currentPassword.trim() || newPassword.trim());
+      const name = `${firstName} ${lastName}`.trim();
+      const nameChanged = name !== (user?.name ?? "").trim();
+
+      if (!wantsPasswordChange && !nameChanged) {
+        setProfileSuccess("No changes to save.");
+        return;
+      }
+
+      if (nameChanged) {
+        await handleSaveProfile();
+      }
+
       if (wantsPasswordChange) {
         await handleSavePassword();
       }
