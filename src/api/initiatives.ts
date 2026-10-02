@@ -36,6 +36,8 @@ export interface CreateInitiativePayload {
   raciInformedIds?: string[];
   /** When false, milestones stay in the system but no longer affect initiative progress. */
   adoptionTrackingEnabled?: boolean;
+  hseImpact?: boolean;
+  foodSafetyImpact?: boolean;
 }
 
 export function listInitiatives(): Promise<InitiativeListItem[]> {
@@ -65,6 +67,11 @@ export function updateInitiative(
   return api
     .patch<unknown>(`/initiatives/${id}`, payload)
     .then((raw) => mapInitiative(raw as { _id: string }) as InitiativeListItem);
+}
+
+/** Discard an unpublished draft initiative (only DRAFTs without roadmap tasks). */
+export function deleteInitiativeDraft(id: string): Promise<{ deleted: boolean }> {
+  return api.delete<{ deleted: boolean }>(`/initiatives/${id}/draft`);
 }
 
 export type InitiativeParticipationRole = "lead" | "raci" | "assignee";

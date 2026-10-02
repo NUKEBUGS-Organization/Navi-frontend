@@ -28,6 +28,7 @@ import {
   IconCircleCheck,
   IconAlertTriangle,
   IconStarFilled,
+  IconTrendingUp,
 } from "@tabler/icons-react";
 import type { IconProps } from "@tabler/icons-react";
 import { THEME_BLUE } from "@/constants";
@@ -44,6 +45,7 @@ import {
 import { getMyOrganization, type MyOrganization } from "@/api/organizations";
 import { getRiskSummary, type RiskSummary } from "@/api/risks";
 import { getKudosSummary, type KudosSummary } from "@/api/kudos";
+import { listAdoption, type AdoptionDto } from "@/api/adoption";
 
 /** Normalize backend _id/ObjectId to string for consistent lookup. */
 function toId(x: unknown): string {
@@ -122,6 +124,7 @@ export default function AdminDashboard() {
   const [riskSummary, setRiskSummary] = useState<RiskSummary | null>(null);
   const [kudosSummary, setKudosSummary] = useState<KudosSummary | null>(null);
   const [naviSummary, setNaviSummary] = useState<NaviSummary | null>(null);
+  const [adoptions, setAdoptions] = useState<AdoptionDto[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -129,6 +132,7 @@ export default function AdminDashboard() {
     const riskPromise = canViewRiskMonitoring ? getRiskSummary().catch(() => null) : Promise.resolve(null);
     const kudosPromise = isEmployee ? getKudosSummary().catch(() => null) : Promise.resolve(null);
     const naviPromise = canViewNaviOrg ? getNaviSummary().catch(() => null) : Promise.resolve(null);
+    const adoptionPromise = !isEmployee ? listAdoption().catch(() => []) : Promise.resolve([]);
     Promise.all([
       listInitiatives(),
       listAssessments(),
@@ -137,14 +141,16 @@ export default function AdminDashboard() {
       riskPromise,
       kudosPromise,
       naviPromise,
+      adoptionPromise,
     ])
-      .then(([initList, assessList, subList, orgData, riskData, kudosData, naviData]) => {
+      .then(([initList, assessList, subList, orgData, riskData, kudosData, naviData, adoptionData]) => {
         setInitiatives(Array.isArray(initList) ? initList : []);
         setAssessments(Array.isArray(assessList) ? assessList : []);
         setSubmissions(Array.isArray(subList) ? subList : []);
         setOrg(orgData ?? null);
         setRiskSummary(riskData ?? null);
         setKudosSummary(kudosData ?? null);
+        setAdoptions(Array.isArray(adoptionData) ? adoptionData : []);
         // Always keep aggregate when the API returns it (including submissionCount === 0) so the NAVI card stays visible.
         setNaviSummary(
           naviData != null && typeof naviData === "object" && "submissionCount" in naviData
@@ -160,6 +166,7 @@ export default function AdminDashboard() {
         setRiskSummary(null);
         setKudosSummary(null);
         setNaviSummary(null);
+        setAdoptions([]);
       })
       .finally(() => setLoading(false));
   }, [canViewRiskMonitoring, canViewNaviOrg, isEmployee]);
@@ -636,6 +643,52 @@ export default function AdminDashboard() {
           </Grid.Col>
         )}
       </Grid>
+
+      {!isEmployee && adoptions.length > 0 && (
+        <Card withBorder radius="lg" p="lg" mb="xl" shadow="xs">
+          <Group justify="space-between" mb="md">
+            <Group gap="sm">
+              <IconTrendingUp size={22} color={THEME_BLUE} />
+              <Text fw={800} fz="lg">Adoption Tracker</Text>
+            </Group>
+            <Text
+              c="blue.7"
+              fw={700}
+              fz="sm"
+              style={{ cursor: "pointer" }}
+              onClick={() => navigate(appRoutes.ADOPTION)}
+            >
+              View All
+            </Text>
+          </Group>
+          <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
+            {(["Achieved", "In Progress", "At Risk", "Not Started"] as const).map((status) => {
+              const count = adoptions.filter((a) => a.status === status).length;
+              const color =
+                status === "Achieved" ? "teal" :
+                status === "In Progress" ? "blue" :
+                status === "At Risk" ? "red" : "gray";
+              return (
+                <Box key={status} p="sm" style={{ borderRadius: 12, border: "1px solid #e9ecef", background: "#fafafa" }}>
+                  <Text fz="xs" fw={700} c="dimmed" tt="uppercase" mb={4}>{status}</Text>
+                  <Text fz={24} fw={800} c={`${color}.7`}>{count}</Text>
+                  <Text fz="xs" c="dimmed">milestone{count === 1 ? "" : "s"}</Text>
+                </Box>
+              );
+            })}
+          </SimpleGrid>
+          {adoptions.some((a) => a.percentAdopted != null) && (
+            <Box mt="md">
+              <Text fz="xs" fw={700} c="dimmed" tt="uppercase" mb={6}>Average adoption</Text>
+              {(() => {
+                const withPct = adoptions.filter((a) => a.percentAdopted != null);
+                const avg = Math.round(withPct.reduce((s, a) => s + (a.percentAdopted ?? 0), 0) / withPct.length);
+                return <Progress value={avg} color={THEME_BLUE} radius="xl" size="md" label={`${avg}%`} />;
+              })()}
+            </Box>
+          )}
+        </Card>
+      )}
 
       <Grid gutter="xl">
         <Grid.Col span={{ base: 12, lg: 7 }}>

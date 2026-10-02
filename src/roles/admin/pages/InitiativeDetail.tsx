@@ -50,6 +50,9 @@ import {
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { THEME_BLUE, NAVY } from "@/constants";
+import { DateRangeFields } from "@/components/ui/DateRangeFields";
+import { RiskComplianceFields } from "@/components/ui/RiskComplianceFields";
+import { formatDateOnly, parseDateRange } from "@/utils";
 import { getInitiative, updateInitiative, listInitiatives, type InitiativeListItem } from "@/api/initiatives";
 import { listOrganizationUsers } from "@/api/auth";
 import { getMyOrganization, updateMyOrganization } from "@/api/organizations";
@@ -61,7 +64,15 @@ import { listAdoption, type AdoptionDto } from "@/api/adoption";
 interface Initiative {
   id: string;
   title: string;
-  status: "In Progress" | "Active" | "Draft" | "Planning" | "DRAFT" | "WAITING_FOR_APPROVAL" | "PLANNING";
+  status:
+    | "In Progress"
+    | "Active"
+    | "Draft"
+    | "Planning"
+    | "Completed"
+    | "DRAFT"
+    | "WAITING_FOR_APPROVAL"
+    | "PLANNING";
   dateRange: string;
   lead: string;
   departments: string[];
@@ -89,7 +100,22 @@ interface Initiative {
   adoptionTrackingEnabled: boolean;
   /** Executive / change sponsor display name */
   sponsorName?: string;
+  changeType: string;
+  /** RACI user ids (set in the create wizard; now also shown and editable here). */
+  raci: { accountable: string[]; responsible: string[]; consulted: string[]; informed: string[] };
+  hseImpact: boolean;
+  foodSafetyImpact: boolean;
 }
+
+const CHANGE_TYPES = [
+  "Tech/Digital",
+  "ERP system change",
+  "Cultural transformation",
+  "Department restructuring",
+  "Full company restructuring",
+  "Merger/acquisition",
+  "Other",
+];
 
 /** Map audience value to display label and which roles can take the assessment. */
 const AUDIENCE_LABELS: Record<string, string> = {
@@ -198,6 +224,9 @@ function mapApiToInitiative(raw: InitiativeListItem & { description?: string }):
     ACTIVE: "Active",
     DRAFT: "Draft",
     PLANNING: "Planning",
+    // Previously missing, so these loaded as "Draft" and editing silently reset them to DRAFT.
+    COMPLETED: "Completed",
+    WAITING_FOR_APPROVAL: "WAITING_FOR_APPROVAL",
   };
   return {
     id: raw.id,
@@ -222,6 +251,15 @@ function mapApiToInitiative(raw: InitiativeListItem & { description?: string }):
     adoptionTrackingEnabled:
       (raw as { adoptionTrackingEnabled?: boolean }).adoptionTrackingEnabled !== false,
     sponsorName: (raw as { sponsorName?: string }).sponsorName?.trim() || undefined,
+    changeType: raw.changeType ?? "Other",
+    raci: {
+      accountable: (raw.raciAccountableIds ?? []).map(String),
+      responsible: (raw.raciResponsibleIds ?? []).map(String),
+      consulted: (raw.raciConsultedIds ?? []).map(String),
+      informed: (raw.raciInformedIds ?? []).map(String),
+    },
+    hseImpact: raw.hseImpact === true,
+    foodSafetyImpact: raw.foodSafetyImpact === true,
   };
 }
 
@@ -232,6 +270,8 @@ export default function InitiativeDetail() {
   const appRoutes = useAppRoutes();
   const canEditInitiative = user?.role === "admin" || user?.role === "manager";
   const [accessDenied, setAccessDenied] = useState(false);
+  const [editSaveError, setEditSaveError] = useState<string | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
   const [editOpened, { open: openEdit, close: closeEdit }] =
     useDisclosure(false);
   const [initiative, setInitiative] = useState<Initiative | null>(null);
@@ -478,7 +518,7 @@ export default function InitiativeDetail() {
   }, [initiative?.id]);
 
   useEffect(() => {
-    if (!initiative?.id || user?.role !== "employee" || !initiative.adoptionTrackingEnabled) {
+    if (!initiative?.id || !initiative.adoptionTrackingEnabled) {
       setEmployeeAdoptions([]);
       setEmployeeAdoptionsLoading(false);
       return;
@@ -553,6 +593,7 @@ export default function InitiativeDetail() {
       Active: { bg: "#e6fcf5", c: "#099268" },
       Draft: { bg: "#f1f3f5", c: "#868e96" },
       Planning: { bg: "#e7f5ff", c: "#1971c2" },
+      Completed: { bg: "#e6fcf5", c: "#099268" },
     };
     return map[status] || map["ACTIVE"];
   };
@@ -709,17 +750,15 @@ export default function InitiativeDetail() {
           <Tabs.Tab value="overview" fw={700} style={{ color: NAVY }}>
             Overview
           </Tabs.Tab>
+          <Tabs.Tab value="adoption" fw={700}>
+            Adoption
+          </Tabs.Tab>
           <Tabs.Tab value="roadmap" fw={700}>
             Roadmap
           </Tabs.Tab>
           <Tabs.Tab value="assessment" fw={700}>
             Assessment
           </Tabs.Tab>
-          {user?.role === "employee" && initiative.adoptionTrackingEnabled ? (
-            <Tabs.Tab value="adoption" fw={700}>
-              Adoption
-            </Tabs.Tab>
-          ) : null}
           <Tabs.Tab value="activity" fw={700}>
             Activity
           </Tabs.Tab>
@@ -944,9 +983,11 @@ export default function InitiativeDetail() {
                     <Title order={5} fw={700} c={NAVY}>
                       Team
                     </Title>
-                    <Button variant="subtle" size="xs" p={4} title="Add team member">
-                      <IconUsers size={18} color={THEME_BLUE} />
-                    </Button>
+                    {canEditInitiative && (
+                      <Button variant="subtle" size="xs" p={4} title="Edit team & RACI" onClick={openEdit}>
+                        <IconUsers size={18} color={THEME_BLUE} />
+                      </Button>
+                    )}
                   </Group>
                   <Stack gap="sm">
                     {initiative.team.map((member, i) => (
@@ -969,6 +1010,36 @@ export default function InitiativeDetail() {
                         </Box>
                       </Group>
                     ))}
+                    {(() => {
+                      const nameById = new Map(managers.map((m) => [m.id, m.name]));
+                      const rows: [string, string[]][] = [
+                        ["Accountable", initiative.raci.accountable],
+                        ["Responsible", initiative.raci.responsible],
+                        ["Consulted", initiative.raci.consulted],
+                        ["Informed", initiative.raci.informed],
+                      ];
+                      const any = rows.some(([, ids]) => ids.length > 0);
+                      return (
+                        <Box mt={4}>
+                          <Text fz="xs" fw={700} c="dimmed" tt="uppercase" mb={4}>
+                            RACI · {initiative.changeType}
+                          </Text>
+                          {any ? (
+                            rows
+                              .filter(([, ids]) => ids.length > 0)
+                              .map(([label, ids]) => (
+                                <Text key={label} fz="xs">
+                                  <b>{label}:</b> {ids.map((id) => nameById.get(id) ?? "Former member").join(", ")}
+                                </Text>
+                              ))
+                          ) : (
+                            <Text fz="xs" c="dimmed">
+                              No RACI assigned yet.{canEditInitiative ? " Use Edit Initiative to add it." : ""}
+                            </Text>
+                          )}
+                        </Box>
+                      );
+                    })()}
                     <Group gap={6} mt={4}>
                       {initiative.teamAvatars.map((av, i) => (
                         <Avatar
@@ -983,6 +1054,25 @@ export default function InitiativeDetail() {
                       ))}
                     </Group>
                   </Stack>
+                </Paper>
+
+                <Paper withBorder p="lg" radius="md">
+                  <Title order={5} fw={700} mb="sm" c={NAVY}>
+                    Risk & Compliance
+                  </Title>
+                  <Group gap="xs">
+                    <Badge color={initiative.hseImpact ? "orange" : "gray"} variant="light">
+                      HSE impact: {initiative.hseImpact ? "Yes" : "No"}
+                    </Badge>
+                    <Badge color={initiative.foodSafetyImpact ? "orange" : "gray"} variant="light">
+                      Food safety: {initiative.foodSafetyImpact ? "Yes" : "No"}
+                    </Badge>
+                  </Group>
+                  {(initiative.hseImpact || initiative.foodSafetyImpact) && (
+                    <Text fz="xs" c="dimmed" mt="xs">
+                      Include these in the pre-flight checklist on Risk Monitoring before go-live.
+                    </Text>
+                  )}
                 </Paper>
 
                 <Paper withBorder p="lg" radius="md">
@@ -1137,13 +1227,7 @@ export default function InitiativeDetail() {
                           <Text size="xs" c="dimmed" mt={4}>{t.progress ?? 0}%</Text>
                         </Table.Td>
                         <Table.Td>
-                          {t.dueDate
-                            ? new Date(t.dueDate).toLocaleDateString("en-US", {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                              })
-                            : "—"}
+                          {formatDateOnly(t.dueDate)}
                         </Table.Td>
                       </Table.Tr>
                     ))}
@@ -1202,7 +1286,7 @@ export default function InitiativeDetail() {
                           </Badge>
                         </Table.Td>
                         <Table.Td>
-                          {a.dueDate ? new Date(a.dueDate).toLocaleDateString() : "—"}
+                          {formatDateOnly(a.dueDate)}
                         </Table.Td>
                         <Table.Td>
                           {!canTake ? (
@@ -1250,57 +1334,78 @@ export default function InitiativeDetail() {
             )}
           </Card>
         </Tabs.Panel>
-        {user?.role === "employee" && initiative.adoptionTrackingEnabled ? (
-          <Tabs.Panel value="adoption" pt="xl">
-            <Card withBorder radius="lg" p="xl" shadow="xs">
-              <Title order={4} fw={800} mb="md" c={NAVY}>
+        <Tabs.Panel value="adoption" pt="xl">
+          <Card withBorder radius="lg" p="xl" shadow="xs">
+            <Group justify="space-between" align="flex-start" mb="md">
+              <Title order={4} fw={800} c={NAVY}>
                 Adoption tracking
               </Title>
-              <Text fz="sm" c="dimmed" mb="lg">
-                Milestones your organization shares with employees for this initiative.
+              {user?.role === "admin" || user?.role === "manager" ? (
+                <Button
+                  variant="light"
+                  size="xs"
+                  onClick={() => navigate(appRoutes.ADOPTION, { state: { initiativeId: initiative.id } })}
+                >
+                  Manage milestones
+                </Button>
+              ) : null}
+            </Group>
+            {!initiative.adoptionTrackingEnabled ? (
+              <Text size="sm" c="dimmed">
+                Adoption tracking is currently paused for this initiative. Enable it from the Quick Stats panel to resume tracking milestones.
               </Text>
-              {employeeAdoptionsLoading ? (
-                <Text size="sm" c="dimmed">
-                  Loading…
+            ) : (
+              <>
+                <Text fz="sm" c="dimmed" mb="lg">
+                  {user?.role === "employee"
+                    ? "Milestones your organization shares with employees for this initiative."
+                    : "Adoption milestones for this initiative. Roadmap tasks can be linked to these milestones."}
                 </Text>
-              ) : employeeAdoptions.length === 0 ? (
-                <Text size="sm" c="dimmed">
-                  No adoption milestones are visible to employees yet.
-                </Text>
-              ) : (
-                <Table withTableBorder withColumnBorders striped>
-                  <Table.Thead>
-                    <Table.Tr>
-                      <Table.Th fw={700} fz="xs" c="dimmed">
-                        Milestone
-                      </Table.Th>
-                      <Table.Th fw={700} fz="xs" c="dimmed">
-                        Progress
-                      </Table.Th>
-                      <Table.Th fw={700} fz="xs" c="dimmed">
-                        Status
-                      </Table.Th>
-                    </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {employeeAdoptions.map((row) => (
-                      <Table.Tr key={row._id}>
-                        <Table.Td fw={600}>{row.milestone}</Table.Td>
-                        <Table.Td>
-                          <Group gap="xs">
-                            <Progress value={row.percentAdopted ?? 0} size="sm" w={100} radius="xl" />
-                            <Text size="sm">{row.percentAdopted ?? 0}%</Text>
-                          </Group>
-                        </Table.Td>
-                        <Table.Td>{row.status ?? "—"}</Table.Td>
+                {employeeAdoptionsLoading ? (
+                  <Text size="sm" c="dimmed">
+                    Loading…
+                  </Text>
+                ) : employeeAdoptions.length === 0 ? (
+                  <Text size="sm" c="dimmed">
+                    {user?.role === "employee"
+                      ? "No adoption milestones are visible to employees yet."
+                      : "No adoption milestones yet. Use Manage milestones to add the first one."}
+                  </Text>
+                ) : (
+                  <Table withTableBorder withColumnBorders striped>
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th fw={700} fz="xs" c="dimmed">
+                          Milestone
+                        </Table.Th>
+                        <Table.Th fw={700} fz="xs" c="dimmed">
+                          Progress
+                        </Table.Th>
+                        <Table.Th fw={700} fz="xs" c="dimmed">
+                          Status
+                        </Table.Th>
                       </Table.Tr>
-                    ))}
-                  </Table.Tbody>
-                </Table>
-              )}
-            </Card>
-          </Tabs.Panel>
-        ) : null}
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {employeeAdoptions.map((row) => (
+                        <Table.Tr key={row._id}>
+                          <Table.Td fw={600}>{row.milestone}</Table.Td>
+                          <Table.Td>
+                            <Group gap="xs">
+                              <Progress value={row.percentAdopted ?? 0} size="sm" w={100} radius="xl" />
+                              <Text size="sm">{row.percentAdopted ?? 0}%</Text>
+                            </Group>
+                          </Table.Td>
+                          <Table.Td>{row.status ?? "—"}</Table.Td>
+                        </Table.Tr>
+                      ))}
+                    </Table.Tbody>
+                  </Table>
+                )}
+              </>
+            )}
+          </Card>
+        </Tabs.Panel>
         <Tabs.Panel value="activity" pt="xl">
           <Card withBorder radius="lg" p="xl" shadow="xs">
             <Title order={4} fw={800} mb="md" c={NAVY}>
@@ -1494,7 +1599,12 @@ export default function InitiativeDetail() {
 
       <EditInitiativeModal
         opened={editOpened}
-        onClose={closeEdit}
+        onClose={() => {
+          setEditSaveError(null);
+          closeEdit();
+        }}
+        saveError={editSaveError}
+        saving={editSaving}
         initiative={initiative}
         managers={managers}
         orgDepartments={orgDepartments}
@@ -1503,8 +1613,18 @@ export default function InitiativeDetail() {
         leadEnrollmentCounts={leadEnrollmentCounts}
         leadEnrollmentInitiativesByLead={leadEnrollmentInitiativesByLead}
         onSave={(updated) => {
+          setEditSaving(true);
+          setEditSaveError(null);
           const statusToApi = (s: string) =>
-            s === "Active" ? "ACTIVE" : s === "Draft" ? "DRAFT" : s === "Planning" ? "PLANNING" : "DRAFT";
+            s === "Active" || s === "In Progress"
+              ? "ACTIVE"
+              : s === "Planning" || s === "PLANNING"
+                ? "PLANNING"
+                : s === "Completed"
+                  ? "COMPLETED"
+                  : s === "WAITING_FOR_APPROVAL"
+                    ? "WAITING_FOR_APPROVAL"
+                    : "DRAFT";
           updateInitiative(initiative.id, {
             title: updated.title,
             description: updated.description,
@@ -1519,10 +1639,25 @@ export default function InitiativeDetail() {
             faqs: updated.faqs
               .filter((f) => f.question.trim() || f.answer.trim())
               .map((f) => ({ question: f.question.trim(), answer: f.answer.trim() })),
+            changeType: updated.changeType,
+            raciAccountableIds: updated.raci.accountable,
+            raciResponsibleIds: updated.raci.responsible,
+            raciConsultedIds: updated.raci.consulted,
+            raciInformedIds: updated.raci.informed,
+            hseImpact: updated.hseImpact,
+            foodSafetyImpact: updated.foodSafetyImpact,
           })
-            .then((data) => setInitiative(mapApiToInitiative(data)))
-            .catch(() => {})
-            .finally(() => closeEdit());
+            .then((data) => {
+              setInitiative(mapApiToInitiative(data));
+              setEditSaveError(null);
+              closeEdit();
+            })
+            .catch((err: { message?: string | string[] }) => {
+              // Previously swallowed and the modal closed, so failed saves looked successful.
+              const msg = Array.isArray(err?.message) ? err.message.join(", ") : err?.message;
+              setEditSaveError(msg || "Could not save changes. Please try again.");
+            })
+            .finally(() => setEditSaving(false));
         }}
       />
     </AdminLayout>
@@ -1540,7 +1675,11 @@ function EditInitiativeModal({
   currentUserRole,
   leadEnrollmentCounts,
   leadEnrollmentInitiativesByLead,
+  saveError,
+  saving,
 }: {
+  saveError?: string | null;
+  saving?: boolean;
   opened: boolean;
   onClose: () => void;
   initiative: Initiative;
@@ -1552,15 +1691,25 @@ function EditInitiativeModal({
   leadEnrollmentCounts: Record<string, number>;
   leadEnrollmentInitiativesByLead: Record<string, InitiativeListItem[]>;
 }) {
-  const statusOptions = currentUserRole === "admin"
-    ? ["In Progress", "Active", "Draft", "Planning"]
-    : ["In Progress", "Draft", "Planning"];
+  const baseStatusOptions = currentUserRole === "admin"
+    ? ["Active", "Draft", "Planning", "Completed"]
+    : ["Draft", "Planning"];
+  const STATUS_LABELS: Record<string, string> = {
+    WAITING_FOR_APPROVAL: "Pending approval",
+    "In Progress": "Active",
+  };
+  // Always include the current status so the select never shows blank (and never drops it on save).
+  const statusOptions = [...new Set([...baseStatusOptions, initiative.status])].map((v) => ({
+    value: v,
+    label: STATUS_LABELS[v] ?? v,
+  }));
   const [addDeptOpen, { open: openAddDept, close: closeAddDept }] = useDisclosure(false);
   const [newDeptName, setNewDeptName] = useState("");
-  const departmentOptions = orgDepartments;
-  const leadOptions = managers.map((m) => ({
-    value: m.name,
-    label: `${m.name} (${leadEnrollmentCounts[m.name] ?? 0})`,
+  // Mantine Select/MultiSelect throw on duplicate option values, which blanked the page.
+  const departmentOptions = [...new Set(orgDepartments)];
+  const leadOptions = [...new Set(managers.map((m) => m.name))].map((name) => ({
+    value: name,
+    label: `${name} (${leadEnrollmentCounts[name] ?? 0})`,
   }));
   const [title, setTitle] = useState(initiative.title);
   const [description, setDescription] = useState(initiative.description);
@@ -1571,6 +1720,12 @@ function EditInitiativeModal({
   const [progress, setProgress] = useState(initiative.progress);
   const [readiness, setReadiness] = useState(initiative.readiness);
   const [riskLevel, setRiskLevel] = useState(initiative.riskLevel);
+  const [changeType, setChangeType] = useState(initiative.changeType);
+  const [raci, setRaci] = useState(initiative.raci);
+  const [riskFlags, setRiskFlags] = useState({
+    hseImpact: initiative.hseImpact,
+    foodSafetyImpact: initiative.foodSafetyImpact,
+  });
   const [departments, setDepartments] = useState<string[]>(
     initiative.departments?.length ? initiative.departments : initiative.impactedDepts ?? [],
   );
@@ -1591,6 +1746,9 @@ function EditInitiativeModal({
     setProgress(initiative.progress);
     setReadiness(initiative.readiness);
     setRiskLevel(initiative.riskLevel);
+    setChangeType(initiative.changeType);
+    setRaci(initiative.raci);
+    setRiskFlags({ hseImpact: initiative.hseImpact, foodSafetyImpact: initiative.foodSafetyImpact });
     setDepartments(initiative.departments?.length ? initiative.departments : initiative.impactedDepts ?? []);
     setGoals(initiative.goals.map((g) => ({ ...g })));
     setFaqs(
@@ -1626,75 +1784,14 @@ function EditInitiativeModal({
       impactedDepts: departments,
       goals,
       faqs,
+      changeType,
+      raci,
+      ...riskFlags,
     });
   };
 
   const selectedLeadInitiatives = leadEnrollmentInitiativesByLead[lead] ?? [];
 
-  function parseDateRange(range: string): { start: Date; end: Date } | null {
-    const r = (range ?? "").replace(/\s+/g, " ").trim();
-    if (!r || r.toLowerCase() === "—") return null;
-
-    const quarterMatch = r.match(/^Q([1-4])\s*(\d{4})\s*(?:-|–)\s*Q([1-4])\s*(\d{4})$/i);
-    if (quarterMatch) {
-      const q1 = Number(quarterMatch[1]);
-      const y1 = Number(quarterMatch[2]);
-      const q2 = Number(quarterMatch[3]);
-      const y2 = Number(quarterMatch[4]);
-      const startMonth = (q1 - 1) * 3;
-      const endMonth = q2 * 3 - 1;
-      return {
-        start: new Date(y1, startMonth, 1),
-        end: new Date(y2, endMonth + 1, 0),
-      };
-    }
-
-    // Example: "Mar 1 – Sep 30, 2025"
-    const monthMap: Record<string, number> = {
-      jan: 0,
-      january: 0,
-      feb: 1,
-      february: 1,
-      mar: 2,
-      march: 2,
-      apr: 3,
-      april: 3,
-      may: 4,
-      jun: 5,
-      june: 5,
-      jul: 6,
-      july: 6,
-      aug: 7,
-      august: 7,
-      sep: 8,
-      sept: 8,
-      september: 8,
-      oct: 9,
-      october: 9,
-      nov: 10,
-      november: 10,
-      dec: 11,
-      december: 11,
-    };
-
-    const mMatch = r.match(
-      /^([A-Za-z]{3,9})\s+(\d{1,2})(?:,\s*(\d{4}))?\s*(?:-|–)\s*([A-Za-z]{3,9})\s+(\d{1,2}),\s*(\d{4})$/
-    );
-    if (!mMatch) return null;
-
-    const m1 = monthMap[String(mMatch[1]).toLowerCase()] ?? null;
-    const d1 = Number(mMatch[2]);
-    const yEnd = Number(mMatch[6]);
-    const m2 = monthMap[String(mMatch[4]).toLowerCase()] ?? null;
-    const d2 = Number(mMatch[5]);
-    if (m1 == null || m2 == null) return null;
-
-    const y1 = mMatch[3] ? Number(mMatch[3]) : yEnd;
-    return {
-      start: new Date(y1, m1, d1),
-      end: new Date(yEnd, m2, d2),
-    };
-  }
 
   const ganttScale = (() => {
     const parsed = selectedLeadInitiatives
@@ -1865,18 +1962,7 @@ function EditInitiativeModal({
           </Grid.Col>
         </Grid>
 
-        <TextInput
-          label={
-            <Text fw={700} fz="sm" mb={4}>
-              Date Range
-            </Text>
-          }
-          value={dateRange}
-          onChange={(e) => setDateRange(e.currentTarget.value)}
-          placeholder="e.g. Q4 2023 - Q2 2024"
-          radius="md"
-          size="md"
-        />
+        <DateRangeFields value={dateRange} onChange={setDateRange} />
 
         <Grid gutter="md">
           <Grid.Col span={4}>
@@ -2009,6 +2095,66 @@ function EditInitiativeModal({
             </Group>
           </Stack>
         </Modal>
+
+        <Divider label="Change type & RACI" labelPosition="center" />
+        {(() => {
+          const options = managers.map((m) => ({ value: m.id, label: m.name }));
+          const acc = raci.accountable[0] ?? null;
+          const withoutAcc = (ids: string[]) => ids.filter((id) => id !== acc);
+          return (
+            <Stack gap="sm">
+              <Select
+                label="Type of change"
+                data={CHANGE_TYPES}
+                value={changeType}
+                onChange={(v) => setChangeType(v ?? "Other")}
+                allowDeselect={false}
+              />
+              <Select
+                label="Accountable (1)"
+                data={options}
+                value={acc}
+                clearable
+                searchable
+                onChange={(v) =>
+                  setRaci((r) => ({
+                    accountable: v ? [v] : [],
+                    responsible: r.responsible.filter((id) => id !== v),
+                    consulted: r.consulted.filter((id) => id !== v),
+                    informed: r.informed.filter((id) => id !== v),
+                  }))
+                }
+              />
+              <MultiSelect
+                label="Responsible"
+                data={options}
+                value={raci.responsible}
+                searchable
+                clearable
+                onChange={(v) => setRaci((r) => ({ ...r, responsible: withoutAcc(v) }))}
+              />
+              <MultiSelect
+                label="Consulted"
+                data={options}
+                value={raci.consulted}
+                searchable
+                clearable
+                onChange={(v) => setRaci((r) => ({ ...r, consulted: withoutAcc(v) }))}
+              />
+              <MultiSelect
+                label="Informed"
+                data={options}
+                value={raci.informed}
+                searchable
+                clearable
+                onChange={(v) => setRaci((r) => ({ ...r, informed: withoutAcc(v) }))}
+              />
+            </Stack>
+          );
+        })()}
+
+        <Divider label="Risk & compliance" labelPosition="center" />
+        <RiskComplianceFields value={riskFlags} onChange={setRiskFlags} />
 
         <Divider label="FAQs (Knowledge Hub)" labelPosition="center" />
         <Stack gap="sm" mb="md">
@@ -2151,11 +2297,16 @@ function EditInitiativeModal({
 
         <Divider />
 
+        {saveError && (
+          <Text c="red" size="sm" fw={600} role="alert">
+            {saveError}
+          </Text>
+        )}
         <Group justify="flex-end" gap="md">
           <Button variant="default" radius="md" fw={600} onClick={onClose}>
             Cancel
           </Button>
-          <Button bg={THEME_BLUE} radius="md" fw={600} onClick={handleSave}>
+          <Button bg={THEME_BLUE} radius="md" fw={600} onClick={handleSave} loading={saving}>
             Save Changes
           </Button>
         </Group>

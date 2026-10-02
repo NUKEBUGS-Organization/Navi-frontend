@@ -16,6 +16,7 @@ import { useMediaQuery } from "@mantine/hooks";
 import { Link, useNavigate } from "react-router-dom";
 import { AUTH_HERO_BG, AUTH_LOGO_HEIGHT, ROUTES } from "@/constants";
 import { NaviLogo } from "@/components/ui/NaviLogo";
+import { PasswordRequirements, isStrongPassword } from "@/components/ui/PasswordRequirements";
 import { requestPasswordReset, resetPasswordWithOtp } from "@/api/auth";
 
 export default function ForgotPassword() {
@@ -77,8 +78,8 @@ export default function ForgotPassword() {
       setError("Enter the 6-digit code from your email.");
       return;
     }
-    if (newPassword.length < 8) {
-      setError("Password must be at least 8 characters.");
+    if (!isStrongPassword(newPassword)) {
+      setError("Your new password doesn't meet all the requirements listed below it.");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -214,12 +215,13 @@ export default function ForgotPassword() {
                     New password
                   </Text>
                   <PasswordInput
-                    placeholder="At least 8 characters"
+                    placeholder="Create a new password"
                     value={newPassword}
                     onChange={(ev) => setNewPassword(ev.currentTarget.value)}
                     styles={{ input: { height: "49px" } }}
                     autoComplete="new-password"
                   />
+                  <PasswordRequirements value={newPassword} />
                 </Stack>
                 <Stack gap={4}>
                   <Text c="#0F2B5C" size="sm" fw={600}>
@@ -231,6 +233,11 @@ export default function ForgotPassword() {
                     onChange={(ev) => setConfirmPassword(ev.currentTarget.value)}
                     styles={{ input: { height: "49px" } }}
                     autoComplete="new-password"
+                    error={
+                      confirmPassword && confirmPassword !== newPassword
+                        ? "Passwords don't match"
+                        : undefined
+                    }
                   />
                 </Stack>
                 <Button

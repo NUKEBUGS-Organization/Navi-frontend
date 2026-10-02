@@ -281,8 +281,8 @@ export default function StakeholderMapping() {
           <Stack gap="md">
             <TextInput label="Name" value={formName} onChange={(e) => setFormName(e.currentTarget.value)} required placeholder="Stakeholder name" />
             <TextInput label="Role / Title" value={formRole} onChange={(e) => setFormRole(e.currentTarget.value)} placeholder="e.g. VP Engineering" />
-            <Select label="Influence" data={INFLUENCE_OPTIONS} value={formInfluence} onChange={setFormInfluence} />
-            <Select label="Support Level" data={SUPPORT_OPTIONS} value={formSupport} onChange={setFormSupport} />
+            <Select label="Influence" data={INFLUENCE_OPTIONS} value={formInfluence} onChange={setFormInfluence} required withAsterisk allowDeselect={false} />
+            <Select label="Support Level" data={SUPPORT_OPTIONS} value={formSupport} onChange={setFormSupport} required withAsterisk allowDeselect={false} description="How supportive this stakeholder is of the change today" />
             <Textarea label="Notes" value={formNotes} onChange={(e) => setFormNotes(e.currentTarget.value)} placeholder="Notes" minRows={2} />
             <Group justify="flex-end" mt="md">
               <Button variant="default" onClick={() => { closeModal(); resetForm(); }}>Cancel</Button>

@@ -20,7 +20,7 @@ import { DateInput } from "@mantine/dates";
 import { PageHeader } from "@/components";
 import { THEME_BLUE } from "@/constants";
 import { useAppRoutes } from "@/hooks/useAppRoutes";
-import { toLocalDateString, parseLocalDateString } from "@/utils";
+import { toLocalDateString, parseLocalDateString, formatDateOnly, parseDateOnly } from "@/utils";
 import { listInitiatives } from "@/api/initiatives";
 import {
   listCommunications,
@@ -59,9 +59,7 @@ const AUDIENCE_PRESETS = [
 ];
 
 function formatDate(s: string | undefined): string {
-  if (!s) return "—";
-  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(s.trim());
-  return (dateOnly ? parseLocalDateString(s.trim()) : new Date(s)).toLocaleDateString();
+  return formatDateOnly(s);
 }
 
 const GANTT_ROW_HEIGHT = 40;
@@ -311,14 +309,7 @@ export default function CommunicationPlanning() {
     setAudiencePreset(presetMatch ? presetMatch.value : aud.includes("@") ? "custom" : "all");
     setFormAudience(row.audience ?? "");
     setFormScheduledDate(
-      row.scheduledDate
-        ? /^\d{4}-\d{2}-\d{2}$/.test(row.scheduledDate.trim())
-          ? parseLocalDateString(row.scheduledDate.trim())
-          : (() => {
-              const [y, m, d] = row.scheduledDate.split("T")[0].split("-").map(Number);
-              return new Date(y, m - 1, d);
-            })()
-        : null
+      parseDateOnly(row.scheduledDate)
     );
     setFormStatus(row.status ?? "Planned");
     setFormMessage(row.message ?? "");
@@ -532,25 +523,7 @@ export default function CommunicationPlanning() {
             <DateInput
               label="Scheduled date"
               value={formScheduledDate}
-              onChange={(v: Date | string | null) => {
-                if (v == null) {
-                  setFormScheduledDate(null);
-                  return;
-                }
-                if (v instanceof Date) {
-                  setFormScheduledDate(v);
-                  return;
-                }
-                const s = String(v).slice(0, 10);
-                if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-                  setFormScheduledDate(parseLocalDateString(s));
-                } else {
-                  setFormScheduledDate(new Date(v));
-                }
-              }}
-              placeholder="Pick date"
-              popoverProps={{ withinPortal: true, zIndex: 10000 }}
-              clearable
+              onChange={(v) => setFormScheduledDate(parseDateOnly(v))}
             />
             <Select label="Status" data={STATUS_OPTIONS} value={formStatus} onChange={setFormStatus} />
             <Textarea label="Message / Notes" value={formMessage} onChange={(e) => setFormMessage(e.currentTarget.value)} placeholder="Content or notes" minRows={2} />

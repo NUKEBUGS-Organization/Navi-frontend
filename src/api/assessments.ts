@@ -10,6 +10,8 @@ export interface AssessmentStep {
 export interface Assessment {
   _id: string;
   name: string;
+  /** Missing on assessments created before drafts existed (treat as PUBLISHED). */
+  status?: "DRAFT" | "PUBLISHED";
   initiativeId: string;
   organizationId: string;
   ownerId?: string;
@@ -84,6 +86,30 @@ export function createAssessment(
   payload: CreateAssessmentPayload
 ): Promise<Assessment> {
   return api.post<Assessment>("/assessments", payload);
+}
+
+/** Work-in-progress assessment saved to the database (admin only). All fields optional. */
+export type AssessmentDraftPayload = Partial<CreateAssessmentPayload>;
+
+export function listAssessmentDrafts(): Promise<Assessment[]> {
+  return api.get<Assessment[]>("/assessments/drafts");
+}
+
+export function createAssessmentDraft(payload: AssessmentDraftPayload): Promise<Assessment> {
+  return api.post<Assessment>("/assessments/drafts", payload);
+}
+
+export function updateAssessmentDraft(id: string, payload: AssessmentDraftPayload): Promise<Assessment> {
+  return api.patch<Assessment>(`/assessments/drafts/${id}`, payload);
+}
+
+/** Publish a draft with its final values (validated like a normal create). */
+export function publishAssessmentDraft(id: string, payload: CreateAssessmentPayload): Promise<Assessment> {
+  return api.post<Assessment>(`/assessments/drafts/${id}/publish`, payload);
+}
+
+export function deleteAssessmentDraft(id: string): Promise<{ deleted: boolean }> {
+  return api.delete<{ deleted: boolean }>(`/assessments/drafts/${id}`);
 }
 
 export function updateAssessment(

@@ -61,17 +61,13 @@ const EmployeeLogin = () => {
   };
 
   return (
-    <Box
-      w="100vw"
-      h="100vh"
-      style={{
-        overflow: "hidden",
-      }}
-    >
+    // min-height (not a locked 100vh + overflow:hidden) so short laptop screens can scroll
+    // to "Forgot Password?" instead of having to zoom out.
+    <Box w="100%" mih="100vh">
       <SimpleGrid
         cols={isMobile ? 1 : 2}
         spacing={0}
-        h="100%"
+        mih="100vh"
         style={{
           gridTemplateRows: isMobile ? "auto 1fr" : undefined,
         }}
@@ -101,12 +97,11 @@ const EmployeeLogin = () => {
         </Stack>
         <Stack
           bg="#FFFFFF"
-          h="100%"
           justify={isMobile ? "flex-start" : "center"}
           align="center"
           gap={"0"}
-          px={isMobile ? "md" : 0}
-          py={isMobile ? "lg" : 0}
+          px={isMobile ? "md" : "lg"}
+          py={isMobile ? "lg" : "xl"}
         >
           <Title c={"#0F2B5C"} fz={isMobile ? 22 : 28}>
             Welcome back
@@ -116,13 +111,14 @@ const EmployeeLogin = () => {
           </Text>
           <Divider
             w={isMobile ? "100%" : "440px"}
-            mt={"30px"}
+            maw="100%"
+            mt={"20px"}
             c={"#E2E8F0"}
             size={"sm"}
           />
           <form
             onSubmit={handleSubmit}
-            style={{ width: isMobile ? "100%" : "440px", marginTop: 24 }}
+            style={{ width: isMobile ? "100%" : "440px", maxWidth: "100%", marginTop: 20 }}
           >
             <Stack gap="md">
               {error && (
@@ -141,11 +137,17 @@ const EmployeeLogin = () => {
                 />
               </Stack>
               <Stack gap={4}>
-                <Text c={"#0F2B5C"}>Password</Text>
+                <Group justify="space-between" gap="xs">
+                  <Text c={"#0F2B5C"}>Password</Text>
+                  <Anchor component={Link} to={ROUTES.AUTH_FORGOT_PASSWORD} fw={600} size="sm">
+                    Forgot / reset password?
+                  </Anchor>
+                </Group>
                 <PasswordInput
                   placeholder="Please Enter your Password"
                   value={password}
                   onChange={(e) => setPassword(e.currentTarget.value)}
+                  autoComplete="current-password"
                   styles={{ input: { height: "49px" } }}
                 />
               </Stack>
@@ -156,9 +158,6 @@ const EmployeeLogin = () => {
                   checked={remember}
                   onChange={(e) => setRemember(e.currentTarget.checked)}
                 />
-                <Anchor component={Link} to={ROUTES.AUTH_FORGOT_PASSWORD} fw={600}>
-                  Forgot Password?
-                </Anchor>
               </Group>
               <Button
                 type="submit"
@@ -178,9 +177,10 @@ const EmployeeLogin = () => {
             label="OR"
             labelPosition="center"
             w={isMobile ? "100%" : "440px"}
-            mt={"30px"}
+            maw="100%"
+            mt={"24px"}
           />
-          <Text mt={"30px"} ta="center">
+          <Text mt={"16px"} ta="center">
             Don't have an account?{" "}
             <Anchor href={ROUTES.AUTH_SIGNUP}>
               Submit an organization request

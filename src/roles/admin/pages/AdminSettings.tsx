@@ -32,6 +32,7 @@ import {
 } from "@tabler/icons-react";
 import { ROUTES, THEME_BLUE, TEAL_BLUE, setStoredUser } from "@/constants";
 import { REPLAY_ORG_TOUR_EVENT } from "@/components/onboarding";
+import { PasswordRequirements, isStrongPassword } from "@/components/ui/PasswordRequirements";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAppRoutes } from "@/hooks/useAppRoutes";
 import { getMyOrganization } from "@/api/organizations";
@@ -122,6 +123,8 @@ export default function AdminSettings() {
   const [lastName, setLastName] = useState(nameParts.slice(1).join(" ") ?? "");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordUpdating, setPasswordUpdating] = useState(false);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
   const [passwordSaving, setPasswordSaving] = useState(false);
@@ -190,17 +193,19 @@ export default function AdminSettings() {
       return false;
     }
     if (!currentPassword.trim() || !newPassword.trim()) {
-      setPasswordError("Enter both current and new password.");
+      setPasswordError("Enter your current password and a new password.");
       return false;
     }
-    if (newPassword.length < 12) {
-      setPasswordError("New password must be at least 12 characters.");
+    if (!isStrongPassword(newPassword)) {
+      setPasswordError("Your new password doesn't meet all the requirements listed below.");
       return false;
     }
-    if (!/(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9])/.test(newPassword)) {
-      setPasswordError(
-        "New password must include at least one uppercase letter, one number, and one special character."
-      );
+    if (newPassword !== confirmPassword) {
+      setPasswordError("The new password and confirmation don't match.");
+      return false;
+    }
+    if (newPassword.trim() === currentPassword.trim()) {
+      setPasswordError("Your new password must be different from your current password.");
       return false;
     }
     setPasswordError(null);
@@ -209,7 +214,8 @@ export default function AdminSettings() {
       await changePassword(user.email, currentPassword, newPassword);
       setCurrentPassword("");
       setNewPassword("");
-      setPasswordSuccess("Password updated successfully.");
+      setConfirmPassword("");
+      setPasswordSuccess("Password updated. Use your new password next time you sign in.");
       return true;
     } catch (e) {
       setPasswordError(
@@ -255,7 +261,9 @@ export default function AdminSettings() {
     setProfileError(null);
     setProfileSuccess(null);
     try {
-      const wantsPasswordChange = Boolean(currentPassword.trim() || newPassword.trim());
+      const wantsPasswordChange = Boolean(
+        currentPassword.trim() || newPassword.trim() || confirmPassword.trim(),
+      );
       const name = `${firstName} ${lastName}`.trim();
       const nameChanged = name !== (user?.name ?? "").trim();
 
@@ -565,46 +573,80 @@ export default function AdminSettings() {
                     </Title>
                   </Group>
                   <Divider mb="xl" color="#f1f3f5" />
+                  <Grid gutter="xl">
+                    <Grid.Col span={{ base: 12, md: 4 }}>
+                      <SettingPasswordInput
+                        label="CURRENT PASSWORD"
+                        placeholder="Enter current password"
+                        ariaLabelToggle="Show or hide current password"
+                        autoComplete="current-password"
+                        value={currentPassword}
+                        onChange={setCurrentPassword}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 4 }}>
+                      <SettingPasswordInput
+                        label="NEW PASSWORD"
+                        placeholder="Enter new password"
+                        ariaLabelToggle="Show or hide new password"
+                        autoComplete="new-password"
+                        value={newPassword}
+                        onChange={setNewPassword}
+                      />
+                    </Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 4 }}>
+                      <SettingPasswordInput
+                        label="CONFIRM NEW PASSWORD"
+                        placeholder="Re-enter new password"
+                        ariaLabelToggle="Show or hide password confirmation"
+                        autoComplete="new-password"
+                        value={confirmPassword}
+                        onChange={setConfirmPassword}
+                        error={
+                          confirmPassword && confirmPassword !== newPassword
+                            ? "Passwords don't match"
+                            : undefined
+                        }
+                      />
+                    </Grid.Col>
+                  </Grid>
+                  <Group justify="space-between" align="flex-end" mt="lg" wrap="wrap" gap="md">
+                    <PasswordRequirements
+                      value={newPassword}
+                      extra={["Must be different from your current password"]}
+                    />
+                    <Button
+                      variant="light"
+                      color="teal"
+                      radius="md"
+                      fw={700}
+                      loading={passwordUpdating}
+                      disabled={!currentPassword || !newPassword || !confirmPassword}
+                      onClick={async () => {
+                        setPasswordUpdating(true);
+                        setPasswordError(null);
+                        setPasswordSuccess(null);
+                        try {
+                          await handleSavePassword();
+                        } finally {
+                          setPasswordUpdating(false);
+                        }
+                      }}
+                    >
+                      Update password
+                    </Button>
+                  </Group>
                   {(passwordError || passwordSuccess) && (
                     <Text
                       size="sm"
                       fw={600}
                       c={passwordError ? "red" : "teal.7"}
-                      mb="md"
+                      mt="md"
+                      role={passwordError ? "alert" : "status"}
                     >
                       {passwordError ?? passwordSuccess}
                     </Text>
                   )}
-                  <Grid gutter="xl">
-                    <Grid.Col span={6}>
-                      <SettingPasswordInput
-                        label="CURRENT PASSWORD"
-                        placeholder="Enter current password"
-                        ariaLabelToggle="Show or hide current password"
-                        value={currentPassword}
-                        onChange={setCurrentPassword}
-                      />
-                    </Grid.Col>
-                    <Grid.Col span={6}>
-                      <SettingPasswordInput
-                        label="NEW PASSWORD"
-                        placeholder="Enter new password"
-                        ariaLabelToggle="Show or hide new password"
-                        value={newPassword}
-                        onChange={setNewPassword}
-                      />
-                    </Grid.Col>
-                  </Grid>
-                  <Text
-                    fz="xs"
-                    c="dimmed"
-                    fw={500}
-                    mt="lg"
-                    style={{ lineHeight: 1.5 }}
-                  >
-                    Password must be at least 12 characters and include at least
-                    one uppercase letter, one number, and one special character.
-                  </Text>
                 </Box>
               </Card>
 
@@ -638,6 +680,7 @@ export default function AdminSettings() {
                     setLastName(parts.slice(1).join(" ") ?? "");
                     setCurrentPassword("");
                     setNewPassword("");
+                    setConfirmPassword("");
                     setPasswordError(null);
                     setPasswordSuccess(null);
                     setProfileError(null);
@@ -701,14 +744,18 @@ function SettingPasswordInput({
   label,
   placeholder,
   ariaLabelToggle,
+  autoComplete,
   value,
   onChange,
+  error,
 }: {
   label: string;
   placeholder?: string;
   ariaLabelToggle: string;
+  autoComplete: "current-password" | "new-password";
   value: string;
   onChange: (value: string) => void;
+  error?: string;
 }) {
   return (
     <PasswordInput
@@ -720,6 +767,8 @@ function SettingPasswordInput({
       placeholder={placeholder}
       value={value}
       onChange={(e) => onChange(e.currentTarget.value)}
+      autoComplete={autoComplete}
+      error={error}
       radius="md"
       size="md"
       visibilityToggleButtonProps={{ "aria-label": ariaLabelToggle }}

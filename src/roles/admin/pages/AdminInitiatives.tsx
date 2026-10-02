@@ -30,10 +30,12 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAppRoutes } from "@/hooks/useAppRoutes";
+import { formatDraftTime, useServerDraft } from "@/hooks/useServerDraft";
 import {
   listInitiatives,
   createInitiative,
   updateInitiative,
+  deleteInitiativeDraft,
   type InitiativeListItem,
   type CreateInitiativePayload,
 } from "@/api/initiatives";
@@ -45,6 +47,9 @@ import type { ApiError } from "@/api/client";
 import { DateInput } from "@mantine/dates";
 import { useDisclosure } from "@mantine/hooks";
 import { PageHeader } from "@/components";
+import { DateRangeFields } from "@/components/ui/DateRangeFields";
+import { RiskComplianceFields } from "@/components/ui/RiskComplianceFields";
+import { formatDateRange, parseDateOnly, parseDateRange } from "@/utils";
 import { IconSearch } from "@tabler/icons-react";
 import { IconPlus } from "@tabler/icons-react";
 import { IconCalendar } from "@tabler/icons-react";
@@ -174,69 +179,6 @@ function toBackendStatus(status: InitiativeStatus): CreateInitiativePayload["sta
   return status as CreateInitiativePayload["status"];
 }
 
-function parseDateRange(range: string): { start: Date; end: Date } | null {
-  const r = (range ?? "").replace(/\s+/g, " ").trim();
-  if (!r || r.toLowerCase() === "—") return null;
-
-  const quarterMatch = r.match(/^Q([1-4])\s*(\d{4})\s*(?:-|–)\s*Q([1-4])\s*(\d{4})$/i);
-  if (quarterMatch) {
-    const q1 = Number(quarterMatch[1]);
-    const y1 = Number(quarterMatch[2]);
-    const q2 = Number(quarterMatch[3]);
-    const y2 = Number(quarterMatch[4]);
-    const startMonth = (q1 - 1) * 3;
-    const endMonth = q2 * 3 - 1;
-    return {
-      start: new Date(y1, startMonth, 1),
-      end: new Date(y2, endMonth + 1, 0),
-    };
-  }
-
-  const monthMap: Record<string, number> = {
-    jan: 0,
-    january: 0,
-    feb: 1,
-    february: 1,
-    mar: 2,
-    march: 2,
-    apr: 3,
-    april: 3,
-    may: 4,
-    jun: 5,
-    june: 5,
-    jul: 6,
-    july: 6,
-    aug: 7,
-    august: 7,
-    sep: 8,
-    sept: 8,
-    september: 8,
-    oct: 9,
-    october: 9,
-    nov: 10,
-    november: 10,
-    dec: 11,
-    december: 11,
-  };
-
-  const mMatch = r.match(
-    /^([A-Za-z]{3,9})\s+(\d{1,2})(?:,\s*(\d{4}))?\s*(?:-|–)\s*([A-Za-z]{3,9})\s+(\d{1,2}),\s*(\d{4})$/
-  );
-  if (!mMatch) return null;
-
-  const m1 = monthMap[String(mMatch[1]).toLowerCase()] ?? null;
-  const d1 = Number(mMatch[2]);
-  const yEnd = Number(mMatch[6]);
-  const m2 = monthMap[String(mMatch[4]).toLowerCase()] ?? null;
-  const d2 = Number(mMatch[5]);
-  if (m1 == null || m2 == null) return null;
-
-  const y1 = mMatch[3] ? Number(mMatch[3]) : yEnd;
-  return {
-    start: new Date(y1, m1, d1),
-    end: new Date(yEnd, m2, d2),
-  };
-}
 
 function toId(x: unknown): string {
   if (x == null) return "";
@@ -447,36 +389,6 @@ export default function AdminInitiatives() {
       close();
     } catch (err) {
       setError((err as ApiError).message ?? "Failed to update initiative");
-    }
-  };
-
-  const handleAdd = async (data: InitiativeSummary & { description?: string }) => {
-    setError(null);
-    const payload: CreateInitiativePayload = {
-      title: data.title?.trim() || "Untitled Initiative",
-      description: data.description,
-      leadName: data.leadName?.trim() || "Unassigned",
-      sponsorName: data.sponsorName?.trim() || undefined,
-      status: user?.role === "manager" ? "WAITING_FOR_APPROVAL" : toBackendStatus(data.status),
-      dateRange: data.dateRange,
-      departments: data.departments ?? [],
-      progress: data.progress ?? 0,
-      goals: data.goals ?? [],
-      faqs: data.faqs ?? [],
-      readiness: data.readiness,
-      changeType: data.changeType,
-      raciAccountableIds: data.raciAccountableIds ?? [],
-      raciResponsibleIds: data.raciResponsibleIds ?? [],
-      raciConsultedIds: data.raciConsultedIds ?? [],
-      raciInformedIds: data.raciInformedIds ?? [],
-    };
-    try {
-      await createInitiative(payload);
-      await fetchInitiatives();
-    } catch (err) {
-      const msg = (err as ApiError).message ?? "Failed to create initiative";
-      setError(msg);
-      throw err;
     }
   };
 
@@ -738,7 +650,7 @@ export default function AdminInitiatives() {
             setEditIndex(null);
             close();
           }}
-          onAdd={handleAdd}
+          onSaved={fetchInitiatives}
           managers={managers}
           orgDepartments={orgDepartments}
           onAddDepartment={handleAddDepartment}
@@ -792,10 +704,11 @@ function InitiativeModal({
 }: InitiativeModalProps) {
   const [addDeptOpen, { open: openAddDept, close: closeAddDept }] = useDisclosure(false);
   const [newDeptName, setNewDeptName] = useState("");
-  const departmentOptions = orgDepartments;
-  const leadOptions = managers.map((m) => ({
-    value: m.name,
-    label: `${m.name} (${leadEnrollmentCounts[m.name] ?? 0})`,
+  // Mantine Select/MultiSelect throw on duplicate option values, which blanked the page.
+  const departmentOptions = [...new Set(orgDepartments)];
+  const leadOptions = [...new Set(managers.map((m) => m.name))].map((name) => ({
+    value: name,
+    label: `${name} (${leadEnrollmentCounts[name] ?? 0})`,
   }));
 
   type ImpactScope = "departments" | "organization";
@@ -988,9 +901,10 @@ function InitiativeModal({
             data={["ACTIVE", "WAITING_FOR_APPROVAL", "DRAFT", "COMPLETED"]}
             {...form.getInputProps("status")}
           />
-          <TextInput
-            label="Timeline (e.g., Mar 1 – Sep 30, 2025)"
-            {...form.getInputProps("dateRange")}
+          <DateRangeFields
+            size="sm"
+            value={form.values.dateRange}
+            onChange={(v) => form.setFieldValue("dateRange", v)}
           />
           <Select
             label="Impact Scope"
@@ -1220,7 +1134,8 @@ const DEPT_ABBREV: Record<string, string> = {
 interface CreateInitiativeModalProps {
   opened: boolean;
   onClose: () => void;
-  onAdd: (data: InitiativeSummary) => Promise<void>;
+  /** Called after the wizard creates, updates or discards an initiative (refresh the list). */
+  onSaved: () => void | Promise<void>;
   managers: { name: string; id: string }[];
   orgDepartments: string[];
   onAddDepartment: (name: string) => void | Promise<void>;
@@ -1232,7 +1147,7 @@ interface CreateInitiativeModalProps {
 function CreateInitiativeModal({
   opened,
   onClose,
-  onAdd,
+  onSaved,
   managers,
   orgDepartments,
   onAddDepartment,
@@ -1241,10 +1156,11 @@ function CreateInitiativeModal({
   organizationPath,
 }: CreateInitiativeModalProps) {
   const [createSaving, setCreateSaving] = useState(false);
-  const departmentOptions = orgDepartments;
-  const leadOptions = managers.map((m) => ({
-    value: m.name,
-    label: `${m.name} (${leadEnrollmentCounts[m.name] ?? 0})`,
+  // Mantine Select/MultiSelect throw on duplicate option values, which blanked the page.
+  const departmentOptions = [...new Set(orgDepartments)];
+  const leadOptions = [...new Set(managers.map((m) => m.name))].map((name) => ({
+    value: name,
+    label: `${name} (${leadEnrollmentCounts[name] ?? 0})`,
   }));
   const collaboratorOptions = managers.map((m) => ({
     value: m.id,
@@ -1292,6 +1208,7 @@ function CreateInitiativeModal({
   const [faqs, setFaqs] = useState<InitiativeFaq[]>([{ question: "", answer: "" }]);
   type InitialStatus = "Drafting" | "Pending Review" | "Published";
   const [initialStatus, setInitialStatus] = useState<InitialStatus>("Drafting");
+  const [riskFlags, setRiskFlags] = useState({ hseImpact: false, foodSafetyImpact: false });
   const [faqImportError, setFaqImportError] = useState<string | null>(null);
 
   const handleFaqFile = (file: File | null) => {
@@ -1336,6 +1253,128 @@ function CreateInitiativeModal({
   ).size;
   const raciOverLimit = nonAccountableUniqueCount > 10;
 
+  // ---- Drafts are saved to the database as the user types ----
+  // The first save creates a DRAFT initiative; later saves (and "Save as Draft" / "Create
+  // Initiative") update that same record, so work is never lost and never duplicated.
+  const { user: draftUser } = useAuth();
+  const isManager = draftUser?.role === "manager";
+  const [createError, setCreateError] = useState<string | null>(null);
+  const formSnapshot = {
+    title, description, sponsorName, lead, changeType,
+    raciAccountableId, raciResponsibleIds, raciConsultedIds, raciInformedIds,
+    dateRange: formatDateRange(startDate, endDate),
+    departments: impactScope === "organization" ? [] : selectedDepts,
+    goals, faqs: faqsPayload, riskFlags,
+  };
+  type WizardSnapshot = typeof formSnapshot;
+  const toPayload = (
+    v: WizardSnapshot,
+    status: NonNullable<CreateInitiativePayload["status"]>,
+  ): CreateInitiativePayload => ({
+    status,
+    title: v.title.trim() || "Untitled Initiative",
+    description: v.description,
+    sponsorName: v.sponsorName.trim() || undefined,
+    leadName: v.lead.trim() || "Unassigned",
+    changeType: v.changeType,
+    raciAccountableIds: v.raciAccountableId ? [v.raciAccountableId] : [],
+    raciResponsibleIds: v.raciResponsibleIds,
+    raciConsultedIds: v.raciConsultedIds,
+    raciInformedIds: v.raciInformedIds,
+    dateRange: v.dateRange,
+    departments: v.departments,
+    goals: v.goals,
+    faqs: v.faqs,
+    progress: 0,
+    ...v.riskFlags,
+  });
+  const initiativeDraft = useServerDraft(formSnapshot, {
+    enabled: opened && !raciOverLimit,
+    isEmpty: (v) => !v.title.trim() && !v.description.trim() && !v.sponsorName.trim(),
+    save: async (v, id) =>
+      id
+        ? (await updateInitiative(id, toPayload(v, "DRAFT"))).id
+        : (await createInitiative(toPayload(v, "DRAFT"))).id,
+  });
+  const resetDraftTracking = initiativeDraft.reset;
+  useEffect(() => {
+    if (opened) {
+      resetDraftTracking(null);
+      setCreateError(null);
+    }
+  }, [opened, resetDraftTracking]);
+
+  const resetWizard = () => {
+    setTitle("");
+    setDescription("");
+    setSponsorName("");
+    setLead("");
+    setStartDate(new Date());
+    setEndDate(null);
+    setSelectedDepts([]);
+    setImpactScope("departments");
+    setGoals([{ goal: "", metric: "" }]);
+    setFaqs([{ question: "", answer: "" }]);
+    setChangeType("Other");
+    setRaciAccountableId("");
+    setRaciResponsibleIds([]);
+    setRaciConsultedIds([]);
+    setRaciInformedIds([]);
+    setInitialStatus("Drafting");
+    setRiskFlags({ hseImpact: false, foodSafetyImpact: false });
+    setCreateError(null);
+    resetDraftTracking(null);
+  };
+
+  const apiMessage = (err: unknown, fallback: string) => {
+    const raw = (err as ApiError | undefined)?.message as string | string[] | undefined;
+    return (Array.isArray(raw) ? raw.join(", ") : raw) || fallback;
+  };
+
+  /** Save `status` onto the auto-saved draft (or create the initiative if nothing was auto-saved). */
+  const saveInitiative = async (status: NonNullable<CreateInitiativePayload["status"]>) => {
+    if (raciOverLimit || createSaving) return;
+    setCreateSaving(true);
+    setCreateError(null);
+    try {
+      const draftId = await initiativeDraft.settle();
+      const payload = toPayload(formSnapshot, status);
+      if (draftId) await updateInitiative(draftId, payload);
+      else await createInitiative(payload);
+      resetWizard();
+      await onSaved();
+      onClose();
+    } catch (err) {
+      setCreateError(apiMessage(err, "Could not save the initiative. Please try again."));
+    } finally {
+      setCreateSaving(false);
+    }
+  };
+
+  /** Closing keeps the work: flush pending edits to the draft, then start fresh next time. */
+  const closeWizard = async () => {
+    const draftId = await initiativeDraft.flush();
+    onClose();
+    resetWizard();
+    if (draftId) await onSaved();
+  };
+
+  const discardDraft = async () => {
+    if (!window.confirm("Discard this draft initiative? This cannot be undone.")) return;
+    setCreateSaving(true);
+    try {
+      const draftId = await initiativeDraft.settle();
+      if (draftId) await deleteInitiativeDraft(draftId);
+      resetWizard();
+      await onSaved();
+      onClose();
+    } catch (err) {
+      setCreateError(apiMessage(err, "Could not discard the draft."));
+    } finally {
+      setCreateSaving(false);
+    }
+  };
+
   const breadcrumbs = [
     { title: "Initiatives", href: "#" },
     { title: "Create New Initiative", href: "#" },
@@ -1348,7 +1387,7 @@ function CreateInitiativeModal({
   return (
     <Modal
       opened={opened}
-      onClose={onClose}
+      onClose={() => void closeWizard()}
       fullScreen
       radius={0}
       padding={0}
@@ -1564,13 +1603,11 @@ function CreateInitiativeModal({
                             Start Date
                           </Text>
                         }
-                        placeholder="mm/dd/yyyy"
                         radius="md"
                         size="md"
                         value={startDate}
-                        onChange={(v) => setStartDate(v != null ? new Date(v as string | Date) : null)}
-                        popoverProps={{ withinPortal: true, zIndex: 10000 }}
-                        clearable
+                        maxDate={endDate ?? undefined}
+                        onChange={(v) => setStartDate(parseDateOnly(v))}
                       />
                     </Grid.Col>
                     <Grid.Col span={6}>
@@ -1580,13 +1617,11 @@ function CreateInitiativeModal({
                             Target End Date
                           </Text>
                         }
-                        placeholder="mm/dd/yyyy"
                         radius="md"
                         size="md"
                         value={endDate}
-                        onChange={(v) => setEndDate(v != null ? new Date(v as string | Date) : null)}
-                        popoverProps={{ withinPortal: true, zIndex: 10000 }}
-                        clearable
+                        minDate={startDate ?? undefined}
+                        onChange={(v) => setEndDate(parseDateOnly(v))}
                       />
                     </Grid.Col>
                   </Grid>
@@ -1793,6 +1828,17 @@ function CreateInitiativeModal({
                       Non-accountable total (Responsible + Consulted + Informed): {nonAccountableUniqueCount}/10
                     </Text>
                   </Stack>
+                </Box>
+
+                <Box>
+                  <Group gap="xs" mb="md">
+                    <IconInfoCircle size={22} color={THEME_BLUE} stroke={2} />
+                    <Title order={4} fw={800} fz="lg">
+                      Risk & Compliance
+                    </Title>
+                  </Group>
+                  <Divider mb="xl" color="#e9ecef" />
+                  <RiskComplianceFields value={riskFlags} onChange={setRiskFlags} />
                 </Box>
 
                 <Box>
@@ -2149,15 +2195,39 @@ function CreateInitiativeModal({
           style={{ maxWidth: rem(1240), margin: "0 auto", padding: "0 20px" }}
         >
             <Group justify="space-between">
-            <Button
-              variant="transparent"
-              c="gray.6"
-              fw={700}
-              size="md"
-              onClick={onClose}
-            >
-              Cancel
-            </Button>
+            <Group gap="sm">
+              <Button
+                variant="transparent"
+                c="gray.6"
+                fw={700}
+                size="md"
+                onClick={() => void closeWizard()}
+              >
+                Close
+              </Button>
+              {initiativeDraft.draftId && (
+                <Button
+                  variant="subtle"
+                  color="red"
+                  size="xs"
+                  disabled={createSaving}
+                  onClick={() => void discardDraft()}
+                >
+                  Discard draft
+                </Button>
+              )}
+              <Text size="xs" c={createError || initiativeDraft.status === "error" ? "red" : "dimmed"} maw={420}>
+                {createError
+                  ? createError
+                  : initiativeDraft.status === "saving"
+                    ? "Saving draft…"
+                    : initiativeDraft.status === "error"
+                      ? `Draft not saved: ${initiativeDraft.error}`
+                      : initiativeDraft.savedAt
+                        ? `Draft saved at ${formatDraftTime(initiativeDraft.savedAt)}. You'll find it in your Initiatives list.`
+                        : ""}
+              </Text>
+            </Group>
             <Group gap="md">
               <Button
                 variant="filled"
@@ -2169,56 +2239,7 @@ function CreateInitiativeModal({
                 h={45}
                 disabled={raciOverLimit || createSaving}
                 loading={createSaving}
-                onClick={async () => {
-                  if (raciOverLimit || createSaving) return;
-                  const dateRange =
-                    startDate && endDate
-                      ? `${startDate.toLocaleDateString()} – ${endDate.toLocaleDateString()}`
-                      : startDate
-                        ? startDate.toLocaleDateString() + " – —"
-                        : "—";
-                  setCreateSaving(true);
-                  try {
-                    await onAdd({
-                      status: "DRAFT",
-                      title: title || "Untitled Initiative",
-                      description,
-                      sponsorName: sponsorName.trim() || undefined,
-                      leadName: lead,
-                      changeType,
-                      raciAccountableIds: raciAccountableId ? [raciAccountableId] : [],
-                      raciResponsibleIds: raciResponsibleIds,
-                      raciConsultedIds: raciConsultedIds,
-                      raciInformedIds: raciInformedIds,
-                      dateRange,
-                      departments: impactScope === "organization" ? [] : selectedDepts,
-                      goals,
-                      faqs: faqsPayload,
-                      progress: 0,
-                    });
-                    setTitle("");
-                    setDescription("");
-                    setSponsorName("");
-                    setLead("");
-                    setStartDate(null);
-                    setEndDate(null);
-                    setSelectedDepts([]);
-                    setImpactScope("departments");
-                    setGoals([{ goal: "", metric: "" }]);
-                    setFaqs([{ question: "", answer: "" }]);
-                    setChangeType("Other");
-                    setRaciAccountableId("");
-                    setRaciResponsibleIds([]);
-                    setRaciConsultedIds([]);
-                    setRaciInformedIds([]);
-                    setInitialStatus("Drafting");
-                    onClose();
-                  } catch {
-                    /* Parent sets global error; keep modal open */
-                  } finally {
-                    setCreateSaving(false);
-                  }
-                }}
+                onClick={() => void saveInitiative("DRAFT")}
               >
                 Save as Draft
               </Button>
@@ -2232,60 +2253,16 @@ function CreateInitiativeModal({
                 c="white"
                 disabled={!title || !lead || !raciAccountableId || raciOverLimit || createSaving}
                 loading={createSaving}
-                onClick={async () => {
-                  if (!title || !lead || !raciAccountableId || raciOverLimit || createSaving) return;
-                  const dateRange =
-                    startDate && endDate
-                      ? `${startDate.toLocaleDateString()} – ${endDate.toLocaleDateString()}`
-                      : startDate
-                        ? startDate.toLocaleDateString() + " – —"
-                        : "—";
-                  const statusMap: Record<InitialStatus, InitiativeStatus> = {
+                onClick={() => {
+                  if (!title || !lead || !raciAccountableId) return;
+                  const statusMap: Record<InitialStatus, NonNullable<CreateInitiativePayload["status"]>> = {
                     Drafting: "DRAFT",
                     "Pending Review": "WAITING_FOR_APPROVAL",
                     Published: "ACTIVE",
                   };
-                  setCreateSaving(true);
-                  try {
-                    await onAdd({
-                      status: statusMap[initialStatus],
-                      title,
-                      description,
-                      sponsorName: sponsorName.trim() || undefined,
-                      leadName: lead,
-                      changeType,
-                      raciAccountableIds: raciAccountableId ? [raciAccountableId] : [],
-                      raciResponsibleIds: raciResponsibleIds,
-                      raciConsultedIds: raciConsultedIds,
-                      raciInformedIds: raciInformedIds,
-                      dateRange,
-                      departments: impactScope === "organization" ? [] : selectedDepts,
-                      goals,
-                      faqs: faqsPayload,
-                      progress: 0,
-                    });
-                    setTitle("");
-                    setDescription("");
-                    setSponsorName("");
-                    setLead("");
-                    setStartDate(null);
-                    setEndDate(null);
-                    setSelectedDepts([]);
-                    setImpactScope("departments");
-                    setGoals([{ goal: "", metric: "" }]);
-                    setFaqs([{ question: "", answer: "" }]);
-                    setChangeType("Other");
-                    setRaciAccountableId("");
-                    setRaciResponsibleIds([]);
-                    setRaciConsultedIds([]);
-                    setRaciInformedIds([]);
-                    setInitialStatus("Drafting");
-                    onClose();
-                  } catch {
-                    /* Parent sets global error */
-                  } finally {
-                    setCreateSaving(false);
-                  }
+                  const status = statusMap[initialStatus];
+                  // Managers can't publish directly; their initiatives go to an admin for approval.
+                  void saveInitiative(isManager && status !== "DRAFT" ? "WAITING_FOR_APPROVAL" : status);
                 }}
               >
                 Create Initiative

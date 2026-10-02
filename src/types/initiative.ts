@@ -46,4 +46,8 @@ export interface InitiativeSummary {
   raciConsultedIds?: string[];
   raciInformedIds?: string[];
   adoptionTrackingEnabled?: boolean;
+  /** Initiative has Health, Safety & Environment implications. */
+  hseImpact?: boolean;
+  /** Initiative has food safety implications. */
+  foodSafetyImpact?: boolean;
 }

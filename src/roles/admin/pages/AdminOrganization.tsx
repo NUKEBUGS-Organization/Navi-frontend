@@ -907,6 +907,39 @@ function InviteUserModal({
             </Title>
           </Group>
           <Stack gap="xl">
+            <Box p="sm" bg="#f8f9fa" style={{ borderRadius: 8 }}>
+              <Text size="sm" fw={700} mb={4}>
+                How adding staff works
+              </Text>
+              <Text size="xs" c="dimmed" component="ol" m={0} pl="md">
+                <li>Choose the person&apos;s role: this decides what they can see and do.</li>
+                <li>Enter their name and work email (this is their sign-in).</li>
+                <li>
+                  Managers and admins get the temporary password you set. Employees get one generated
+                  automatically.
+                </li>
+                <li>Ask them to sign in and change the password under Settings → Security.</li>
+              </Text>
+              <Text size="xs" c="dimmed" mt={6}>
+                Adding many people? Use <b>Import CSV</b> on the team list instead.
+              </Text>
+            </Box>
+            <Box>
+              <Text fw={700} fz="sm" mb={10}>
+                Step 1 · Role
+              </Text>
+              <Stack gap="md">
+                {roleChoices.map((opt) => (
+                  <RoleOption
+                    key={opt.value}
+                    active={form.values.role === opt.value}
+                    title={opt.label}
+                    desc={opt.desc}
+                    onClick={() => form.setFieldValue("role", opt.value)}
+                  />
+                ))}
+              </Stack>
+            </Box>
             <TextInput
               label={
                 <Text fw={700} fz="sm" mb={8}>
@@ -962,22 +995,6 @@ function InviteUserModal({
                 welcome email can be sent from the team list after CSV import, or share credentials securely.
               </Text>
             )}
-            <Box>
-              <Text fw={700} fz="sm" mb={10}>
-                Role
-              </Text>
-              <Stack gap="md">
-                {roleChoices.map((opt) => (
-                  <RoleOption
-                    key={opt.value}
-                    active={form.values.role === opt.value}
-                    title={opt.label}
-                    desc={opt.desc}
-                    onClick={() => form.setFieldValue("role", opt.value)}
-                  />
-                ))}
-              </Stack>
-            </Box>
             {orgDepartments.length > 0 && (
               <MultiSelect
                 label={

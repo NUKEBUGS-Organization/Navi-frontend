@@ -28,6 +28,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { NAVY, TEAL, PAGE_BG } from "@/constants";
 import { useAppRoutes } from "@/hooks/useAppRoutes";
+import { formatDraftTime, useServerDraft } from "@/hooks/useServerDraft";
 import {
   IconCheck,
   IconAlertTriangle,
@@ -43,6 +44,12 @@ import { listInitiatives } from "@/api/initiatives";
 import { getMyOrganization } from "@/api/organizations";
 import {
   createAssessment,
+  createAssessmentDraft,
+  deleteAssessmentDraft,
+  listAssessmentDrafts,
+  publishAssessmentDraft,
+  updateAssessmentDraft,
+  type CreateAssessmentPayload,
   listAssessments,
   listAssessmentTemplates,
   listSubmissions,
@@ -51,7 +58,7 @@ import {
   type AssessmentTemplate,
 } from "@/api/assessments";
 import { useAuth } from "@/contexts/AuthContext";
-import { toLocalDateString, parseLocalDateString } from "@/utils";
+import { formatDateOnly, parseDateOnly, toDateOnlyString } from "@/utils";
 
 // Category labels used when mapping categoryScores from assessment form
 const DIMENSION_LABELS = [
@@ -115,6 +122,52 @@ function StarRating({ value, max = 5 }: { value: number; max?: number }) {
   );
 }
 
+/** Final payload for create / publish. */
+function toAssessmentPayload(values: AssessmentCreateValues): CreateAssessmentPayload {
+  const naviLetters = new Set(["N", "A", "V", "I"]);
+  return {
+    name: values.name,
+    initiativeId: values.initiative.trim(),
+    ownerId: values.owner || undefined,
+    dueDate: values.dueDate || undefined,
+    audience: values.audience || undefined,
+    audienceDepartments: values.audience === "department" ? (values.audienceDepartments ?? []) : undefined,
+    description: values.description || undefined,
+    steps: (values.steps ?? []).map((s) => {
+      const questions = s.questions ?? [];
+      const pillars = s.pillars;
+      const pillarsOk =
+        Array.isArray(pillars) &&
+        pillars.length === questions.length &&
+        pillars.every((p) => naviLetters.has(String(p || "").trim().toUpperCase()));
+      return {
+        title: s.title ?? "",
+        questions,
+        ...(pillarsOk ? { pillars: pillars!.map((p) => String(p || "").trim().toUpperCase()) } : {}),
+      };
+    }),
+  };
+}
+
+/** Partial payload for saving a draft: whatever has been filled in so far. */
+function toDraftPayload(values: AssessmentCreateValues): Partial<CreateAssessmentPayload> {
+  const full = toAssessmentPayload(values);
+  return {
+    ...full,
+    initiativeId: full.initiativeId || undefined,
+    audienceDepartments: values.audienceDepartments ?? [],
+    audience: values.audience ?? "",
+    description: values.description ?? "",
+    dueDate: values.dueDate ?? "",
+    ownerId: values.owner ?? "",
+  };
+}
+
+const isEmptyAssessment = (v: AssessmentCreateValues) =>
+  !v.name?.trim() &&
+  !v.description?.trim() &&
+  !(v.steps ?? []).some((st) => st.title?.trim() || (st.questions ?? []).some((q) => q?.trim()));
+
 export default function AssessmentResults() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -136,9 +189,14 @@ export default function AssessmentResults() {
     if (!createOpen) return;
     listOrganizationUsers()
       .then((users) => {
+        // Admins + managers can own an assessment. Listing managers only left the required
+        // Owner dropdown empty in orgs without managers, so "Create" silently did nothing.
         const list = users
-          .filter((u) => u.role === "manager")
-          .map((u) => ({ value: u._id, label: u.name }));
+          .filter((u) => u.role === "manager" || u.role === "admin")
+          .map((u) => ({
+            value: String(u._id),
+            label: `${u.name} (${u.role === "admin" ? "Admin" : "Manager"})`,
+          }));
         setManagers(list);
       })
       .catch(() => setManagers([]));
@@ -204,6 +262,84 @@ export default function AssessmentResults() {
     },
   });
 
+  // Drafts are saved to the database as the admin types, so they follow them across devices.
+  const assessmentDraft = useServerDraft(createForm.values, {
+    enabled: createOpen && canCreateAssessment,
+    isEmpty: isEmptyAssessment,
+    save: async (v, id) =>
+      id
+        ? (await updateAssessmentDraft(id, toDraftPayload(v)))._id
+        : (await createAssessmentDraft(toDraftPayload(v)))._id,
+  });
+  const [drafts, setDrafts] = useState<Assessment[]>([]);
+  const [draftActionBusy, setDraftActionBusy] = useState(false);
+
+  const refreshDrafts = () => {
+    if (!canCreateAssessment) return;
+    listAssessmentDrafts()
+      .then((list) => setDrafts(Array.isArray(list) ? list : []))
+      .catch(() => setDrafts([]));
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(refreshDrafts, [canCreateAssessment]);
+
+  const openCreateAssessment = (draft?: Assessment) => {
+    setCreateError(null);
+    if (draft) {
+      // Same key order as initialValues so the baseline matches and opening doesn't re-save.
+      const values: AssessmentCreateValues = {
+        name: draft.name ?? "",
+        owner: draft.ownerId ? String(draft.ownerId) : "",
+        initiative: draft.initiativeId ? String(draft.initiativeId) : "",
+        audience: draft.audience ?? "",
+        audienceDepartments: draft.audienceDepartments ?? [],
+        dueDate: toDateOnlyString(draft.dueDate) ?? "",
+        description: draft.description ?? "",
+        steps: draft.steps?.length
+          ? draft.steps.map((st) => ({
+              title: st.title ?? "",
+              questions: st.questions?.length ? st.questions : [""],
+              pillars: st.pillars?.some((p) => p) ? st.pillars : undefined,
+            }))
+          : [{ title: "", questions: [""], pillars: undefined }],
+      };
+      createForm.setValues(values);
+      assessmentDraft.reset(draft._id, values);
+    } else {
+      createForm.reset();
+      assessmentDraft.reset(null);
+      if (user?._id && (user.role === "admin" || user.role === "manager")) {
+        createForm.setFieldValue("owner", String(user._id));
+      }
+    }
+    setCreateOpen(true);
+  };
+
+  /** Close the dialog, saving any last edits to the draft first. */
+  const closeCreateAssessment = async () => {
+    setCreateOpen(false);
+    setCreateError(null);
+    await assessmentDraft.flush();
+    refreshDrafts();
+  };
+
+  const discardDraft = async (id?: string | null) => {
+    setDraftActionBusy(true);
+    try {
+      const target = id ?? (await assessmentDraft.settle());
+      if (target) await deleteAssessmentDraft(target);
+      if (!id || id === assessmentDraft.draftId) {
+        assessmentDraft.reset(null);
+        createForm.reset();
+      }
+      refreshDrafts();
+    } catch {
+      setCreateError("Could not delete the draft. Please try again.");
+    } finally {
+      setDraftActionBusy(false);
+    }
+  };
+
   type DimensionScore = { label: string; score: number };
   const state = location.state as {
     dimensionScores?: DimensionScore[];
@@ -244,12 +380,8 @@ export default function AssessmentResults() {
         {canCreateAssessment && (
         <Modal
           opened={createOpen}
-          onClose={() => {
-            setCreateOpen(false);
-            setCreateError(null);
-            createForm.reset();
-          }}
-          title="Create Assessment"
+          onClose={() => void closeCreateAssessment()}
+          title={assessmentDraft.draftId ? "Edit Assessment Draft" : "Create Assessment"}
           centered
           size="lg"
           styles={{ body: { maxHeight: "80vh", overflowY: "auto" } }}
@@ -262,32 +394,19 @@ export default function AssessmentResults() {
                 return;
               }
               try {
-                await createAssessment({
-                  name: values.name,
-                  initiativeId: values.initiative.trim(),
-                  ownerId: values.owner || undefined,
-                  dueDate: values.dueDate || undefined,
-                  audience: values.audience || undefined,
-                  audienceDepartments: values.audience === "department" ? (values.audienceDepartments ?? []) : undefined,
-                  description: values.description || undefined,
-                  steps: (values.steps ?? []).map((s) => {
-                    const questions = s.questions ?? [];
-                    const pillars = s.pillars;
-                    const naviLetters = new Set(["N", "A", "V", "I"]);
-                    const pillarsOk =
-                      Array.isArray(pillars) &&
-                      pillars.length === questions.length &&
-                      pillars.every((p) => naviLetters.has(String(p || "").trim().toUpperCase()));
-                    return {
-                      title: s.title ?? "",
-                      questions,
-                      ...(pillarsOk ? { pillars: pillars!.map((p) => String(p || "").trim().toUpperCase()) } : {}),
-                    };
-                  }),
-                });
+                const payload = toAssessmentPayload(values);
+                // Let any in-flight autosave finish so we publish the right draft.
+                const draftId = await assessmentDraft.settle();
+                if (draftId) {
+                  await publishAssessmentDraft(draftId, payload);
+                } else {
+                  await createAssessment(payload);
+                }
                 setCreateOpen(false);
                 setCreateError(null);
+                assessmentDraft.reset(null);
                 createForm.reset();
+                refreshDrafts();
                 const list = await listAssessments().catch(() => null);
                 if (Array.isArray(list)) setAssessmentsList(list);
               } catch (err) {
@@ -297,9 +416,38 @@ export default function AssessmentResults() {
                   : (raw ?? "Failed to create assessment. Please try again.");
                 setCreateError(msg);
               }
+            }, (errors) => {
+              // Validation errors sit at the top of a long, scrolling form; say so next to the button.
+              const missing = Object.values(errors).filter(Boolean).join(" · ");
+              setCreateError(`Please complete the required fields at the top of the form: ${missing}`);
             })}
           >
             <Stack gap="md">
+              {(assessmentDraft.draftId || assessmentDraft.status !== "idle") && (
+                <Group justify="space-between" gap="xs" wrap="nowrap">
+                  <Text size="xs" c={assessmentDraft.status === "error" ? "red" : "dimmed"}>
+                    {assessmentDraft.status === "saving"
+                      ? "Saving draft…"
+                      : assessmentDraft.status === "error"
+                        ? `Draft not saved: ${assessmentDraft.error}`
+                        : assessmentDraft.savedAt
+                          ? `Draft saved to your account at ${formatDraftTime(assessmentDraft.savedAt)}`
+                          : "Editing a saved draft. Changes save automatically."}
+                  </Text>
+                  {assessmentDraft.draftId && (
+                    <Button
+                      size="compact-xs"
+                      variant="subtle"
+                      color="red"
+                      type="button"
+                      loading={draftActionBusy}
+                      onClick={() => void discardDraft()}
+                    >
+                      Discard draft
+                    </Button>
+                  )}
+                </Group>
+              )}
               <TextInput
                 label="Assessment name"
                 placeholder="e.g., Q3 Readiness Survey"
@@ -320,34 +468,8 @@ export default function AssessmentResults() {
                 <Grid.Col span={{ base: 12, sm: 6 }}>
                   <DateInput
                     label="Due date"
-                    placeholder="Pick date"
-                    value={
-                      createForm.values.dueDate
-                        ? /^\d{4}-\d{2}-\d{2}$/.test(createForm.values.dueDate)
-                          ? parseLocalDateString(createForm.values.dueDate)
-                          : new Date(createForm.values.dueDate)
-                        : null
-                    }
-                    onChange={(d) => {
-                      if (!d) {
-                        createForm.setFieldValue("dueDate", "");
-                        return;
-                      }
-                      let dateStr = "";
-                      if (typeof d === "string") {
-                        dateStr = d.slice(0, 10);
-                      } else if (
-                        typeof d === "object" &&
-                        d !== null &&
-                        typeof (d as Date).getFullYear === "function"
-                      ) {
-                        dateStr = toLocalDateString(d as Date);
-                      }
-                      createForm.setFieldValue("dueDate", dateStr);
-                    }}
-                    valueFormat="YYYY-MM-DD"
-                    popoverProps={{ withinPortal: true, zIndex: 10000 }}
-                    clearable
+                    value={parseDateOnly(createForm.values.dueDate)}
+                    onChange={(d) => createForm.setFieldValue("dueDate", toDateOnlyString(d) ?? "")}
                   />
                 </Grid.Col>
               </Grid>
@@ -492,16 +614,27 @@ export default function AssessmentResults() {
               )}
 
               <Group justify="flex-end" mt="md">
+                <Button variant="default" type="button" onClick={() => void closeCreateAssessment()}>
+                  Close
+                </Button>
                 <Button
-                  variant="default"
+                  variant="light"
                   type="button"
-                  onClick={() => {
-                    setCreateOpen(false);
-                    setCreateError(null);
-                    createForm.reset();
+                  loading={assessmentDraft.status === "saving"}
+                  onClick={async () => {
+                    if (isEmptyAssessment(createForm.values)) {
+                      setCreateError("Add a name or some questions before saving a draft.");
+                      return;
+                    }
+                    await assessmentDraft.flush();
+                    if ((await assessmentDraft.settle()) == null) {
+                      setCreateError("Could not save the draft. Please try again.");
+                      return;
+                    }
+                    await closeCreateAssessment();
                   }}
                 >
-                  Cancel
+                  Save draft
                 </Button>
                 <Button type="submit">Create Assessment</Button>
               </Group>
@@ -544,11 +677,7 @@ export default function AssessmentResults() {
               {canCreateAssessment && (
                 <Button
                   color={NAVY}
-                  onClick={() => {
-                    createForm.reset();
-                    setCreateError(null);
-                    setCreateOpen(true);
-                  }}
+                  onClick={() => openCreateAssessment()}
                 >
                   Create Assessment
                 </Button>
@@ -564,6 +693,53 @@ export default function AssessmentResults() {
             </Group>
           </Group>
         </Stack>
+
+        {canCreateAssessment && drafts.length > 0 && (
+          <Paper withBorder radius="md" bg="white" p="md" mb="lg">
+            <Text fw={700} size="sm" c="dimmed" tt="uppercase" lts={0.5} mb="sm">
+              Drafts ({drafts.length})
+            </Text>
+            <Table verticalSpacing="xs">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Name</Table.Th>
+                  <Table.Th>Initiative</Table.Th>
+                  <Table.Th>Last saved</Table.Th>
+                  <Table.Th />
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {drafts.map((d) => (
+                  <Table.Tr key={d._id}>
+                    <Table.Td fw={500}>{d.name?.trim() || "Untitled draft"}</Table.Td>
+                    <Table.Td>{(d.initiativeId && initiativeTitleMap[String(d.initiativeId)]) || "—"}</Table.Td>
+                    <Table.Td>{d.updatedAt ? new Date(d.updatedAt).toLocaleString() : "—"}</Table.Td>
+                    <Table.Td>
+                      <Group gap="xs" justify="flex-end">
+                        <Button size="xs" variant="light" onClick={() => openCreateAssessment(d)}>
+                          Continue editing
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="subtle"
+                          color="red"
+                          loading={draftActionBusy}
+                          onClick={() => {
+                            if (window.confirm(`Delete draft "${d.name?.trim() || "Untitled draft"}"?`)) {
+                              void discardDraft(d._id);
+                            }
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Paper>
+        )}
 
         {/* No assessments for this role: show single empty state */}
         {!assessmentsLoading && assessmentsList.length === 0 && mySubmissions.length === 0 ? (
@@ -680,12 +856,7 @@ export default function AssessmentResults() {
                           <Table.Td fw={500}>{a.name}</Table.Td>
                           <Table.Td>{initiativeTitle}</Table.Td>
                           <Table.Td>
-                            {a.dueDate
-                              ? (/^\d{4}-\d{2}-\d{2}$/.test(a.dueDate.trim())
-                                  ? parseLocalDateString(a.dueDate.trim())
-                                  : new Date(a.dueDate)
-                                ).toLocaleDateString()
-                              : "—"}
+                            {formatDateOnly(a.dueDate)}
                           </Table.Td>
                           <Table.Td>
                             <Button

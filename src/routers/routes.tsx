@@ -1,4 +1,6 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import type { ReactNode } from "react";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ROUTES, getAppDashboardRoute } from "@/constants";
 import { ProtectedRoute } from "@/components/auth";
 import { useAuth } from "@/contexts/AuthContext";
@@ -31,9 +33,16 @@ function DashboardRedirect() {
   return <Navigate to={to} replace />;
 }
 
+/** Remount the boundary on navigation so an error on one page doesn't stick to the next. */
+function RouteErrorBoundary({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation();
+  return <ErrorBoundary key={pathname}>{children}</ErrorBoundary>;
+}
+
 export default function AppRoutes() {
   return (
     <BrowserRouter>
+      <RouteErrorBoundary>
       <Routes>
         <Route path={ROUTES.HOME} element={<Navigate to={ROUTES.AUTH_LOGIN} replace />} />
         <Route path="/dashboard" element={<DashboardRedirect />} />
@@ -264,6 +273,7 @@ export default function AppRoutes() {
         />
         <Route path={ROUTES.EMPLOYEE_APP} element={<Navigate to={ROUTES.EMPLOYEE_DASHBOARD} replace />} />
       </Routes>
+      </RouteErrorBoundary>
     </BrowserRouter>
   );
 }

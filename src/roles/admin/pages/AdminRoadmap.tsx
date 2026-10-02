@@ -63,7 +63,7 @@ import { listAdoption, type AdoptionDto } from "@/api/adoption";
 import { listOrganizationUsers } from "@/api/auth";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAppRoutes } from "@/hooks/useAppRoutes";
-import { toLocalDateString, parseLocalDateString } from "@/utils";
+import { formatDateOnly, toDateOnlyString } from "@/utils";
 
 const PHASES: TaskPhase[] = ["Discovery", "Awareness", "Alignment", "Implementation", "Adoption", "Reinforcement"];
 
@@ -115,9 +115,7 @@ function hasAnyRaciConfigured(option: InitiativeRoadmapOption | undefined): bool
 
 function formatTaskDate(d: string | undefined): string {
   if (!d) return "—";
-  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(d.trim());
-  const date = dateOnly ? parseLocalDateString(d.trim()) : new Date(d);
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return formatDateOnly(d, { month: "short", day: "numeric" });
 }
 
 export default function AdminRoadmap() {
@@ -1280,11 +1278,7 @@ function CreateTaskModal({
         title: values.title.trim(),
         description: values.description?.trim() || undefined,
         phase: values.phase,
-        dueDate: values.dueDate
-          ? typeof values.dueDate === "string"
-            ? values.dueDate.slice(0, 10)
-            : toLocalDateString(values.dueDate as Date)
-          : undefined,
+        dueDate: toDateOnlyString(values.dueDate) ?? undefined,
         assigneeId: values.assigneeId,
         progress: values.progress,
         adoptionMilestoneId: values.adoptionMilestoneId?.trim() || undefined,
@@ -1342,12 +1336,8 @@ function CreateTaskModal({
             />
             <DateInput
               label={<Text fw={700} fz="sm" mb={5}>Due Date</Text>}
-              placeholder="Pick date"
               radius="md"
               size="md"
-              valueFormat="YYYY-MM-DD"
-              popoverProps={{ withinPortal: true, zIndex: 10000 }}
-              clearable
               {...form.getInputProps("dueDate")}
             />
           </SimpleGrid>

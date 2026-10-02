@@ -62,7 +62,9 @@ export default function RiskMonitoring() {
   const { user } = useAuth();
   const appRoutes = useAppRoutes();
   const canEdit = user?.role === "admin" || user?.role === "manager";
-  const [initiatives, setInitiatives] = useState<{ id: string; title: string }[]>([]);
+  const [initiatives, setInitiatives] = useState<
+    { id: string; title: string; hseImpact?: boolean; foodSafetyImpact?: boolean }[]
+  >([]);
   const [selectedInitiativeId, setSelectedInitiativeId] = useState<string | null>(null);
   const [list, setList] = useState<RiskDto[]>([]);
   const [assessmentRisks, setAssessmentRisks] = useState<AssessmentDerivedRisk[]>([]);
@@ -91,7 +93,14 @@ export default function RiskMonitoring() {
   useEffect(() => {
     listInitiatives()
       .then((data) => {
-        setInitiatives(data.map((i) => ({ id: i.id, title: i.title })));
+        setInitiatives(
+          data.map((i) => ({
+            id: i.id,
+            title: i.title,
+            hseImpact: i.hseImpact,
+            foodSafetyImpact: i.foodSafetyImpact,
+          })),
+        );
         if (data.length > 0 && !selectedInitiativeId) setSelectedInitiativeId(data[0].id);
       })
       .catch(() => []);
@@ -225,6 +234,74 @@ export default function RiskMonitoring() {
             </Group>
           }
         />
+
+        {(() => {
+          const sel = initiatives.find((i) => i.id === selectedInitiativeId);
+          if (!sel || (!sel.hseImpact && !sel.foodSafetyImpact)) return null;
+          const groups: { key: string; label: string; checks: string[] }[] = [];
+          if (sel.hseImpact) {
+            groups.push({
+              key: "hse",
+              label: "HSE impact",
+              checks: [
+                "HSE risk assessment completed and signed off",
+                "Safe work procedures / PPE requirements updated",
+                "Affected staff briefed and trained before go-live",
+              ],
+            });
+          }
+          if (sel.foodSafetyImpact) {
+            groups.push({
+              key: "food",
+              label: "Food safety impact",
+              checks: [
+                "HACCP plan / food safety controls reviewed",
+                "Allergen, supplier and storage controls confirmed",
+                "Food safety team consulted and records updated",
+              ],
+            });
+          }
+          return (
+            <Paper withBorder radius="md" p="md" mb="lg" style={{ borderColor: "#ffd8a8" }}>
+              <Group gap="xs" mb="sm">
+                <IconAlertTriangle size={18} color="#e8590c" />
+                <Text fw={700} size="sm" tt="uppercase" lts={0.5} c="orange.8">
+                  Pre-flight compliance checks
+                </Text>
+              </Group>
+              <Text size="xs" c="dimmed" mb="md">
+                This initiative is flagged for the items below. Confirm each before go-live, and log any gaps as risks.
+              </Text>
+              <Grid>
+                {groups.map((g) => (
+                  <Grid.Col key={g.key} span={{ base: 12, md: 6 }}>
+                    <Group justify="space-between" mb={6}>
+                      <Badge color="orange" variant="light">{g.label}</Badge>
+                      {canEdit && (
+                        <Button
+                          size="compact-xs"
+                          variant="subtle"
+                          onClick={() => {
+                            openCreate();
+                            setFormTitle(`${g.label}: `);
+                            setFormSeverity("High");
+                          }}
+                        >
+                          Log as risk
+                        </Button>
+                      )}
+                    </Group>
+                    <Stack gap={4}>
+                      {g.checks.map((c) => (
+                        <Text key={c} size="sm">• {c}</Text>
+                      ))}
+                    </Stack>
+                  </Grid.Col>
+                ))}
+              </Grid>
+            </Paper>
+          );
+        })()}
 
         {sortedAssessmentRisks.length > 0 && (
           <Paper withBorder radius="md" p="md" mb="lg">

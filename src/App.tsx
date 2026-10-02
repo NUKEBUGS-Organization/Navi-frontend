@@ -1,21 +1,14 @@
 import "@mantine/core/styles.css";
-import {
-  MantineProvider,
-  createTheme,
-  localStorageColorSchemeManager,
-} from "@mantine/core";
+import "@mantine/dates/styles.css";
+import { MantineProvider, localStorageColorSchemeManager } from "@mantine/core";
+import { DatesProvider } from "@mantine/dates";
 import { AuthProvider } from "@/contexts/AuthContext";
 import AppRoutes from "./routers/routes";
 import { COLOR_SCHEME_STORAGE_KEY } from "@/constants";
+import { theme } from "./theme";
 
 const colorSchemeManager = localStorageColorSchemeManager({
   key: COLOR_SCHEME_STORAGE_KEY,
-});
-
-const theme = createTheme({
-  primaryColor: "blue",
-  defaultRadius: "md",
-  fontFamily: "Inter, sans-serif",
 });
 
 function App() {
@@ -25,9 +18,11 @@ function App() {
       defaultColorScheme="light"
       colorSchemeManager={colorSchemeManager}
     >
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
+      <DatesProvider settings={{ locale: "en", firstDayOfWeek: 0, weekendDays: [0, 6] }}>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </DatesProvider>
     </MantineProvider>
   );
 }

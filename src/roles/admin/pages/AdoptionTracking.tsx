@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import AdminLayout from "@/roles/admin/layout/AdminLayout";
 import {
   Box,
@@ -18,6 +19,7 @@ import {
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { DateInput } from "@mantine/dates";
+import { formatDateOnly, parseDateOnly, toDateOnlyString } from "@/utils";
 import { PageHeader } from "@/components";
 import { THEME_BLUE } from "@/constants";
 import { useAppRoutes } from "@/hooks/useAppRoutes";
@@ -41,8 +43,7 @@ const STATUS_OPTIONS = [
 ];
 
 function formatDate(s: string | undefined): string {
-  if (!s) return "—";
-  return new Date(s).toLocaleDateString();
+  return formatDateOnly(s);
 }
 
 export default function AdoptionTracking() {
@@ -50,7 +51,11 @@ export default function AdoptionTracking() {
   const appRoutes = useAppRoutes();
   const canEdit = user?.role === "admin" || user?.role === "manager";
   const [initiatives, setInitiatives] = useState<{ id: string; title: string }[]>([]);
-  const [selectedInitiativeId, setSelectedInitiativeId] = useState<string | null>(null);
+  const location = useLocation();
+  // Preselect the initiative when opened from an initiative's Adoption tab.
+  const [selectedInitiativeId, setSelectedInitiativeId] = useState<string | null>(
+    (location.state as { initiativeId?: string } | null)?.initiativeId ?? null,
+  );
   const [list, setList] = useState<AdoptionDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, { open: openModal, close: closeModal }] = useDisclosure(false);
@@ -107,7 +112,7 @@ export default function AdoptionTracking() {
   const openEdit = (row: AdoptionDto) => {
     setEditing(row);
     setFormMilestone(row.milestone);
-    setFormTargetDate(row.targetDate ? new Date(row.targetDate) : null);
+    setFormTargetDate(parseDateOnly(row.targetDate));
     setFormStatus(row.status ?? "Not Started");
     setFormPercent(row.percentAdopted ?? 0);
     setFormTargetPercent(row.targetPercent ?? 100);
@@ -120,7 +125,7 @@ export default function AdoptionTracking() {
     if (!formMilestone.trim() || !selectedInitiativeId) return;
     setSaving(true);
     try {
-      const targetStr = formTargetDate ? formTargetDate.toISOString().slice(0, 10) : undefined;
+      const targetStr = toDateOnlyString(formTargetDate) ?? undefined;
       if (editing) {
         await updateAdoption(editing._id, {
           milestone: formMilestone.trim(),
@@ -278,10 +283,7 @@ export default function AdoptionTracking() {
             <DateInput
               label="Target date"
               value={formTargetDate}
-              onChange={(v: Date | string | null) => setFormTargetDate(v == null ? null : v instanceof Date ? v : new Date(v))}
-              placeholder="Pick date"
-              popoverProps={{ withinPortal: true, zIndex: 10000 }}
-              clearable
+              onChange={(v) => setFormTargetDate(parseDateOnly(v))}
             />
             <Select label="Status" data={STATUS_OPTIONS} value={formStatus} onChange={setFormStatus} />
             <Switch
