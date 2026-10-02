@@ -683,7 +683,13 @@ export default function AdminDashboard() {
               {(() => {
                 const withPct = adoptions.filter((a) => a.percentAdopted != null);
                 const avg = Math.round(withPct.reduce((s, a) => s + (a.percentAdopted ?? 0), 0) / withPct.length);
-                return <Progress value={avg} color={THEME_BLUE} radius="xl" size="md" label={`${avg}%`} />;
+                return (
+                  <Progress.Root radius="xl" size="md">
+                    <Progress.Section value={avg} color={THEME_BLUE}>
+                      <Progress.Label>{`${avg}%`}</Progress.Label>
+                    </Progress.Section>
+                  </Progress.Root>
+                );
               })()}
             </Box>
           )}
