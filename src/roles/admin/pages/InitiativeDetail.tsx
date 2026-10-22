@@ -60,6 +60,8 @@ import { listAssessmentsByInitiative, listSubmissions, type Assessment, type Ass
 import { listTasks, type TaskDto } from "@/api/tasks";
 import { getInitiativeActivity, type ActivityItem } from "@/api/activity";
 import { listAdoption, type AdoptionDto } from "@/api/adoption";
+import { getAiStatus } from "@/api/ai";
+import AiInitiativeInsights from "@/components/ai/AiInitiativeInsights";
 
 interface Initiative {
   id: string;
@@ -295,6 +297,14 @@ export default function InitiativeDetail() {
   const [adoptResumeError, setAdoptResumeError] = useState<string | null>(null);
   const [adoptResumeOpened, { open: openAdoptResume, close: closeAdoptResume }] = useDisclosure(false);
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
+  const [aiEnabled, setAiEnabled] = useState(false);
+
+  useEffect(() => {
+    if (!canEditInitiative) return;
+    getAiStatus()
+      .then((s) => setAiEnabled(!!s.enabled))
+      .catch(() => setAiEnabled(false));
+  }, [canEditInitiative]);
 
   const handleAddDepartment = useCallback(
     async (newDept: string) => {
@@ -762,6 +772,11 @@ export default function InitiativeDetail() {
           <Tabs.Tab value="activity" fw={700}>
             Activity
           </Tabs.Tab>
+          {canEditInitiative && aiEnabled && (
+            <Tabs.Tab value="ai" fw={700} c="violet">
+              ✨ AI Insights
+            </Tabs.Tab>
+          )}
         </Tabs.List>
 
         <Tabs.Panel value="overview" pt="xl">
@@ -1508,6 +1523,11 @@ export default function InitiativeDetail() {
             )}
           </Card>
         </Tabs.Panel>
+        {canEditInitiative && aiEnabled && id && (
+          <Tabs.Panel value="ai" pt="xl">
+            <AiInitiativeInsights initiativeId={id} />
+          </Tabs.Panel>
+        )}
       </Tabs>
 
       <Modal
