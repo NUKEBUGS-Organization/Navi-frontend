@@ -17,6 +17,7 @@ import {
 } from "@/api/kudos";
 import { listOrganizationUsers, type AuthUser } from "@/api/auth";
 import { THEME_BLUE } from "@/constants";
+import AiKudosHelper from "@/components/ai/AiKudosHelper";
 
 function formatDate(d?: string) {
   if (!d) return "—";
@@ -290,9 +291,17 @@ export default function Kudos() {
                         label="Note (optional)"
                         placeholder="What are you recognizing them for?"
                         minRows={2}
+                        autosize
+                        maxLength={500}
                         value={awardNote}
                         onChange={(e) => setAwardNote(e.currentTarget.value)}
                         disabled={!selectedInitiativeId}
+                      />
+                      <AiKudosHelper
+                        initiativeId={selectedInitiativeId}
+                        employeeId={awardEmployeeId}
+                        currentNote={awardNote}
+                        onNote={setAwardNote}
                       />
                       {awardError ? (
                         <Text size="sm" c="red">

@@ -152,6 +152,15 @@ export function draftInitiative(idea: string, departments: string[]): Promise<In
   return api.post<InitiativeDraftDto>("/ai/initiatives/draft", { idea, departments });
 }
 
+export function draftKudos(payload: {
+  initiativeId: string;
+  employeeId: string;
+  roughNote?: string;
+  tone?: "Warm" | "Formal" | "Enthusiastic";
+}): Promise<{ note: string }> {
+  return api.post<{ note: string }>("/ai/kudos/draft", payload);
+}
+
 export function getInitiativeHealth(initiativeId: string): Promise<InitiativeHealthDto> {
   return api.post<InitiativeHealthDto>(`/ai/initiatives/${encodeURIComponent(initiativeId)}/health`, {});
 }
