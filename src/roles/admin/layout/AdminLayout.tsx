@@ -21,6 +21,7 @@ import { ColorSchemeToggle } from "@/components/ui/ColorSchemeToggle";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAppRoutes } from "@/hooks/useAppRoutes";
 import { OrgOnboardingTour } from "@/components/onboarding";
+import NaviAiChat from "@/components/ai/NaviAiChat";
 
 interface NavItem {
   icon: React.FC<IconProps>;
@@ -226,6 +227,7 @@ export default function AdminLayout({
       <AppShell.Main style={{ minHeight: "100vh" }}>
         <OrgOnboardingTour />
         <Box p={{ base: "md", sm: "35px" }}>{children}</Box>
+        <NaviAiChat />
       </AppShell.Main>
     </AppShell>
   );
