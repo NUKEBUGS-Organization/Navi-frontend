@@ -101,6 +101,24 @@ export function askKnowledge(initiativeId: string, question: string): Promise<Kn
   return api.post<KnowledgeAnswerDto>("/ai/knowledge/ask", { initiativeId, question });
 }
 
+export interface StakeholderAnalysisDto {
+  overview: string;
+  concerns: string[];
+  stakeholders: {
+    name: string;
+    quadrant: "Manage closely" | "Keep satisfied" | "Keep informed" | "Monitor";
+    strategy: string;
+    frequency: string;
+    channel: string;
+    keyMessage: string;
+  }[];
+  generatedAt: string;
+}
+
+export function analyzeStakeholders(initiativeId: string): Promise<StakeholderAnalysisDto> {
+  return api.post<StakeholderAnalysisDto>(`/ai/initiatives/${encodeURIComponent(initiativeId)}/stakeholders/analyze`, {});
+}
+
 export function getInitiativeHealth(initiativeId: string): Promise<InitiativeHealthDto> {
   return api.post<InitiativeHealthDto>(`/ai/initiatives/${encodeURIComponent(initiativeId)}/health`, {});
 }

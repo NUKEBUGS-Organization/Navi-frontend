@@ -27,8 +27,10 @@ import {
   type StakeholderDto,
   type CreateStakeholderPayload,
 } from "@/api/stakeholders";
+import { getAiStatus } from "@/api/ai";
+import AiStakeholderAnalysisModal from "@/components/ai/AiStakeholderAnalysisModal";
 import { useAuth } from "@/contexts/AuthContext";
-import { IconPlus, IconPencil, IconTrash } from "@tabler/icons-react";
+import { IconPlus, IconPencil, IconTrash, IconSparkles } from "@tabler/icons-react";
 
 const INFLUENCE_OPTIONS = [
   { value: "High", label: "High" },
@@ -61,6 +63,15 @@ export default function StakeholderMapping() {
   const [deleteConfirm, setDeleteConfirm] = useState<StakeholderDto | null>(null);
   const [raciRollup, setRaciRollup] = useState<RaciRollupRow[]>([]);
   const [raciLoading, setRaciLoading] = useState(true);
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiAnalysisOpen, { open: openAiAnalysis, close: closeAiAnalysis }] = useDisclosure(false);
+
+  useEffect(() => {
+    if (!canEdit) return;
+    getAiStatus()
+      .then((s) => setAiEnabled(!!s.enabled))
+      .catch(() => setAiEnabled(false));
+  }, [canEdit]);
 
   useEffect(() => {
     listRaciRollup()
@@ -179,6 +190,18 @@ export default function StakeholderMapping() {
                 w={220}
                 radius="md"
               />
+              {canEdit && aiEnabled && (
+                <Button
+                  leftSection={<IconSparkles size={18} />}
+                  color="violet"
+                  variant="light"
+                  radius="md"
+                  onClick={openAiAnalysis}
+                  disabled={!selectedInitiativeId || list.length === 0}
+                >
+                  Analyze stakeholders
+                </Button>
+              )}
               {canEdit && (
                 <Button
                   leftSection={<IconPlus size={18} />}
@@ -298,6 +321,10 @@ export default function StakeholderMapping() {
             <Button color="red" onClick={() => deleteConfirm && handleDelete(deleteConfirm)}>Delete</Button>
           </Group>
         </Modal>
+
+        {aiEnabled && selectedInitiativeId && (
+          <AiStakeholderAnalysisModal initiativeId={selectedInitiativeId} opened={aiAnalysisOpen} onClose={closeAiAnalysis} />
+        )}
       </Box>
     </AdminLayout>
   );
