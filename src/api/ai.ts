@@ -177,6 +177,18 @@ export function generateAssessment(payload: {
   return api.post<{ steps: GeneratedAssessmentStepDto[] }>("/ai/assessments/generate", payload);
 }
 
+export interface ChatMessageDto {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export function chatWithNavi(
+  messages: ChatMessageDto[],
+  currentInitiativeId?: string,
+): Promise<{ reply: string; toolsUsed: string[] }> {
+  return api.post<{ reply: string; toolsUsed: string[] }>("/ai/chat", { messages, currentInitiativeId });
+}
+
 export function getInitiativeHealth(initiativeId: string): Promise<InitiativeHealthDto> {
   return api.post<InitiativeHealthDto>(`/ai/initiatives/${encodeURIComponent(initiativeId)}/health`, {});
 }
