@@ -161,6 +161,22 @@ export function draftKudos(payload: {
   return api.post<{ note: string }>("/ai/kudos/draft", payload);
 }
 
+export interface GeneratedAssessmentStepDto {
+  title: string;
+  questions: string[];
+  pillars: ("N" | "A" | "V" | "I")[];
+}
+
+export function generateAssessment(payload: {
+  initiativeId?: string;
+  audience: "Leadership" | "Employees";
+  stage: "Pre-change" | "During change" | "Post-change";
+  questionsPerPillar: number;
+  focus?: string;
+}): Promise<{ steps: GeneratedAssessmentStepDto[] }> {
+  return api.post<{ steps: GeneratedAssessmentStepDto[] }>("/ai/assessments/generate", payload);
+}
+
 export function getInitiativeHealth(initiativeId: string): Promise<InitiativeHealthDto> {
   return api.post<InitiativeHealthDto>(`/ai/initiatives/${encodeURIComponent(initiativeId)}/health`, {});
 }

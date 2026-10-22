@@ -58,6 +58,7 @@ import {
   type AssessmentTemplate,
 } from "@/api/assessments";
 import { useAuth } from "@/contexts/AuthContext";
+import AiAssessmentGenerator from "@/components/ai/AiAssessmentGenerator";
 import { formatDateOnly, parseDateOnly, toDateOnlyString } from "@/utils";
 
 // Category labels used when mapping categoryScores from assessment form
@@ -531,6 +532,16 @@ export default function AssessmentResults() {
               <Text size="xs" c="dimmed">
                 Templates include NAVI pillar tags (N, A, V, I) so submissions can compute organization NAVI scores.
               </Text>
+              <AiAssessmentGenerator
+                initiativeId={createForm.values.initiative}
+                hasQuestions={createForm.values.steps.some((s) => s.questions.some((q) => q.trim()))}
+                onSteps={(steps) =>
+                  createForm.setFieldValue(
+                    "steps",
+                    steps.map((s) => ({ title: s.title, questions: [...s.questions], pillars: [...s.pillars] })),
+                  )
+                }
+              />
 
               <Text size="sm" c="dimmed">
                 Add steps (e.g. sections) and questions for each step. Each step can have multiple questions.
