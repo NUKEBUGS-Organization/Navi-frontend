@@ -135,6 +135,23 @@ export function explainAdoption(initiativeId: string): Promise<AdoptionExplanati
   return api.post<AdoptionExplanationDto>(`/ai/initiatives/${encodeURIComponent(initiativeId)}/adoption/explain`, {});
 }
 
+export interface InitiativeDraftDto {
+  title: string;
+  description: string;
+  changeType: string;
+  goals: { goal: string; metric: string }[];
+  faqs: { question: string; answer: string }[];
+  departments: string[];
+  wholeOrganization: boolean;
+  hseImpact: boolean;
+  foodSafetyImpact: boolean;
+  durationWeeks: number;
+}
+
+export function draftInitiative(idea: string, departments: string[]): Promise<InitiativeDraftDto> {
+  return api.post<InitiativeDraftDto>("/ai/initiatives/draft", { idea, departments });
+}
+
 export function getInitiativeHealth(initiativeId: string): Promise<InitiativeHealthDto> {
   return api.post<InitiativeHealthDto>(`/ai/initiatives/${encodeURIComponent(initiativeId)}/health`, {});
 }

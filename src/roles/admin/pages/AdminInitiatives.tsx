@@ -63,6 +63,8 @@ import { IconBulb } from "@tabler/icons-react";
 import { IconRocket } from "@tabler/icons-react";
 import { IconCheck } from "@tabler/icons-react";
 import { useForm } from "@mantine/form";
+import AiInitiativeIdeaPanel from "@/components/ai/AiInitiativeIdeaPanel";
+import type { InitiativeDraftDto } from "@/api/ai";
 import { THEME_BLUE, TEAL_BLUE } from "@/constants";
 import type { InitiativeFaq, InitiativeSummary, InitiativeStatus } from "@/types";
 
@@ -1331,6 +1333,27 @@ function CreateInitiativeModal({
     return (Array.isArray(raw) ? raw.join(", ") : raw) || fallback;
   };
 
+  /** Fill the wizard from an AI draft. People fields (lead, sponsor, RACI) are left untouched. */
+  const applyAiDraft = (d: InitiativeDraftDto) => {
+    setTitle(d.title);
+    setDescription(d.description);
+    if (CHANGE_TYPES.includes(d.changeType as ChangeType)) setChangeType(d.changeType as ChangeType);
+    setGoals(d.goals.length ? d.goals : [{ goal: "", metric: "" }]);
+    setFaqs(d.faqs.length ? d.faqs : [{ question: "", answer: "" }]);
+    const depts = d.departments.filter((x) => departmentOptions.includes(x));
+    if (d.wholeOrganization || depts.length === 0) {
+      setImpactScope("organization");
+      setSelectedDepts([]);
+    } else {
+      setImpactScope("departments");
+      setSelectedDepts(depts);
+    }
+    setRiskFlags({ hseImpact: d.hseImpact, foodSafetyImpact: d.foodSafetyImpact });
+    const start = startDate ?? new Date();
+    if (!startDate) setStartDate(start);
+    setEndDate(new Date(start.getTime() + d.durationWeeks * 7 * 86_400_000));
+  };
+
   /** Save `status` onto the auto-saved draft (or create the initiative if nothing was auto-saved). */
   const saveInitiative = async (status: NonNullable<CreateInitiativePayload["status"]>) => {
     if (raciOverLimit || createSaving) return;
@@ -1429,6 +1452,11 @@ function CreateInitiativeModal({
           <Grid gutter={50}>
             <Grid.Col span={{ base: 12, md: 7.5 }}>
               <Stack gap={50}>
+                <AiInitiativeIdeaPanel
+                  departments={departmentOptions}
+                  hasContent={!!(title.trim() || description.trim())}
+                  onApply={applyAiDraft}
+                />
                 <Box>
                   <Group gap="xs" mb="md">
                     <IconInfoCircle size={22} color={THEME_BLUE} stroke={2} />
