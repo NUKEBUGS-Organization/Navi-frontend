@@ -38,6 +38,30 @@ export function draftCommunication(payload: DraftCommunicationPayload): Promise<
   return api.post<CommunicationDraftDto>("/ai/communications/draft", payload);
 }
 
+export type RiskSeverity = "Low" | "Medium" | "High" | "Critical";
+
+export interface RiskSuggestionDto {
+  title: string;
+  description: string;
+  severity: RiskSeverity;
+  mitigationNotes: string;
+  rationale: string;
+}
+
+export interface RiskAssessmentDto {
+  severity: RiskSeverity;
+  rationale: string;
+  mitigationNotes: string;
+}
+
+export function suggestRisks(initiativeId: string): Promise<{ risks: RiskSuggestionDto[] }> {
+  return api.post<{ risks: RiskSuggestionDto[] }>(`/ai/initiatives/${encodeURIComponent(initiativeId)}/risks/suggest`, {});
+}
+
+export function assessRisk(payload: { initiativeId: string; title: string; description?: string }): Promise<RiskAssessmentDto> {
+  return api.post<RiskAssessmentDto>("/ai/risks/assess", payload);
+}
+
 export function getInitiativeHealth(initiativeId: string): Promise<InitiativeHealthDto> {
   return api.post<InitiativeHealthDto>(`/ai/initiatives/${encodeURIComponent(initiativeId)}/health`, {});
 }

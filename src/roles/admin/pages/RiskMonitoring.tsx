@@ -34,8 +34,11 @@ import {
   type RiskSummary,
   type AssessmentDerivedRisk,
 } from "@/api/risks";
+import { getAiStatus } from "@/api/ai";
+import AiRiskSuggestionsModal from "@/components/ai/AiRiskSuggestionsModal";
+import AiRiskAssessButton from "@/components/ai/AiRiskAssessButton";
 import { useAuth } from "@/contexts/AuthContext";
-import { IconPlus, IconPencil, IconTrash, IconAlertTriangle } from "@tabler/icons-react";
+import { IconPlus, IconPencil, IconTrash, IconAlertTriangle, IconSparkles } from "@tabler/icons-react";
 
 const SEVERITY_OPTIONS = [
   { value: "Low", label: "Low" },
@@ -79,6 +82,15 @@ export default function RiskMonitoring() {
   const [formMitigation, setFormMitigation] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<RiskDto | null>(null);
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiSuggestOpen, { open: openAiSuggest, close: closeAiSuggest }] = useDisclosure(false);
+
+  useEffect(() => {
+    if (!canEdit) return;
+    getAiStatus()
+      .then((s) => setAiEnabled(!!s.enabled))
+      .catch(() => setAiEnabled(false));
+  }, [canEdit]);
 
   const loadList = () => {
     if (!selectedInitiativeId) {
@@ -220,6 +232,18 @@ export default function RiskMonitoring() {
                 w={220}
                 radius="md"
               />
+              {canEdit && aiEnabled && (
+                <Button
+                  leftSection={<IconSparkles size={18} />}
+                  color="violet"
+                  variant="light"
+                  radius="md"
+                  onClick={openAiSuggest}
+                  disabled={!selectedInitiativeId}
+                >
+                  Suggest risks
+                </Button>
+              )}
               {canEdit && (
                 <Button
                   leftSection={<IconPlus size={18} />}
@@ -443,6 +467,16 @@ export default function RiskMonitoring() {
           <Stack gap="md">
             <TextInput label="Title" value={formTitle} onChange={(e) => setFormTitle(e.currentTarget.value)} required placeholder="Risk title" />
             <Textarea label="Description" value={formDescription} onChange={(e) => setFormDescription(e.currentTarget.value)} placeholder="Describe the risk" minRows={2} />
+            {aiEnabled && selectedInitiativeId && (
+              <AiRiskAssessButton
+                initiativeId={selectedInitiativeId}
+                title={formTitle}
+                description={formDescription}
+                currentMitigation={formMitigation}
+                onSeverity={setFormSeverity}
+                onMitigation={setFormMitigation}
+              />
+            )}
             <Select label="Severity" data={SEVERITY_OPTIONS} value={formSeverity} onChange={setFormSeverity} />
             <Select label="Status" data={STATUS_OPTIONS} value={formStatus} onChange={setFormStatus} />
             <Textarea label="Mitigation notes" value={formMitigation} onChange={(e) => setFormMitigation(e.currentTarget.value)} placeholder="How to mitigate" minRows={2} />
@@ -452,6 +486,18 @@ export default function RiskMonitoring() {
             </Group>
           </Stack>
         </Modal>
+
+        {aiEnabled && selectedInitiativeId && (
+          <AiRiskSuggestionsModal
+            initiativeId={selectedInitiativeId}
+            opened={aiSuggestOpen}
+            onClose={closeAiSuggest}
+            onAdded={() => {
+              loadList();
+              getRiskSummary().then(setSummary).catch(() => {});
+            }}
+          />
+        )}
 
         <Modal opened={!!deleteConfirm} onClose={() => setDeleteConfirm(null)} title="Delete risk?">
           <Text size="sm" mb="md">This cannot be undone.</Text>
