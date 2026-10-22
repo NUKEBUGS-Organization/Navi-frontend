@@ -31,6 +31,8 @@ import {
   type CommunicationDto,
   type CreateCommunicationPayload,
 } from "@/api/communications";
+import { getAiStatus } from "@/api/ai";
+import AiCommunicationDraftPanel from "@/components/ai/AiCommunicationDraftPanel";
 import { useAuth } from "@/contexts/AuthContext";
 import { IconPlus, IconPencil, IconTrash, IconMailForward } from "@tabler/icons-react";
 
@@ -261,6 +263,16 @@ export default function CommunicationPlanning() {
   const [deleteConfirm, setDeleteConfirm] = useState<CommunicationDto | null>(null);
   const [audiencePreset, setAudiencePreset] = useState<string | null>("all");
   const [sendingId, setSendingId] = useState<string | null>(null);
+  const [aiEnabled, setAiEnabled] = useState(false);
+  /** Title/message before the last AI draft, so the user can undo it. */
+  const [preAiSnapshot, setPreAiSnapshot] = useState<{ title: string; message: string } | null>(null);
+
+  useEffect(() => {
+    if (!canEdit) return;
+    getAiStatus()
+      .then((s) => setAiEnabled(!!s.enabled))
+      .catch(() => setAiEnabled(false));
+  }, [canEdit]);
 
   useEffect(() => {
     listInitiatives()
@@ -293,6 +305,7 @@ export default function CommunicationPlanning() {
     setFormScheduledDate(null);
     setFormStatus("Planned");
     setFormMessage("");
+    setPreAiSnapshot(null);
   };
 
   const openCreate = () => {
@@ -313,6 +326,7 @@ export default function CommunicationPlanning() {
     );
     setFormStatus(row.status ?? "Planned");
     setFormMessage(row.message ?? "");
+    setPreAiSnapshot(null);
     openModal();
   };
 
@@ -526,7 +540,33 @@ export default function CommunicationPlanning() {
               onChange={(v) => setFormScheduledDate(parseDateOnly(v))}
             />
             <Select label="Status" data={STATUS_OPTIONS} value={formStatus} onChange={setFormStatus} />
-            <Textarea label="Message / Notes" value={formMessage} onChange={(e) => setFormMessage(e.currentTarget.value)} placeholder="Content or notes" minRows={2} />
+            {aiEnabled && selectedInitiativeId && (
+              <AiCommunicationDraftPanel
+                initiativeId={selectedInitiativeId}
+                type={formType ?? undefined}
+                defaultAudience={
+                  audiencePreset && audiencePreset !== "custom"
+                    ? AUDIENCE_PRESETS.find((p) => p.value === audiencePreset)?.label ?? "All affected employees"
+                    : "All affected employees"
+                }
+                currentMessage={formMessage}
+                onDraft={(draft) => {
+                  setPreAiSnapshot((prev) => prev ?? { title: formTitle, message: formMessage });
+                  if (!formTitle.trim()) setFormTitle(draft.title);
+                  setFormMessage(draft.message);
+                }}
+                onUndo={
+                  preAiSnapshot
+                    ? () => {
+                        setFormTitle(preAiSnapshot.title);
+                        setFormMessage(preAiSnapshot.message);
+                        setPreAiSnapshot(null);
+                      }
+                    : undefined
+                }
+              />
+            )}
+            <Textarea label="Message / Notes" value={formMessage} onChange={(e) => setFormMessage(e.currentTarget.value)} placeholder="Content or notes" autosize minRows={3} maxRows={14} />
             <Group justify="flex-end" mt="md">
               <Button variant="default" onClick={() => { closeModal(); resetForm(); }}>Cancel</Button>
               <Button bg={THEME_BLUE} onClick={handleSave} loading={saving} disabled={!formTitle.trim()}>Save</Button>

@@ -8,3 +8,4 @@ export * from "./stakeholders";
 export * from "./communications";
 export * from "./adoption";
 export * from "./risks";
+export * from "./ai";
