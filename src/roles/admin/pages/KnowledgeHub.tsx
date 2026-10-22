@@ -28,6 +28,8 @@ import { PageHeader } from "@/components";
 import { THEME_BLUE } from "@/constants";
 import { useAuth } from "@/contexts/AuthContext";
 import { getInitiative, listInitiatives, type InitiativeListItem } from "@/api/initiatives";
+import { getAiStatus } from "@/api/ai";
+import AiKnowledgeAsk from "@/components/ai/AiKnowledgeAsk";
 import type { InitiativeFaq } from "@/types";
 import {
   contributeKnowledgeText,
@@ -88,6 +90,13 @@ export default function KnowledgeHub() {
 
   const [initiatives, setInitiatives] = useState<InitiativeListItem[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
+  const [aiEnabled, setAiEnabled] = useState(false);
+
+  useEffect(() => {
+    getAiStatus()
+      .then((s) => setAiEnabled(!!s.enabled))
+      .catch(() => setAiEnabled(false));
+  }, []);
   const [entries, setEntries] = useState<KnowledgeEntry[]>([]);
   const [faqs, setFaqs] = useState<InitiativeFaq[]>([]);
   const [loadingList, setLoadingList] = useState(true);
@@ -304,6 +313,8 @@ export default function KnowledgeHub() {
           />
         </Stack>
       </Card>
+
+      {aiEnabled && selectedId && <AiKnowledgeAsk key={selectedId} initiativeId={selectedId} />}
 
       <Tabs defaultValue="contributions" color="blue">
         <Tabs.List mb="md">

@@ -79,6 +79,28 @@ export function getAssessmentInsights(assessmentId: string): Promise<AssessmentI
   return api.post<AssessmentInsightsDto>(`/ai/assessments/${encodeURIComponent(assessmentId)}/insights`, {});
 }
 
+export interface KnowledgeSourceDto {
+  index: number;
+  entryId: string;
+  kind: "text" | "file";
+  authorName: string;
+  originalFileName?: string;
+  snippet: string;
+  score: number;
+  createdAt?: string;
+}
+
+export interface KnowledgeAnswerDto {
+  answered: boolean;
+  answer: string;
+  citedSources: number[];
+  sources: KnowledgeSourceDto[];
+}
+
+export function askKnowledge(initiativeId: string, question: string): Promise<KnowledgeAnswerDto> {
+  return api.post<KnowledgeAnswerDto>("/ai/knowledge/ask", { initiativeId, question });
+}
+
 export function getInitiativeHealth(initiativeId: string): Promise<InitiativeHealthDto> {
   return api.post<InitiativeHealthDto>(`/ai/initiatives/${encodeURIComponent(initiativeId)}/health`, {});
 }
