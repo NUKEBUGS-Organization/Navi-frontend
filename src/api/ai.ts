@@ -62,6 +62,23 @@ export function assessRisk(payload: { initiativeId: string; title: string; descr
   return api.post<RiskAssessmentDto>("/ai/risks/assess", payload);
 }
 
+export interface AssessmentInsightsDto {
+  respondents: number;
+  averageScore: number | null;
+  averageNaviIndex: number | null;
+  overallReadiness: string;
+  summary: string;
+  strengths: string[];
+  gaps: string[];
+  departmentNotes: string[];
+  recommendedActions: string[];
+  generatedAt: string;
+}
+
+export function getAssessmentInsights(assessmentId: string): Promise<AssessmentInsightsDto> {
+  return api.post<AssessmentInsightsDto>(`/ai/assessments/${encodeURIComponent(assessmentId)}/insights`, {});
+}
+
 export function getInitiativeHealth(initiativeId: string): Promise<InitiativeHealthDto> {
   return api.post<InitiativeHealthDto>(`/ai/initiatives/${encodeURIComponent(initiativeId)}/health`, {});
 }
