@@ -32,6 +32,8 @@ import {
   type AdoptionDto,
   type CreateAdoptionPayload,
 } from "@/api/adoption";
+import { getAiStatus } from "@/api/ai";
+import AiAdoptionExplainCard from "@/components/ai/AiAdoptionExplainCard";
 import { useAuth } from "@/contexts/AuthContext";
 import { IconPlus, IconPencil, IconTrash } from "@tabler/icons-react";
 
@@ -58,6 +60,14 @@ export default function AdoptionTracking() {
   );
   const [list, setList] = useState<AdoptionDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [aiEnabled, setAiEnabled] = useState(false);
+
+  useEffect(() => {
+    if (!canEdit) return;
+    getAiStatus()
+      .then((s) => setAiEnabled(!!s.enabled))
+      .catch(() => setAiEnabled(false));
+  }, [canEdit]);
   const [modalOpen, { open: openModal, close: closeModal }] = useDisclosure(false);
   const [editing, setEditing] = useState<AdoptionDto | null>(null);
   const [formMilestone, setFormMilestone] = useState("");
@@ -216,6 +226,12 @@ export default function AdoptionTracking() {
             </Group>
           }
         />
+
+        {canEdit && aiEnabled && selectedInitiativeId && list.length > 0 && (
+          <Box mb="md">
+            <AiAdoptionExplainCard key={selectedInitiativeId} initiativeId={selectedInitiativeId} />
+          </Box>
+        )}
 
         <Paper withBorder radius="md" p="md">
           {loading ? (

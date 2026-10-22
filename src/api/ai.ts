@@ -119,6 +119,22 @@ export function analyzeStakeholders(initiativeId: string): Promise<StakeholderAn
   return api.post<StakeholderAnalysisDto>(`/ai/initiatives/${encodeURIComponent(initiativeId)}/stakeholders/analyze`, {});
 }
 
+export interface AdoptionExplanationDto {
+  overview: string;
+  milestones: {
+    milestone: string;
+    assessment: "Achieved" | "Ahead" | "On pace" | "Behind" | "Overdue" | "Not started";
+    explanation: string;
+    suggestion: string;
+  }[];
+  interventions: string[];
+  generatedAt: string;
+}
+
+export function explainAdoption(initiativeId: string): Promise<AdoptionExplanationDto> {
+  return api.post<AdoptionExplanationDto>(`/ai/initiatives/${encodeURIComponent(initiativeId)}/adoption/explain`, {});
+}
+
 export function getInitiativeHealth(initiativeId: string): Promise<InitiativeHealthDto> {
   return api.post<InitiativeHealthDto>(`/ai/initiatives/${encodeURIComponent(initiativeId)}/health`, {});
 }
