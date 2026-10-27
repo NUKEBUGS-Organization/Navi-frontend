@@ -23,6 +23,8 @@ export interface Assessment {
   completed?: boolean;
   overallScore?: number;
   riskLevel?: string;
+  /** Set when an admin has archived the assessment. */
+  archivedAt?: string | null;
   naviN?: number;
   naviA?: number;
   naviV?: number;
@@ -106,6 +108,30 @@ export function updateAssessmentDraft(id: string, payload: AssessmentDraftPayloa
 /** Publish a draft with its final values (validated like a normal create). */
 export function publishAssessmentDraft(id: string, payload: CreateAssessmentPayload): Promise<Assessment> {
   return api.post<Assessment>(`/assessments/drafts/${id}/publish`, payload);
+}
+
+/** Every active assessment in the organization regardless of audience (admin only). */
+export function listAllAssessmentsForAdmin(): Promise<Assessment[]> {
+  return api.get<Assessment[]>("/assessments?all=true");
+}
+
+/** Archived assessments (admin only). Archived ones are left out of the other assessment lists. */
+export function listArchivedAssessments(): Promise<Assessment[]> {
+  return api.get<Assessment[]>("/assessments/archived");
+}
+
+/** Soft delete (admin only): retires the assessment and drops its submissions from rollups until restored. */
+export function archiveAssessment(id: string): Promise<Assessment> {
+  return api.post<Assessment>(`/assessments/${id}/archive`, {});
+}
+
+export function restoreAssessment(id: string): Promise<Assessment> {
+  return api.post<Assessment>(`/assessments/${id}/restore`, {});
+}
+
+/** Permanently delete an archived assessment and its submissions (admin only). */
+export function deleteAssessmentPermanently(id: string): Promise<{ deleted: boolean }> {
+  return api.delete<{ deleted: boolean }>(`/assessments/${id}`);
 }
 
 export function deleteAssessmentDraft(id: string): Promise<{ deleted: boolean }> {

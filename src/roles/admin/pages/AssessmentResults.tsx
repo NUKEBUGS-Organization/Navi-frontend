@@ -38,6 +38,8 @@ import {
   IconPlus,
   IconTrash,
   IconCheckbox,
+  IconArchive,
+  IconRestore,
 } from "@tabler/icons-react";
 import { listOrganizationUsers } from "@/api/auth";
 import { listInitiatives } from "@/api/initiatives";
@@ -56,7 +58,13 @@ import {
   type Assessment,
   type AssessmentSubmission,
   type AssessmentTemplate,
+  listAllAssessmentsForAdmin,
+  listArchivedAssessments,
+  archiveAssessment,
+  restoreAssessment,
+  deleteAssessmentPermanently,
 } from "@/api/assessments";
+import { AssessmentActionModal, type RecordAction } from "@/components";
 import { useAuth } from "@/contexts/AuthContext";
 import AiAssessmentGenerator from "@/components/ai/AiAssessmentGenerator";
 import { formatDateOnly, parseDateOnly, toDateOnlyString } from "@/utils";
@@ -283,6 +291,34 @@ export default function AssessmentResults() {
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(refreshDrafts, [canCreateAssessment]);
+
+  // Admin management: every active assessment (any audience) plus the archive.
+  const [allAssessments, setAllAssessments] = useState<Assessment[]>([]);
+  const [archivedAssessments, setArchivedAssessments] = useState<Assessment[]>([]);
+  const [assessmentAction, setAssessmentAction] = useState<RecordAction<Assessment & { title: string }> | null>(null);
+
+  const refreshManaged = () => {
+    if (!canCreateAssessment) return;
+    listAllAssessmentsForAdmin()
+      .then((list) => setAllAssessments(Array.isArray(list) ? list : []))
+      .catch(() => setAllAssessments([]));
+    listArchivedAssessments()
+      .then((list) => setArchivedAssessments(Array.isArray(list) ? list : []))
+      .catch(() => setArchivedAssessments([]));
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(refreshManaged, [canCreateAssessment]);
+
+  const runAssessmentAction = async () => {
+    if (!assessmentAction) return;
+    const { kind, item } = assessmentAction;
+    if (kind === "archive") await archiveAssessment(item._id);
+    else if (kind === "restore") await restoreAssessment(item._id);
+    else await deleteAssessmentPermanently(item._id);
+    refreshManaged();
+    const list = await listAssessments().catch(() => null);
+    if (list) setAssessmentsList(list);
+  };
 
   const openCreateAssessment = (draft?: Assessment) => {
     setCreateError(null);
@@ -753,7 +789,11 @@ export default function AssessmentResults() {
         )}
 
         {/* No assessments for this role: show single empty state */}
-        {!assessmentsLoading && assessmentsList.length === 0 && mySubmissions.length === 0 ? (
+        {!assessmentsLoading &&
+        assessmentsList.length === 0 &&
+        mySubmissions.length === 0 &&
+        allAssessments.length === 0 &&
+        archivedAssessments.length === 0 ? (
           <Paper withBorder radius="md" bg="white" p="xl" mb="lg">
             <Stack align="center" gap="md" py="xl">
               <IconCheckbox size={48} color={NAVY} stroke={1.5} />
@@ -777,6 +817,12 @@ export default function AssessmentResults() {
               <Tabs.Tab value="pending">
                 Pending ({pendingAssessments.length})
               </Tabs.Tab>
+              {canCreateAssessment && (
+                <>
+                  <Tabs.Tab value="all">All assessments ({allAssessments.length})</Tabs.Tab>
+                  <Tabs.Tab value="archived">Archived ({archivedAssessments.length})</Tabs.Tab>
+                </>
+              )}
             </Tabs.List>
             <Tabs.Panel value="submitted" pt="md" px="md" pb="md">
               {assessmentsLoading ? (
@@ -890,9 +936,107 @@ export default function AssessmentResults() {
                 </Table>
               )}
             </Tabs.Panel>
+            {canCreateAssessment && (
+              <>
+                <Tabs.Panel value="all" pt="md" px="md" pb="md">
+                  {allAssessments.length === 0 ? (
+                    <Text size="sm" c="dimmed">No published assessments yet.</Text>
+                  ) : (
+                    <Table striped highlightOnHover>
+                      <Table.Thead>
+                        <Table.Tr>
+                          <Table.Th>Assessment</Table.Th>
+                          <Table.Th>Initiative</Table.Th>
+                          <Table.Th>Due date</Table.Th>
+                          <Table.Th />
+                        </Table.Tr>
+                      </Table.Thead>
+                      <Table.Tbody>
+                        {allAssessments.map((a) => (
+                          <Table.Tr key={a._id}>
+                            <Table.Td fw={500}>{a.name}</Table.Td>
+                            <Table.Td>{initiativeTitleMap[toId(a.initiativeId)] ?? "—"}</Table.Td>
+                            <Table.Td>{formatDateOnly(a.dueDate)}</Table.Td>
+                            <Table.Td>
+                              <Group justify="flex-end">
+                                <Button
+                                  size="xs"
+                                  variant="subtle"
+                                  color="gray"
+                                  leftSection={<IconArchive size={14} />}
+                                  onClick={() => setAssessmentAction({ kind: "archive", item: { ...a, title: a.name } })}
+                                >
+                                  Archive
+                                </Button>
+                              </Group>
+                            </Table.Td>
+                          </Table.Tr>
+                        ))}
+                      </Table.Tbody>
+                    </Table>
+                  )}
+                </Tabs.Panel>
+                <Tabs.Panel value="archived" pt="md" px="md" pb="md">
+                  <Text size="xs" c="dimmed" mb="sm">
+                    Archived assessments can't be taken, and their submissions don't count toward readiness or NAVI
+                    scores. Restore one to bring it back, or delete it permanently.
+                  </Text>
+                  {archivedAssessments.length === 0 ? (
+                    <Text size="sm" c="dimmed">No archived assessments.</Text>
+                  ) : (
+                    <Table striped highlightOnHover>
+                      <Table.Thead>
+                        <Table.Tr>
+                          <Table.Th>Assessment</Table.Th>
+                          <Table.Th>Initiative</Table.Th>
+                          <Table.Th>Archived</Table.Th>
+                          <Table.Th />
+                        </Table.Tr>
+                      </Table.Thead>
+                      <Table.Tbody>
+                        {archivedAssessments.map((a) => (
+                          <Table.Tr key={a._id}>
+                            <Table.Td fw={500}>{a.name}</Table.Td>
+                            <Table.Td>{initiativeTitleMap[toId(a.initiativeId)] ?? "—"}</Table.Td>
+                            <Table.Td>{a.archivedAt ? new Date(a.archivedAt).toLocaleDateString() : "—"}</Table.Td>
+                            <Table.Td>
+                              <Group gap="xs" justify="flex-end">
+                                <Button
+                                  size="xs"
+                                  variant="light"
+                                  leftSection={<IconRestore size={14} />}
+                                  onClick={() => setAssessmentAction({ kind: "restore", item: { ...a, title: a.name } })}
+                                >
+                                  Restore
+                                </Button>
+                                <Button
+                                  size="xs"
+                                  variant="subtle"
+                                  color="red"
+                                  leftSection={<IconTrash size={14} />}
+                                  onClick={() => setAssessmentAction({ kind: "delete", item: { ...a, title: a.name } })}
+                                >
+                                  Delete
+                                </Button>
+                              </Group>
+                            </Table.Td>
+                          </Table.Tr>
+                        ))}
+                      </Table.Tbody>
+                    </Table>
+                  )}
+                </Tabs.Panel>
+              </>
+            )}
           </Tabs>
         </Paper>
         )}
+
+        <AssessmentActionModal
+          action={assessmentAction}
+          onClose={() => setAssessmentAction(null)}
+          onConfirm={runAssessmentAction}
+        />
 
         {!hasState && submittedSubmissions.length > 0 && (
           <Paper withBorder radius="md" p="md" mb="lg" bg="var(--mantine-color-default-hover)">

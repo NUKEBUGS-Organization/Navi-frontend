@@ -46,17 +46,37 @@ import {
   IconMessageCircle,
   IconTarget,
   IconRocket,
+  IconArchive,
+  IconRestore,
 } from "@tabler/icons-react";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { THEME_BLUE, NAVY } from "@/constants";
 import { DateRangeFields } from "@/components/ui/DateRangeFields";
 import { RiskComplianceFields } from "@/components/ui/RiskComplianceFields";
 import { formatDateOnly, parseDateRange } from "@/utils";
-import { getInitiative, updateInitiative, listInitiatives, type InitiativeListItem } from "@/api/initiatives";
+import {
+  getInitiative,
+  updateInitiative,
+  listInitiatives,
+  archiveInitiative,
+  restoreInitiative,
+  deleteInitiativePermanently,
+  isInitiativeLead,
+  leadPickerValue,
+  leadSelectOptions,
+  type InitiativeListItem,
+} from "@/api/initiatives";
 import { listOrganizationUsers } from "@/api/auth";
 import { getMyOrganization, updateMyOrganization } from "@/api/organizations";
-import { listAssessmentsByInitiative, listSubmissions, type Assessment, type AssessmentSubmission } from "@/api/assessments";
+import {
+  listAssessmentsByInitiative,
+  listSubmissions,
+  archiveAssessment,
+  type Assessment,
+  type AssessmentSubmission,
+} from "@/api/assessments";
+import { AssessmentActionModal, InitiativeActionModal, type RecordAction } from "@/components";
 import { listTasks, type TaskDto } from "@/api/tasks";
 import { getInitiativeActivity, type ActivityItem } from "@/api/activity";
 import { listAdoption, type AdoptionDto } from "@/api/adoption";
@@ -76,7 +96,10 @@ interface Initiative {
     | "WAITING_FOR_APPROVAL"
     | "PLANNING";
   dateRange: string;
+  /** Change lead's current name (resolved from their profile by the server). */
   lead: string;
+  /** Change lead's user ID; missing on older initiatives not linked to a user yet. */
+  leadUserId?: string;
   departments: string[];
   description: string;
   impactedDepts: string[];
@@ -107,6 +130,8 @@ interface Initiative {
   raci: { accountable: string[]; responsible: string[]; consulted: string[]; informed: string[] };
   hseImpact: boolean;
   foodSafetyImpact: boolean;
+  /** Set when an admin has archived the initiative (only admins can open it then). */
+  archivedAt?: string | null;
 }
 
 const CHANGE_TYPES = [
@@ -236,6 +261,7 @@ function mapApiToInitiative(raw: InitiativeListItem & { description?: string }):
     status: statusMap[raw.status ?? ""] ?? "Draft",
     dateRange: raw.dateRange ?? "",
     lead,
+    leadUserId: raw.leadUserId ? String(raw.leadUserId) : undefined,
     departments: depts,
     description: raw.description ?? "",
     // Empty `departments` means the initiative impacts the whole organization.
@@ -262,6 +288,7 @@ function mapApiToInitiative(raw: InitiativeListItem & { description?: string }):
     },
     hseImpact: raw.hseImpact === true,
     foodSafetyImpact: raw.foodSafetyImpact === true,
+    archivedAt: raw.archivedAt ?? null,
   };
 }
 
@@ -276,6 +303,7 @@ export default function InitiativeDetail() {
   const [editSaving, setEditSaving] = useState(false);
   const [editOpened, { open: openEdit, close: closeEdit }] =
     useDisclosure(false);
+  const [editFocus, setEditFocus] = useState<"raci" | null>(null);
   const [initiative, setInitiative] = useState<Initiative | null>(null);
   const [loading, setLoading] = useState(true);
   const [managers, setManagers] = useState<{ name: string; id: string }[]>([]);
@@ -298,6 +326,9 @@ export default function InitiativeDetail() {
   const [adoptResumeOpened, { open: openAdoptResume, close: closeAdoptResume }] = useDisclosure(false);
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
   const [aiEnabled, setAiEnabled] = useState(false);
+  const isAdmin = user?.role === "admin";
+  const [initiativeAction, setInitiativeAction] = useState<RecordAction<{ title: string }> | null>(null);
+  const [assessmentAction, setAssessmentAction] = useState<RecordAction<Assessment & { title: string }> | null>(null);
 
   useEffect(() => {
     if (!canEditInitiative) return;
@@ -401,11 +432,8 @@ export default function InitiativeDetail() {
   const canToggleAdoptionTracking = useMemo(() => {
     if (user?.role === "admin") return true;
     if (user?.role !== "manager" || !initiative) return false;
-    return (
-      String(user.name ?? "").trim().toLowerCase() ===
-      String(initiative.lead ?? "").trim().toLowerCase()
-    );
-  }, [user?.role, user?.name, initiative?.lead]);
+    return isInitiativeLead({ leadUserId: initiative.leadUserId, leadName: initiative.lead }, user);
+  }, [user, initiative?.lead, initiative?.leadUserId]);
 
   const refreshActivity = useCallback(async (initiativeId: string) => {
     try {
@@ -428,7 +456,7 @@ export default function InitiativeDetail() {
         const mapped = mapApiToInitiative(data);
         if (user?.role === "manager") {
           const myDepts = new Set((user.departments ?? []).map((d) => String(d).toLowerCase()));
-          const leadMatch = String(mapped.lead ?? "").toLowerCase() === String(user?.name ?? "").toLowerCase();
+          const leadMatch = isInitiativeLead({ leadUserId: mapped.leadUserId, leadName: mapped.lead }, user);
           const deptMatch =
             (mapped.departments ?? []).length === 0 ||
             (mapped.departments ?? []).some((d) => myDepts.has(String(d).toLowerCase()));
@@ -614,6 +642,7 @@ export default function InitiativeDetail() {
     initiative.status === "WAITING_FOR_APPROVAL" ||
     initiative.status === "PLANNING" ||
     initiative.status === "Planning";
+  const isArchived = Boolean(initiative.archivedAt);
   const activeMilestoneIndex = initiative.milestones.findIndex(
     (m) => m.status === "current",
   );
@@ -694,7 +723,7 @@ export default function InitiativeDetail() {
               </Text>
             )}
           </Stack>
-          {isDraft && user?.role === "admin" && (
+          {isDraft && !isArchived && user?.role === "admin" && (
             <Button
               variant="filled"
               color="teal"
@@ -712,7 +741,21 @@ export default function InitiativeDetail() {
               Approve initiative
             </Button>
           )}
-          {canEditInitiative && (
+          {isAdmin && !isArchived && (
+            <Button
+              variant="outline"
+              color="gray"
+              radius="md"
+              h={40}
+              px="lg"
+              fw={600}
+              leftSection={<IconArchive size={16} />}
+              onClick={() => setInitiativeAction({ kind: "archive", item: initiative })}
+            >
+              Archive
+            </Button>
+          )}
+          {canEditInitiative && !isArchived && (
           <Button
             bg={THEME_BLUE}
             radius="md"
@@ -720,13 +763,50 @@ export default function InitiativeDetail() {
             px="lg"
             fw={600}
             leftSection={<IconEdit size={16} />}
-            onClick={openEdit}
+            onClick={() => {
+              setEditFocus(null);
+              openEdit();
+            }}
           >
             Edit Initiative
           </Button>
         )}
         </Group>
       </Group>
+
+      {isArchived && (
+        <Paper withBorder p="md" mb="lg" bg="gray.0" radius="md">
+          <Group justify="space-between" align="center" gap="sm">
+            <Text size="sm" fw={600} c="gray.8">
+              This initiative was archived
+              {initiative.archivedAt ? ` on ${new Date(initiative.archivedAt).toLocaleDateString()}` : ""}. It is
+              hidden from lists, dashboards and rollups, and can't be edited until it is restored.
+            </Text>
+            {isAdmin && (
+              <Group gap="xs">
+                <Button
+                  size="xs"
+                  variant="light"
+                  color={THEME_BLUE}
+                  leftSection={<IconRestore size={14} />}
+                  onClick={() => setInitiativeAction({ kind: "restore", item: initiative })}
+                >
+                  Restore
+                </Button>
+                <Button
+                  size="xs"
+                  variant="subtle"
+                  color="red"
+                  leftSection={<IconTrash size={14} />}
+                  onClick={() => setInitiativeAction({ kind: "delete", item: initiative })}
+                >
+                  Delete permanently
+                </Button>
+              </Group>
+            )}
+          </Group>
+        </Paper>
+      )}
 
       {isDraft && (
         <Paper withBorder p="md" mb="lg" bg="orange.0" radius="md">
@@ -984,6 +1064,7 @@ export default function InitiativeDetail() {
                           }}
                           label="Milestones affect initiative progress"
                           size="sm"
+                          disabled={isArchived}
                         />
                         <Text fz="xs" c="dimmed" mt={6}>
                           Turn off to keep saved milestones but revert progress to tasks only.
@@ -998,9 +1079,18 @@ export default function InitiativeDetail() {
                     <Title order={5} fw={700} c={NAVY}>
                       Team
                     </Title>
-                    {canEditInitiative && (
-                      <Button variant="subtle" size="xs" p={4} title="Edit team & RACI" onClick={openEdit}>
-                        <IconUsers size={18} color={THEME_BLUE} />
+                    {canEditInitiative && !isArchived && (
+                      <Button
+                        variant="light"
+                        size="xs"
+                        leftSection={<IconUsers size={14} />}
+                        title="Opens Edit Initiative at the Change type & RACI section"
+                        onClick={() => {
+                          setEditFocus("raci");
+                          openEdit();
+                        }}
+                      >
+                        Edit team & RACI
                       </Button>
                     )}
                   </Group>
@@ -1049,7 +1139,7 @@ export default function InitiativeDetail() {
                               ))
                           ) : (
                             <Text fz="xs" c="dimmed">
-                              No RACI assigned yet.{canEditInitiative ? " Use Edit Initiative to add it." : ""}
+                              No RACI assigned yet.{canEditInitiative && !isArchived ? " Use Edit team & RACI to add it." : ""}
                             </Text>
                           )}
                         </Box>
@@ -1281,6 +1371,7 @@ export default function InitiativeDetail() {
                     <Table.Th fw={700} fz="xs" c="dimmed">Due date</Table.Th>
                     <Table.Th fw={700} fz="xs" c="dimmed">Your status</Table.Th>
                     <Table.Th fw={700} fz="xs" c="dimmed">Action</Table.Th>
+                    {isAdmin && !isArchived && <Table.Th />}
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
@@ -1339,6 +1430,19 @@ export default function InitiativeDetail() {
                             <Text size="xs" c="dimmed">—</Text>
                           )}
                         </Table.Td>
+                        {isAdmin && !isArchived && (
+                          <Table.Td>
+                            <Button
+                              size="xs"
+                              variant="subtle"
+                              color="gray"
+                              leftSection={<IconArchive size={14} />}
+                              onClick={() => setAssessmentAction({ kind: "archive", item: { ...a, title: a.name } })}
+                            >
+                              Archive
+                            </Button>
+                          </Table.Td>
+                        )}
                       </Table.Tr>
                     );
                   })}
@@ -1617,6 +1721,34 @@ export default function InitiativeDetail() {
         </Group>
       </Modal>
 
+      <InitiativeActionModal
+        action={initiativeAction}
+        onClose={() => setInitiativeAction(null)}
+        onConfirm={async () => {
+          if (!initiativeAction) return;
+          if (initiativeAction.kind === "delete") {
+            await deleteInitiativePermanently(initiative.id);
+            navigate(appRoutes.INITIATIVES);
+            return;
+          }
+          const data =
+            initiativeAction.kind === "archive"
+              ? await archiveInitiative(initiative.id)
+              : await restoreInitiative(initiative.id);
+          setInitiative(mapApiToInitiative(data));
+        }}
+      />
+
+      <AssessmentActionModal
+        action={assessmentAction}
+        onClose={() => setAssessmentAction(null)}
+        onConfirm={async () => {
+          if (!assessmentAction) return;
+          await archiveAssessment(assessmentAction.item._id);
+          setAssessmentsList((list) => list.filter((a) => a._id !== assessmentAction.item._id));
+        }}
+      />
+
       <EditInitiativeModal
         opened={editOpened}
         onClose={() => {
@@ -1625,6 +1757,7 @@ export default function InitiativeDetail() {
         }}
         saveError={editSaveError}
         saving={editSaving}
+        focusSection={editFocus}
         initiative={initiative}
         managers={managers}
         orgDepartments={orgDepartments}
@@ -1650,6 +1783,7 @@ export default function InitiativeDetail() {
             description: updated.description,
             status: statusToApi(updated.status),
             leadName: updated.lead,
+            leadUserId: updated.leadUserId || undefined,
             sponsorName: updated.sponsorName?.trim() || undefined,
             dateRange: updated.dateRange,
             departments: updated.departments ?? updated.impactedDepts ?? [],
@@ -1697,9 +1831,12 @@ function EditInitiativeModal({
   leadEnrollmentInitiativesByLead,
   saveError,
   saving,
+  focusSection,
 }: {
   saveError?: string | null;
   saving?: boolean;
+  /** "raci" opens the dialog scrolled to the team (Change type & RACI) section. */
+  focusSection?: "raci" | null;
   opened: boolean;
   onClose: () => void;
   initiative: Initiative;
@@ -1727,13 +1864,14 @@ function EditInitiativeModal({
   const [newDeptName, setNewDeptName] = useState("");
   // Mantine Select/MultiSelect throw on duplicate option values, which blanked the page.
   const departmentOptions = [...new Set(orgDepartments)];
-  const leadOptions = [...new Set(managers.map((m) => m.name))].map((name) => ({
-    value: name,
-    label: `${name} (${leadEnrollmentCounts[name] ?? 0})`,
-  }));
+  const leadOptions = leadSelectOptions(managers, leadEnrollmentCounts);
+  const initialLeadUserId = () =>
+    leadPickerValue({ leadUserId: initiative.leadUserId, leadName: initiative.lead }, managers);
   const [title, setTitle] = useState(initiative.title);
   const [description, setDescription] = useState(initiative.description);
-  const [lead, setLead] = useState(initiative.lead);
+  const [leadUserId, setLeadUserId] = useState(initialLeadUserId);
+  // The picker holds the user ID; the name is only for display (the server resolves it on save).
+  const lead = managers.find((m) => m.id === leadUserId)?.name ?? initiative.lead;
   const [sponsorName, setSponsorName] = useState(initiative.sponsorName ?? "");
   const [status, setStatus] = useState(initiative.status);
   const [dateRange, setDateRange] = useState(initiative.dateRange);
@@ -1759,7 +1897,7 @@ function EditInitiativeModal({
   useEffect(() => {
     setTitle(initiative.title);
     setDescription(initiative.description);
-    setLead(initiative.lead);
+    setLeadUserId(initialLeadUserId());
     setSponsorName(initiative.sponsorName ?? "");
     setStatus(initiative.status);
     setDateRange(initiative.dateRange);
@@ -1778,6 +1916,19 @@ function EditInitiativeModal({
     );
   }, [initiative]);
 
+  const raciSectionRef = useRef<HTMLDivElement>(null);
+  // Runs once the open transition ends, after the focus trap has focused (and scrolled to) the first field.
+  const scrollToFocusSection = () => {
+    if (focusSection !== "raci") return;
+    window.setTimeout(() => raciSectionRef.current?.scrollIntoView({ block: "start" }), 0);
+  };
+
+  // People load after the modal mounts; match an unlinked lead by name once they arrive.
+  useEffect(() => {
+    if (!leadUserId && managers.length) setLeadUserId(initialLeadUserId());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [managers]);
+
   const handleGoalChange = (
     index: number,
     field: keyof Initiative["goals"][0],
@@ -1794,6 +1945,7 @@ function EditInitiativeModal({
       title,
       description,
       lead,
+      leadUserId: leadUserId || initiative.leadUserId,
       sponsorName: sponsorName.trim() || undefined,
       status,
       dateRange,
@@ -1833,6 +1985,7 @@ function EditInitiativeModal({
     <Modal
       opened={opened}
       onClose={onClose}
+      onEnterTransitionEnd={scrollToFocusSection}
       title={
         <Text fw={800} fz="lg">
           Edit Initiative
@@ -1891,11 +2044,16 @@ function EditInitiativeModal({
                   Change Lead
                 </Text>
               }
-              placeholder="Select a manager..."
-              value={lead}
-              onChange={(val) => setLead(val || lead)}
+              description="Click to choose who leads this change"
+              placeholder="Select a person..."
+              value={leadUserId || null}
+              onChange={(val) => setLeadUserId(val || leadUserId)}
+              searchable
+              nothingFoundMessage="No one in your organization matches"
+              allowDeselect={false}
               data={leadOptions}
               rightSection={<IconChevronDown size={16} />}
+              rightSectionPointerEvents="none"
               radius="md"
               size="md"
             />
@@ -2116,7 +2274,9 @@ function EditInitiativeModal({
           </Stack>
         </Modal>
 
-        <Divider label="Change type & RACI" labelPosition="center" />
+        <Box ref={raciSectionRef} style={{ scrollMarginTop: 16 }}>
+          <Divider label="Change type & RACI" labelPosition="center" />
+        </Box>
         {(() => {
           const options = managers.map((m) => ({ value: m.id, label: m.name }));
           const acc = raci.accountable[0] ?? null;

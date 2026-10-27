@@ -24,6 +24,8 @@ import {
   Breadcrumbs,
   Grid,
   FileButton,
+  SegmentedControl,
+  Menu,
 } from "@mantine/core";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
@@ -36,6 +38,13 @@ import {
   createInitiative,
   updateInitiative,
   deleteInitiativeDraft,
+  listArchivedInitiatives,
+  archiveInitiative,
+  restoreInitiative,
+  deleteInitiativePermanently,
+  isInitiativeLead,
+  leadPickerValue,
+  leadSelectOptions,
   type InitiativeListItem,
   type CreateInitiativePayload,
 } from "@/api/initiatives";
@@ -46,7 +55,7 @@ import { listSubmissions, type AssessmentSubmission } from "@/api/assessments";
 import type { ApiError } from "@/api/client";
 import { DateInput } from "@mantine/dates";
 import { useDisclosure } from "@mantine/hooks";
-import { PageHeader } from "@/components";
+import { InitiativeActionModal, PageHeader, type RecordAction } from "@/components";
 import { DateRangeFields } from "@/components/ui/DateRangeFields";
 import { RiskComplianceFields } from "@/components/ui/RiskComplianceFields";
 import { formatDateRange, parseDateOnly, parseDateRange } from "@/utils";
@@ -62,6 +71,7 @@ import { IconTrash } from "@tabler/icons-react";
 import { IconBulb } from "@tabler/icons-react";
 import { IconRocket } from "@tabler/icons-react";
 import { IconCheck } from "@tabler/icons-react";
+import { IconArchive, IconDots, IconRestore } from "@tabler/icons-react";
 import { useForm } from "@mantine/form";
 import AiInitiativeIdeaPanel from "@/components/ai/AiInitiativeIdeaPanel";
 import type { InitiativeDraftDto } from "@/api/ai";
@@ -224,6 +234,12 @@ export default function AdminInitiatives() {
   const [orgDepartments, setOrgDepartments] = useState<string[]>([]);
   const [tasksByInitiative, setTasksByInitiative] = useState<Record<string, { total: number; completed: number }>>({});
   const [submissions, setSubmissions] = useState<AssessmentSubmission[]>([]);
+  const isAdmin = user?.role === "admin";
+  // Admins can switch to the archive to restore or permanently delete initiatives.
+  const [view, setView] = useState<"active" | "archived">("active");
+  const [archivedInitiatives, setArchivedInitiatives] = useState<InitiativeListItem[]>([]);
+  const [archivedLoading, setArchivedLoading] = useState(false);
+  const [pendingAction, setPendingAction] = useState<RecordAction<InitiativeListItem> | null>(null);
   const leadEnrollmentCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     const isDraftStatus = (s?: string) => {
@@ -290,6 +306,31 @@ export default function AdminInitiatives() {
   useEffect(() => {
     fetchInitiatives();
   }, []);
+
+  const fetchArchived = useCallback(async () => {
+    if (!isAdmin) return;
+    setArchivedLoading(true);
+    try {
+      setArchivedInitiatives(await listArchivedInitiatives());
+    } catch (err) {
+      setError((err as ApiError).message ?? "Failed to load archived initiatives");
+    } finally {
+      setArchivedLoading(false);
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (view === "archived") void fetchArchived();
+  }, [view, fetchArchived]);
+
+  const runPendingAction = async () => {
+    if (!pendingAction) return;
+    const { kind, item } = pendingAction;
+    if (kind === "archive") await archiveInitiative(item.id);
+    else if (kind === "restore") await restoreInitiative(item.id);
+    else await deleteInitiativePermanently(item.id);
+    await Promise.all([fetchInitiatives(), view === "archived" ? fetchArchived() : Promise.resolve()]);
+  };
 
   useEffect(() => {
     listTasks()
@@ -372,6 +413,7 @@ export default function AdminInitiatives() {
       await updateInitiative(id, {
         title: data.title,
         leadName: data.leadName,
+        leadUserId: data.leadUserId || undefined,
         sponsorName: data.sponsorName?.trim() || undefined,
         status: toBackendStatus(data.status),
         dateRange: data.dateRange,
@@ -394,14 +436,16 @@ export default function AdminInitiatives() {
     }
   };
 
+  const showingArchived = isAdmin && view === "archived";
+  const listLoading = showingArchived ? archivedLoading : loading;
+
   // Filter by search
-  const filtered = initiatives.filter((i) => {
+  const filtered = (showingArchived ? archivedInitiatives : initiatives).filter((i) => {
     // Managers should only see initiatives they are "part of":
     // - either they are explicitly the lead (leadName)
     // - or the initiative impacts one of their departments
     if (user?.role === "manager") {
-      const managerName = String(user.name ?? "").toLowerCase();
-      const leadMatch = String(i.leadName ?? "").toLowerCase() === managerName;
+      const leadMatch = isInitiativeLead(i, user);
       const managerDepts = new Set((user.departments ?? []).map((d) => String(d).toLowerCase()));
       // If `departments` is empty, it means the initiative impacts the whole organization.
       const deptMatch =
@@ -448,19 +492,36 @@ export default function AdminInitiatives() {
       )}
 
       <Card withBorder radius="md" p="md" mb={40} shadow="xs">
-        <Group grow>
+        <Group>
           <TextInput
+            style={{ flex: 1 }}
             placeholder="Search initiatives..."
             leftSection={<IconSearch size={16} />}
             variant="default"
             value={search}
             onChange={(e) => setSearch(e.currentTarget.value)}
           />
+          {isAdmin && (
+            <SegmentedControl
+              value={view}
+              onChange={(v) => setView(v as "active" | "archived")}
+              data={[
+                { value: "active", label: "Active" },
+                { value: "archived", label: "Archived" },
+              ]}
+            />
+          )}
         </Group>
+        {showingArchived && (
+          <Text size="xs" c="dimmed" mt="xs">
+            Archived initiatives are hidden from lists, dashboards and rollups. Restore one to bring it back,
+            or delete it permanently.
+          </Text>
+        )}
       </Card>
 
       <Grid gutter={32} mb={40}>
-        {loading ? (
+        {listLoading ? (
           <Grid.Col span={12}>
             <Text c="dimmed" size="sm" py="xl" ta="center">
               Loading initiatives...
@@ -518,6 +579,23 @@ export default function AdminInitiatives() {
                   <Text fz={12} fw={700} c="dimmed">
                     Readiness: {readinessText}
                   </Text>
+                  {isAdmin && !showingArchived && (
+                    <Menu position="bottom-end" withinPortal>
+                      <Menu.Target>
+                        <ActionIcon variant="subtle" color="gray" size="sm" aria-label="Initiative actions">
+                          <IconDots size={16} />
+                        </ActionIcon>
+                      </Menu.Target>
+                      <Menu.Dropdown>
+                        <Menu.Item
+                          leftSection={<IconArchive size={14} />}
+                          onClick={() => setPendingAction({ kind: "archive", item: i })}
+                        >
+                          Archive initiative
+                        </Menu.Item>
+                      </Menu.Dropdown>
+                    </Menu>
+                  )}
                 </Group>
               </Group>
               <Title order={3} fz={20} fw={800} mb={4}>
@@ -580,7 +658,38 @@ export default function AdminInitiatives() {
                   </Group>
                 ) : null;
               })()}
-              {(i.status === "WAITING_FOR_APPROVAL" || i.status === "PLANNING") && user?.role === "admin" && (
+              {showingArchived && (
+                <Stack gap={8} mt={8}>
+                  <Badge color="gray" variant="light" radius="sm">
+                    Archived{i.archivedAt ? ` ${new Date(i.archivedAt).toLocaleDateString()}` : ""}
+                  </Badge>
+                  <Button
+                    fullWidth
+                    variant="light"
+                    color={THEME_BLUE}
+                    fw={700}
+                    radius="md"
+                    h={38}
+                    leftSection={<IconRestore size={16} />}
+                    onClick={() => setPendingAction({ kind: "restore", item: i })}
+                  >
+                    Restore
+                  </Button>
+                  <Button
+                    fullWidth
+                    variant="subtle"
+                    color="red"
+                    fw={700}
+                    radius="md"
+                    h={38}
+                    leftSection={<IconTrash size={16} />}
+                    onClick={() => setPendingAction({ kind: "delete", item: i })}
+                  >
+                    Delete
+                  </Button>
+                </Stack>
+              )}
+              {!showingArchived && (i.status === "WAITING_FOR_APPROVAL" || i.status === "PLANNING") && user?.role === "admin" && (
                 <Button
                   fullWidth
                   variant="filled"
@@ -616,34 +725,42 @@ export default function AdminInitiatives() {
                 >
                   View Details
                 </Button>
-                <Button
-                  variant="subtle"
-                  color={THEME_BLUE}
-                  fw={700}
-                  radius="md"
-                  h={38}
-                  style={{ fontSize: 14 }}
-                  onClick={() =>
-                    navigate(appRoutes.ROADMAP, { state: { initiativeId: i.id } })
-                  }
-                >
-                  View Roadmap
-                </Button>
+                {!showingArchived && (
+                  <Button
+                    variant="subtle"
+                    color={THEME_BLUE}
+                    fw={700}
+                    radius="md"
+                    h={38}
+                    style={{ fontSize: 14 }}
+                    onClick={() =>
+                      navigate(appRoutes.ROADMAP, { state: { initiativeId: i.id } })
+                    }
+                  >
+                    View Roadmap
+                  </Button>
+                )}
               </Group>
             </Card>
           </Grid.Col>
               );
             })}
-        {!loading && filtered.length === 0 && (
+        {!listLoading && filtered.length === 0 && (
           <Grid.Col span={12}>
             <Text c="dimmed" size="md" py="xl" ta="center">
-              All initiatives will display here.
+              {showingArchived ? "No archived initiatives." : "All initiatives will display here."}
             </Text>
           </Grid.Col>
         )}
           </>
         )}
       </Grid>
+
+      <InitiativeActionModal
+        action={pendingAction}
+        onClose={() => setPendingAction(null)}
+        onConfirm={runPendingAction}
+      />
 
       {editIndex === null ? (
         <CreateInitiativeModal
@@ -708,10 +825,7 @@ function InitiativeModal({
   const [newDeptName, setNewDeptName] = useState("");
   // Mantine Select/MultiSelect throw on duplicate option values, which blanked the page.
   const departmentOptions = [...new Set(orgDepartments)];
-  const leadOptions = [...new Set(managers.map((m) => m.name))].map((name) => ({
-    value: name,
-    label: `${name} (${leadEnrollmentCounts[name] ?? 0})`,
-  }));
+  const leadOptions = leadSelectOptions(managers, leadEnrollmentCounts);
 
   type ImpactScope = "departments" | "organization";
   const [impactScope, setImpactScope] = useState<ImpactScope>(
@@ -725,7 +839,7 @@ function InitiativeModal({
   const form = useForm({
     initialValues: {
       title: initial?.title || "",
-      leadName: initial?.leadName || "",
+      leadUserId: leadPickerValue(initial, managers),
       sponsorName: initial?.sponsorName || "",
       status: initial?.status || "ACTIVE",
       dateRange: initial?.dateRange || "",
@@ -749,7 +863,7 @@ function InitiativeModal({
     },
     validate: {
       title: (v) => (!v ? "Title required" : null),
-      leadName: (v) => (!v ? "Lead required" : null),
+      leadUserId: (v) => (!v ? "Lead required" : null),
       status: (v) => (!v ? "Status required" : null),
       departments: (v) =>
         impactScopeRef.current === "departments" && v.length === 0
@@ -762,7 +876,7 @@ function InitiativeModal({
     if (!opened || !initial) return;
     form.setValues({
       title: initial.title || "",
-      leadName: initial.leadName || "",
+      leadUserId: leadPickerValue(initial, managers),
       sponsorName: initial.sponsorName || "",
       status: initial.status || "ACTIVE",
       dateRange: initial.dateRange || "",
@@ -785,8 +899,8 @@ function InitiativeModal({
     setImpactScope((initial.departments?.length ?? 0) > 0 ? "departments" : "organization");
   }, [opened, initial?.id]);
 
-  const selectedLeadInitiatives =
-    leadEnrollmentInitiativesByLead[form.values.leadName ?? ""] ?? [];
+  const selectedLeadName = managers.find((m) => m.id === form.values.leadUserId)?.name ?? "";
+  const selectedLeadInitiatives = leadEnrollmentInitiativesByLead[selectedLeadName] ?? [];
 
   return (
     <Modal
@@ -801,7 +915,7 @@ function InitiativeModal({
           const faqsClean = (values.faqs as InitiativeFaq[])
             .filter((f) => f.question.trim() || f.answer.trim())
             .map((f) => ({ question: f.question.trim(), answer: f.answer.trim() }));
-          onSave({ ...values, faqs: faqsClean });
+          onSave({ ...values, leadName: selectedLeadName, faqs: faqsClean });
           form.reset();
         })}
       >
@@ -814,9 +928,10 @@ function InitiativeModal({
           />
           <Select
             label="Change Lead"
-            placeholder="Select a manager..."
+            placeholder="Select a person..."
             data={leadOptions}
-            {...form.getInputProps("leadName")}
+            searchable
+            {...form.getInputProps("leadUserId")}
           />
           {selectedLeadInitiatives.length > 0 && (
             <Box style={{ border: "1px solid #e9ecef", borderRadius: 8, padding: 10 }}>
@@ -1160,10 +1275,7 @@ function CreateInitiativeModal({
   const [createSaving, setCreateSaving] = useState(false);
   // Mantine Select/MultiSelect throw on duplicate option values, which blanked the page.
   const departmentOptions = [...new Set(orgDepartments)];
-  const leadOptions = [...new Set(managers.map((m) => m.name))].map((name) => ({
-    value: name,
-    label: `${name} (${leadEnrollmentCounts[name] ?? 0})`,
-  }));
+  const leadOptions = leadSelectOptions(managers, leadEnrollmentCounts);
   const collaboratorOptions = managers.map((m) => ({
     value: m.id,
     label: m.name,
@@ -1233,7 +1345,10 @@ function CreateInitiativeModal({
     reader.readAsText(file);
   };
 
-  const selectedLeadInitiatives = leadEnrollmentInitiativesByLead[lead] ?? [];
+  // `lead` holds the lead's user ID; the name is looked up for display.
+  const leadNameOf = (userId: string) => managers.find((m) => m.id === userId)?.name ?? "";
+  const leadName = leadNameOf(lead);
+  const selectedLeadInitiatives = leadEnrollmentInitiativesByLead[leadName] ?? [];
 
   const toggleDept = (dept: string) => {
     if (impactScope !== "departments") return;
@@ -1277,7 +1392,8 @@ function CreateInitiativeModal({
     title: v.title.trim() || "Untitled Initiative",
     description: v.description,
     sponsorName: v.sponsorName.trim() || undefined,
-    leadName: v.lead.trim() || "Unassigned",
+    leadName: leadNameOf(v.lead) || "Unassigned",
+    leadUserId: v.lead || undefined,
     changeType: v.changeType,
     raciAccountableIds: v.raciAccountableId ? [v.raciAccountableId] : [],
     raciResponsibleIds: v.raciResponsibleIds,
@@ -1507,12 +1623,15 @@ function CreateInitiativeModal({
                           Change Lead
                         </Text>
                       }
-                      placeholder="Select a manager..."
+                      placeholder="Select a person..."
                       rightSection={<IconChevronDown size={18} />}
+                      rightSectionPointerEvents="none"
                       data={leadOptions}
+                      searchable
+                      nothingFoundMessage="No one in your organization matches"
                       radius="md"
                       size="md"
-                      value={lead}
+                      value={lead || null}
                       onChange={(value) => setLead(value || "")}
                     />
                     <Text size="xs" c="dimmed" maw={520}>
@@ -2088,7 +2207,7 @@ function CreateInitiativeModal({
                           Lead
                         </Text>
                         <Text fw={800} fz="md">
-                          {lead || "—"}
+                          {leadName || "—"}
                         </Text>
                       </Stack>
                     </Group>

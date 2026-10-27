@@ -31,9 +31,14 @@ export interface InitiativeSummary {
   readiness?: string;
   title: string;
   description?: string;
+  /** Change lead's current display name (resolved from their profile by the server). */
   leadName: string;
+  /** Change lead's user ID. Missing on older initiatives the server could not match to a user. */
+  leadUserId?: string;
   /** Executive / change sponsor (display name). */
   sponsorName?: string;
+  /** Set when an admin has archived the initiative (soft delete). */
+  archivedAt?: string | null;
   dateRange: string;
   departments?: string[];
   tags?: string[];

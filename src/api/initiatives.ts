@@ -22,6 +22,8 @@ export interface CreateInitiativePayload {
   description?: string;
   status?: "ACTIVE" | "DRAFT" | "WAITING_FOR_APPROVAL" | "COMPLETED" | "PLANNING";
   leadName: string;
+  /** Change lead's user ID; the server shows the lead's current profile name from it. */
+  leadUserId?: string;
   sponsorName?: string;
   dateRange?: string;
   departments?: string[];
@@ -38,6 +40,43 @@ export interface CreateInitiativePayload {
   adoptionTrackingEnabled?: boolean;
   hseImpact?: boolean;
   foodSafetyImpact?: boolean;
+}
+
+/** True when the user is the initiative's change lead (by ID; by name for initiatives not linked to a user yet). */
+export function isInitiativeLead(
+  initiative: { leadUserId?: string; leadName?: string },
+  user: { _id?: unknown; name?: string } | null | undefined,
+): boolean {
+  if (!user) return false;
+  if (initiative.leadUserId) return user._id != null && String(user._id) === String(initiative.leadUserId);
+  const lead = String(initiative.leadName ?? "").trim().toLowerCase();
+  return Boolean(lead) && lead === String(user.name ?? "").trim().toLowerCase();
+}
+
+/**
+ * Picker value for an initiative's lead: their user ID, or (for older initiatives not linked yet)
+ * the ID of the one person whose name matches.
+ */
+export function leadPickerValue(
+  initiative: { leadUserId?: string; leadName?: string } | null | undefined,
+  people: { id: string; name: string }[],
+): string {
+  if (!initiative) return "";
+  if (initiative.leadUserId) return String(initiative.leadUserId);
+  const name = String(initiative.leadName ?? "").trim().toLowerCase();
+  const matches = people.filter((p) => p.name.trim().toLowerCase() === name);
+  return matches.length === 1 ? matches[0].id : "";
+}
+
+/** Change Lead picker options: value is the user ID, label shows the name and current enrollment count. */
+export function leadSelectOptions(
+  people: { id: string; name: string }[],
+  enrollmentCountsByName: Record<string, number>,
+): { value: string; label: string }[] {
+  const seen = new Set<string>();
+  return people
+    .filter((p) => !seen.has(p.id) && Boolean(seen.add(p.id)))
+    .map((p) => ({ value: p.id, label: `${p.name} (${enrollmentCountsByName[p.name] ?? 0})` }));
 }
 
 export function listInitiatives(): Promise<InitiativeListItem[]> {
@@ -67,6 +106,31 @@ export function updateInitiative(
   return api
     .patch<unknown>(`/initiatives/${id}`, payload)
     .then((raw) => mapInitiative(raw as { _id: string }) as InitiativeListItem);
+}
+
+/** Archived initiatives (admin only). Archived ones are left out of `listInitiatives`. */
+export function listArchivedInitiatives(): Promise<InitiativeListItem[]> {
+  return api.get<unknown[]>("/initiatives?archived=true").then((list) =>
+    list.map((item) => mapInitiative(item as { _id: string }) as InitiativeListItem)
+  );
+}
+
+/** Soft delete (admin only): hides the initiative from lists, dashboards and rollups until restored. */
+export function archiveInitiative(id: string): Promise<InitiativeListItem> {
+  return api
+    .post<unknown>(`/initiatives/${id}/archive`, {})
+    .then((raw) => mapInitiative(raw as { _id: string }) as InitiativeListItem);
+}
+
+export function restoreInitiative(id: string): Promise<InitiativeListItem> {
+  return api
+    .post<unknown>(`/initiatives/${id}/restore`, {})
+    .then((raw) => mapInitiative(raw as { _id: string }) as InitiativeListItem);
+}
+
+/** Permanently delete an archived initiative and everything linked to it (admin only). */
+export function deleteInitiativePermanently(id: string): Promise<{ deleted: boolean }> {
+  return api.delete<{ deleted: boolean }>(`/initiatives/${id}`);
 }
 
 /** Discard an unpublished draft initiative (only DRAFTs without roadmap tasks). */
