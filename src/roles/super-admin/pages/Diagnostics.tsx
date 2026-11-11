@@ -78,6 +78,7 @@ export default function Diagnostics() {
   const [data, setData] = useState<ErrorGroupPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const requestId = useRef(0);
 
@@ -108,10 +109,11 @@ export default function Diagnostics() {
   }, [debouncedSearch]);
 
   const loadSummary = useCallback(async () => {
+    setSummaryError(null);
     try {
       setSummary(await diagnosticsApi.getSummary());
-    } catch {
-      // Tiles are best-effort; the table surfaces load errors.
+    } catch (e) {
+      setSummaryError((e as ApiError).message ?? "Failed to load summary");
     }
   }, []);
 
@@ -129,15 +131,22 @@ export default function Diagnostics() {
     if (q) params.q = q;
     try {
       const res = await diagnosticsApi.listGroups(params);
-      if (id === requestId.current) setData(res);
+      if (id === requestId.current) {
+        setData(res);
+        const last = Math.max(1, Math.ceil(res.total / PAGE_SIZE));
+        if (res.total > 0 && page > last) {
+          updateParams({ page: last === 1 ? null : String(last) });
+        }
+      }
     } catch (e) {
       if (id === requestId.current) {
+        setData(null);
         setError((e as ApiError).message ?? "Failed to load errors");
       }
     } finally {
       if (id === requestId.current) setLoading(false);
     }
-  }, [source, severity, status, q, page]);
+  }, [source, severity, status, q, page, updateParams]);
 
   useEffect(() => {
     loadGroups();
@@ -153,7 +162,10 @@ export default function Diagnostics() {
   }, [loadGroups, loadSummary]);
 
   const items: ErrorGroup[] = data?.items ?? [];
-  const totalPages = data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1;
+  const totalPages = Math.max(
+    page,
+    data ? Math.ceil(data.total / PAGE_SIZE) : 1,
+  );
 
   return (
     <SuperAdminLayout>
@@ -176,6 +188,12 @@ export default function Diagnostics() {
           value={summary?.usersAffectedLast24h}
         />
       </SimpleGrid>
+
+      {summaryError && !error && (
+        <Alert color="red" title="Could not load summary" mb="md">
+          {summaryError}
+        </Alert>
+      )}
 
       <Card withBorder radius="md" p="md" mb="lg" shadow="xs">
         <Group gap="md" align="flex-end">
@@ -238,7 +256,13 @@ export default function Diagnostics() {
       )}
 
       <Card withBorder radius="lg" shadow="xs">
-        <Table.ScrollContainer minWidth={900}>
+        <Table.ScrollContainer
+          minWidth={900}
+          style={{
+            opacity: loading ? 0.5 : 1,
+            pointerEvents: loading ? "none" : undefined,
+          }}
+        >
           <Table striped highlightOnHover>
             <Table.Thead>
               <Table.Tr>
@@ -299,7 +323,7 @@ export default function Diagnostics() {
             </Table.Tbody>
           </Table>
         </Table.ScrollContainer>
-        {loading && items.length === 0 && (
+        {loading && (
           <Center p="lg">
             <Loader size="sm" />
           </Center>
@@ -313,7 +337,7 @@ export default function Diagnostics() {
         )}
       </Card>
 
-      {data && data.total > PAGE_SIZE && (
+      {(totalPages > 1 || page > 1) && (
         <Group justify="center" mt="lg">
           <Pagination
             value={page}
