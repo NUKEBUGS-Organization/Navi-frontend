@@ -9,6 +9,7 @@ type ClientErrorReport = {
   stack?: string;
   componentStack?: string;
   pageUrl: string;
+  route: string;
 };
 
 const ENDPOINT_PATH = "/diagnostics/client-errors";
@@ -42,13 +43,39 @@ export function normalizeError(error: unknown): { name: string; message: string;
       stack: error.stack ? cap(error.stack, MAX_STACK) : undefined,
     };
   }
-  let message: string;
+  return { name: "NonError", message: cap(describeNonError(error), MAX_MESSAGE) };
+}
+
+/** A readable message for a thrown/rejected non-Error value (not "[object Object]"). */
+function describeNonError(value: unknown): string {
   try {
-    message = String(error);
+    if (typeof value === "object" && value !== null) {
+      const message = (value as { message?: unknown }).message;
+      if (typeof message === "string") return message;
+      const json = JSON.stringify(value);
+      if (typeof json === "string") return json;
+    }
   } catch {
-    message = "[unprintable value]";
+    // circular or hostile object: fall through to String()
   }
-  return { name: "NonError", message: cap(message, MAX_MESSAGE) };
+  try {
+    return String(value);
+  } catch {
+    return "[unprintable value]";
+  }
+}
+
+const OBJECT_ID = /^[0-9a-f]{24}$/i;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DIGITS = /^\d+$/;
+
+/** Page path pattern: ObjectId, UUID and numeric segments become `:id` (`/tasks/:id`). */
+export function routePattern(pathname: string): string {
+  const pattern = pathname
+    .split("/")
+    .map((segment) => (OBJECT_ID.test(segment) || UUID.test(segment) || DIGITS.test(segment) ? ":id" : segment))
+    .join("/");
+  return cap(pattern || "/", 200);
 }
 
 function redactPairs(pairs: string): string {
@@ -117,6 +144,7 @@ export function reportError(
       name,
       message,
       pageUrl: currentPageUrl(),
+      route: routePattern(typeof location === "undefined" ? "/" : location.pathname),
     };
     if (stack) report.stack = stack;
     if (context.componentStack) {
@@ -140,11 +168,12 @@ function takeBatch(): ClientErrorReport[] {
 }
 
 /**
- * Flushes queued reports. With `unloading` (pagehide) it fires keepalive fetches without
- * awaiting them: unlike sendBeacon, fetch can carry the Authorization header and avoids the
- * credentialed cross-origin preflight that is easily cut off during unload. sendBeacon is
- * used only when fetch is unavailable. keepalive bodies share a 64 KB in-flight budget, so
- * only what fits is sent; the rest stays queued.
+ * Flushes queued reports. Regular flushes use a plain fetch, one batch at a time. With
+ * `unloading` (pagehide) it fires keepalive fetches without awaiting them so they outlive
+ * the page; unlike sendBeacon, fetch can carry the Authorization header (the JSON +
+ * Authorization request still needs a CORS preflight either way). sendBeacon is used only
+ * when fetch is unavailable. keepalive bodies share a 64 KB in-flight budget, so only what
+ * fits is sent; the rest stays queued.
  */
 export function flushNow(unloading = false): void {
   try {
@@ -190,10 +219,10 @@ export function flushNow(unloading = false): void {
     const token = getAuthToken();
     if (token) headers.Authorization = `Bearer ${token}`;
     inFlight = true;
-    // Plain fetch on purpose: reporting the reporter's own failures would loop.
+    // Plain fetch on purpose: reporting the reporter's own failures would loop. No keepalive:
+    // its 64 KB budget is reserved for the pagehide flush.
     fetch(url, {
       method: "POST",
-      keepalive: true,
       headers,
       body: JSON.stringify({ reports: batch }),
     })
