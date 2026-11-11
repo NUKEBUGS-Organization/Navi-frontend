@@ -24,6 +24,7 @@ import Kudos from "@/roles/admin/pages/Kudos";
 import KnowledgeHub from "@/roles/admin/pages/KnowledgeHub";
 import SuperAdminDashboard from "@/roles/super-admin/pages/SuperAdminDashboard";
 import Organizations from "@/roles/super-admin/pages/Organizations";
+import Diagnostics from "@/roles/super-admin/pages/Diagnostics";
 import SignupLeads from "@/roles/super-admin/pages/SignupLeads";
 import SuperAdminSettings from "@/roles/super-admin/pages/SuperAdminSettings";
 
@@ -77,6 +78,14 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={["super_admin"]}>
               <Organizations />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path={ROUTES.SUPER_ADMIN_DIAGNOSTICS}
+          element={
+            <ProtectedRoute allowedRoles={["super_admin"]}>
+              <Diagnostics />
             </ProtectedRoute>
           }
         />

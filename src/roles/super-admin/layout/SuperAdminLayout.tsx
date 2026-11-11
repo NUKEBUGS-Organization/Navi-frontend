@@ -17,6 +17,7 @@ import {
   IconLayoutDashboard,
   IconBuilding,
   IconInbox,
+  IconBug,
   IconSettings,
   IconLogout,
 } from "@tabler/icons-react";
@@ -37,6 +38,7 @@ const NAV_ITEMS: NavItem[] = [
   { icon: IconLayoutDashboard, label: "Dashboard", path: ROUTES.SUPER_ADMIN_DASHBOARD },
   { icon: IconInbox, label: "Leads", path: ROUTES.SUPER_ADMIN_LEADS },
   { icon: IconBuilding, label: "Organizations", path: ROUTES.SUPER_ADMIN_ORGS },
+  { icon: IconBug, label: "Diagnostics", path: ROUTES.SUPER_ADMIN_DIAGNOSTICS },
   { icon: IconSettings, label: "Settings", path: ROUTES.SUPER_ADMIN_SETTINGS },
 ];
 
