@@ -17,6 +17,7 @@ const BATCH_MAX = 20;
 const FLUSH_INTERVAL_MS = 2000;
 const DEDUPE_WINDOW_MS = 10_000;
 const MAX_BODY_CHARS = 30_000;
+const KEEPALIVE_BUDGET_BYTES = 60_000;
 const MAX_NAME = 200;
 const MAX_MESSAGE = 500;
 const MAX_STACK = 8000;
@@ -138,7 +139,14 @@ function takeBatch(): ClientErrorReport[] {
   return batch;
 }
 
-export function flushNow(useBeacon = false): void {
+/**
+ * Flushes queued reports. With `unloading` (pagehide) it fires keepalive fetches without
+ * awaiting them: unlike sendBeacon, fetch can carry the Authorization header and avoids the
+ * credentialed cross-origin preflight that is easily cut off during unload. sendBeacon is
+ * used only when fetch is unavailable. keepalive bodies share a 64 KB in-flight budget, so
+ * only what fits is sent; the rest stays queued.
+ */
+export function flushNow(unloading = false): void {
   try {
     if (queue.length === 0 || typeof window === "undefined") {
       stopTimerIfIdle();
@@ -146,18 +154,33 @@ export function flushNow(useBeacon = false): void {
     }
     const url = `${API_BASE}${ENDPOINT_PATH}`;
 
-    if (useBeacon) {
-      if (typeof navigator === "undefined" || typeof navigator.sendBeacon !== "function") return;
+    if (unloading) {
+      const canFetch = typeof fetch === "function";
+      const canBeacon = typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function";
+      if (!canFetch && !canBeacon) return;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const token = getAuthToken();
+      if (token) headers.Authorization = `Bearer ${token}`;
+      let budget = KEEPALIVE_BUDGET_BYTES;
       while (queue.length > 0) {
         const batch = takeBatch();
-        const blob = new Blob([JSON.stringify({ reports: batch })], { type: "application/json" });
-        if (!navigator.sendBeacon(url, blob)) {
+        const body = JSON.stringify({ reports: batch });
+        const bytes = new Blob([body]).size;
+        if (canFetch && bytes > budget) {
           queue = [...batch, ...queue];
           trimQueue();
-          return;
+          break;
+        }
+        if (canFetch) {
+          budget -= bytes;
+          // Plain fetch, rejections swallowed: never report the reporter's own failures.
+          fetch(url, { method: "POST", keepalive: true, headers, body }).catch(() => {});
+        } else if (!navigator.sendBeacon(url, new Blob([body], { type: "application/json" }))) {
+          queue = [...batch, ...queue];
+          trimQueue();
+          break;
         }
       }
-      stopTimerIfIdle();
       return;
     }
 
