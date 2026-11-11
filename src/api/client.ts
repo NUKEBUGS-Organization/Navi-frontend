@@ -1,6 +1,17 @@
 import { API_BASE, getAuthToken } from "@/constants";
+import { reportError } from "@/diagnostics/reporter";
 
 export type ApiError = { message: string; status?: number };
+
+/** fetch that reports thrown (network) failures, then rethrows the same error. */
+async function fetchOrReport(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (err) {
+    reportError(err, { kind: "network" });
+    throw err;
+  }
+}
 
 async function request<T>(
   path: string,
@@ -15,7 +26,7 @@ async function request<T>(
   if (token) {
     (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
   }
-  const res = await fetch(url, { ...options, headers });
+  const res = await fetchOrReport(url, { ...options, headers });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const raw = (data as { message?: string | string[] }).message;
@@ -36,7 +47,7 @@ export async function postFormData<T>(path: string, formData: FormData): Promise
   if (token) {
     (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
   }
-  const res = await fetch(url, { method: "POST", body: formData, headers });
+  const res = await fetchOrReport(url, { method: "POST", body: formData, headers });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     const err: ApiError = {
@@ -56,7 +67,7 @@ export async function getBlob(path: string): Promise<Blob> {
   if (token) {
     (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
   }
-  const res = await fetch(url, { method: "GET", headers });
+  const res = await fetchOrReport(url, { method: "GET", headers });
   if (!res.ok) {
     const err: ApiError = { message: res.statusText || "Request failed", status: res.status };
     throw err;

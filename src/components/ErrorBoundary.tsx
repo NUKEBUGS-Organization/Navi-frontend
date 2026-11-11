@@ -2,6 +2,7 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button, Center, Group, Stack, Text, Title } from "@mantine/core";
 import { IconAlertTriangle } from "@tabler/icons-react";
 import { THEME_BLUE } from "@/constants";
+import { reportError } from "@/diagnostics/reporter";
 
 type Props = { children: ReactNode };
 type State = { error: Error | null };
@@ -20,6 +21,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("Unhandled UI error:", error, info.componentStack);
+    reportError(error, { kind: "render", componentStack: info.componentStack ?? undefined });
   }
 
   render() {

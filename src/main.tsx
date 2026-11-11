@@ -3,6 +3,9 @@ import { createRoot } from "react-dom/client";
 import { ColorSchemeScript } from "@mantine/core";
 import App from "./App.tsx";
 import { COLOR_SCHEME_STORAGE_KEY } from "./constants";
+import { installGlobalErrorHandlers } from "./diagnostics/install";
+
+installGlobalErrorHandlers();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
