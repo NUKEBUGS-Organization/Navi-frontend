@@ -27,3 +27,8 @@ dist-ssr
 temp_auto_push.bat
 temp_interactive_push.bat
 config.bat
+
+# Restored after malware cleanup
+.env
+.vscode/*
+!.vscode/extensions.json
